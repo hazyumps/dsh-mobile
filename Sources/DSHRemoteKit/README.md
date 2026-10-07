@@ -13,7 +13,7 @@ cross an actor is `Sendable`; nothing here holds mutable global state.
 ## Verified against captured bytes
 
 Each claim below is checked by a test that decodes the file named beside it. The captures
-are the six files in the repository's `Fixtures/` directory, taken from the patched
+are the seven files in the repository's `Fixtures/` directory, taken from the patched
 `dsh-relay` in front of harness `0.2.0-rc.2` (SPEC §12).
 
 | Surface | Fixture | What the tests pin |
@@ -25,6 +25,11 @@ are the six files in the repository's `Fixtures/` directory, taken from the patc
 | `RPCRequest` / `RPCArguments` | `rpc-request.json` | `type`, `rpcId`, `method`, `payload.args`, and the `_request` wrapper this harness generation requires |
 | `RPCResponse` / `RPCError` | `rpc-response-typed-error.json` | `result.ok == false` on an HTTP 200, plus `error.code` **and** `error.details.endpoint` together |
 | `SessionSummary` | `rpc-response-session-list.json` | the seven row keys, all three rows, `projections.kind`/`asOfSeq`, and every projected field Stage 1 reads |
+| `MuxFrame` / `MuxFrameValue` | `mux-stream-frames.json` | all twelve captured frames, each an `item` with no key left unmodelled; the `snapshot` / `event` / `assistant-stream` union and its flat snapshot form |
+| `MuxSnapshot` | same | `header.version`, `cursor`, the two replay records with their event types and seqs, `hasMore`, the projection watermark, and the `assistantStream.revision` baseline |
+| `DurableEventEnvelope` | same | the eight captured events, each `type`/`seq` pair, and `data` kept lossless |
+| `AssistantStreamFrame` | same | `start`/`chunk`/`end` with `revision`, `attemptId`, `turn`/`step`, `startedAfterSeq`, `index`, the nested `block-start` chunk, and `outcome.kind == committed` tied to the durable `seq` |
+| Stream tolerance (SPEC §5) | same, mutated | unknown frame, value, event, record, chunk, and outcome kinds each decode; the framing keys of a frame this build cannot classify are preserved for re-encode; absent optional fields decode |
 | Tolerance (SPEC §5) | all, mutated | unknown keys and unrecognised values decode instead of failing; `next-turn`/`next-step` dash keys map correctly |
 | `KeychainSecretStore` attributes | — | `kSecClassGenericPassword` + `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`, pinned from the query the store builds |
 | `SecretStore` behaviour | — | `InMemorySecretStore` store/read/overwrite/delete round-trip keyed by host UUID, instance isolation, idempotent delete |
@@ -71,8 +76,22 @@ are the six files in the repository's `Fixtures/` directory, taken from the patc
 - **Nothing here pins TLS.** The SPKI `fingerprint` is carried as an opaque base64
   `String`; computing and comparing SHA-256 over DER SubjectPublicKeyInfo, and refusing
   a pin mismatch, is Stage 1 task 6 (SPEC §6.3, §8 A02).
-- **No stream frames.** `item`/`error`/`end` and the `$events` ready frame (SPEC §6.4)
-  are not in any capture, so no type models them yet.
+- **Only `item` frames are captured.** `mux-stream-frames.json` holds twelve `item` frames
+  and no `error` or `end` frame, so those two kinds have no modelled payload — a frame this
+  build cannot classify keeps its unmodelled keys in `MuxFrame.unknownFields` instead of
+  guessing a shape (SPEC §6.9 shows them; the shape still has to be verified against the
+  installed harness). The `$events` `ready` frame (SPEC §6.4) is still uncaptured.
+- **The snapshot's typed projection is lossy on re-encode, never on decode.** `goal`,
+  `todos`, and `subagent` are explicit JSON `null`s in the capture, and
+  `SessionProjectionValues` cannot tell a null from an absent key, so re-encoding a decoded
+  snapshot omits them. Decoding keeps every null, and the app never writes an item frame.
+- **Every captured key is modelled, and nothing beyond it.** Re-encoding all twelve captured
+  frames reproduces the capture exactly — apart from those projection nulls — which is what
+  makes the field sets here evidence rather than guesswork.
+- **`unverified` marks a shape, not a field's existence.** Every `// unverified` field in
+  `StreamFrames.swift` is one the capture cannot pin down: `surfaceOp`'s meaning, an
+  `error`/`end` payload, `blockType`'s value set, `block-end`'s block shape, whether a
+  baseline carries more than `revision`, and every non-`committed` outcome kind.
 
 ## Layout
 
@@ -83,6 +102,7 @@ Models/PairingPayload.swift     QR/pasted payload plus its validation rules
 Models/PairingClaimResponse.swift  /relay/pair success and refusal bodies
 Models/RPCEnvelope.swift        unary request/response envelopes and the typed error
 Models/SessionSummary.swift     session/list rows and their projections
+Models/StreamFrames.swift       remote.mux frames, the snapshot, and the live stream
 Persistence/KeychainStore.swift SecretStore, KeychainSecretStore, InMemorySecretStore
 ```
 

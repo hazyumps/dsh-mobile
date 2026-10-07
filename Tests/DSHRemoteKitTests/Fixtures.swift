@@ -15,6 +15,7 @@ enum Fixtures {
         case rpcSessionList = "rpc-response-session-list.json"
         case rpcTypedError = "rpc-response-typed-error.json"
         case forbiddenUnpaired = "forbidden-unpaired.json"
+        case muxStreamFrames = "mux-stream-frames.json"
     }
 
     static let directory: URL = URL(fileURLWithPath: #filePath)

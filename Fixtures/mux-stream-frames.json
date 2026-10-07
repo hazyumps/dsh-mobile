@@ -1,0 +1,421 @@
+{
+  "note": "Captured from a live session/follow stream through the relay. Strings are redacted except the wire vocabulary.",
+  "capturedFrom": "session/follow with assistantStream",
+  "frames": {
+    "snapshot": {
+      "type": "item",
+      "streamId": "redacted",
+      "value": {
+        "type": "snapshot",
+        "header": {
+          "version": 4,
+          "id": "redacted",
+          "createdAt": 1791416445789,
+          "cwd": "redacted",
+          "isSeeded": false,
+          "agentPreset": "standard"
+        },
+        "cursor": 31,
+        "records": [
+          {
+            "type": "event",
+            "event": {
+              "type": "permission/preset",
+              "seq": 0,
+              "time": 1791416445791,
+              "data": {
+                "preset": "workspace-write"
+              }
+            }
+          },
+          {
+            "type": "event",
+            "event": {
+              "type": "sandbox/mode",
+              "seq": 1,
+              "time": 1791416445791,
+              "data": {
+                "mode": "workspace-write"
+              }
+            }
+          }
+        ],
+        "hasMore": false,
+        "projections": {
+          "asOfSeq": 31,
+          "values": {
+            "title": "redacted",
+            "goal": null,
+            "tokenUsage": {
+              "uncachedInputTokens": 51666,
+              "outputTokens": 4,
+              "cacheReadTokens": 57856,
+              "cacheWriteTokens": 0
+            },
+            "contextPressure": {
+              "pressureTokens": 54771,
+              "projectedTokens": 54784,
+              "contextWindow": 1000000
+            },
+            "contextBreakdown": {
+              "systemTokens": 4185,
+              "toolsTokens": 36501,
+              "messageTokens": 12304
+            },
+            "inbox": {
+              "next-turn": [],
+              "next-step": []
+            },
+            "sessionStats": {
+              "turns": 2,
+              "steps": 2,
+              "llmMs": 3053,
+              "toolMs": 0,
+              "ttftMs": 3008,
+              "ttftSteps": 2,
+              "decodeMs": 45,
+              "decodeTokens": 4
+            },
+            "turnOutline": [
+              {
+                "turn": 1,
+                "seq": 4,
+                "prompt": "redacted",
+                "response": "redacted"
+              },
+              {
+                "turn": 2,
+                "seq": 24,
+                "prompt": "redacted",
+                "response": "redacted"
+              }
+            ],
+            "agentPreset": "standard",
+            "userQuestions": {
+              "active": [],
+              "settled": []
+            },
+            "subagentCatalog": [],
+            "subagentTiming": {
+              "settledMs": 0
+            },
+            "subagent": null,
+            "permissions": {
+              "currentValue": "redacted"
+            },
+            "todos": null,
+            "plan": {
+              "active": false,
+              "pending": false
+            },
+            "modelSelection": {
+              "lastUsed": {
+                "provider": "redacted",
+                "model": "redacted",
+                "reasoningEffort": "redacted"
+              },
+              "next": {
+                "provider": "redacted",
+                "model": "redacted",
+                "reasoningEffort": "redacted"
+              }
+            },
+            "sessionListMetadata": {
+              "blank": false,
+              "lastPromptAt": 1791416518734
+            },
+            "imageLimits": {
+              "maxImageBytes": 20971520,
+              "maxImagesPerMessage": 20,
+              "maxMessageImageBytes": 209715200,
+              "maxImagePixels": 64000000,
+              "maxImageDimension": 8192,
+              "mediaTypes": [
+                "redacted",
+                "redacted"
+              ]
+            }
+          }
+        },
+        "assistantStream": {
+          "revision": 18
+        }
+      }
+    },
+    "event/agent/inbox/spliced": {
+      "type": "item",
+      "streamId": "redacted",
+      "value": {
+        "type": "event",
+        "event": {
+          "type": "agent/inbox/spliced",
+          "seq": 32,
+          "time": 1791416582055,
+          "data": {
+            "target": "redacted",
+            "start": 0,
+            "inserted": [
+              {
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "redacted"
+                  }
+                ],
+                "source": {
+                  "kind": "user",
+                  "rpcId": "redacted"
+                },
+                "role": "user",
+                "id": "redacted"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "event/turn/start": {
+      "type": "item",
+      "streamId": "redacted",
+      "value": {
+        "type": "event",
+        "event": {
+          "type": "turn/start",
+          "seq": 33,
+          "time": 1791416582056,
+          "data": {
+            "turn": 3
+          }
+        }
+      }
+    },
+    "event/step/start": {
+      "type": "item",
+      "streamId": "redacted",
+      "value": {
+        "type": "event",
+        "event": {
+          "type": "step/start",
+          "seq": 35,
+          "time": 1791416582156,
+          "data": {
+            "turn": 3,
+            "step": 1
+          }
+        }
+      }
+    },
+    "event/user/message": {
+      "type": "item",
+      "streamId": "redacted",
+      "value": {
+        "type": "event",
+        "event": {
+          "type": "user/message",
+          "seq": 36,
+          "time": 1791416582156,
+          "data": {
+            "content": [
+              {
+                "type": "text",
+                "text": "redacted"
+              }
+            ],
+            "source": {
+              "kind": "user",
+              "rpcId": "redacted"
+            },
+            "role": "user",
+            "id": "redacted"
+          },
+          "surfaceOp": "redacted"
+        }
+      }
+    },
+    "assistant-stream/start": {
+      "type": "item",
+      "streamId": "redacted",
+      "value": {
+        "type": "assistant-stream",
+        "frame": {
+          "type": "start",
+          "attemptId": "redacted",
+          "revision": 19,
+          "turn": 3,
+          "step": 1,
+          "startedAfterSeq": 36
+        }
+      }
+    },
+    "event/session-log-deepseek/delivery-accepted": {
+      "type": "item",
+      "streamId": "redacted",
+      "value": {
+        "type": "event",
+        "event": {
+          "type": "session-log-deepseek/delivery-accepted",
+          "seq": 37,
+          "time": 1791416582966,
+          "data": {
+            "sessionId": "redacted",
+            "sessionFormatVersion": 4,
+            "throughSeq": 36
+          }
+        }
+      }
+    },
+    "assistant-stream/chunk": {
+      "type": "item",
+      "streamId": "redacted",
+      "value": {
+        "type": "assistant-stream",
+        "frame": {
+          "type": "chunk",
+          "attemptId": "redacted",
+          "revision": 20,
+          "index": 0,
+          "time": 1791416582970,
+          "chunk": {
+            "type": "block-start",
+            "index": 0,
+            "blockType": "redacted"
+          }
+        }
+      }
+    },
+    "event/assistant/message": {
+      "type": "item",
+      "streamId": "redacted",
+      "value": {
+        "type": "event",
+        "event": {
+          "type": "assistant/message",
+          "seq": 38,
+          "time": 1791416583433,
+          "data": {
+            "turn": 3,
+            "step": 1,
+            "message": {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "reasoning",
+                  "text": "redacted"
+                },
+                {
+                  "type": "text",
+                  "text": "redacted"
+                }
+              ],
+              "source": {
+                "kind": "model",
+                "provider": "redacted",
+                "model": "redacted",
+                "replayState": {
+                  "response": {
+                    "kind": "deepseek-messages",
+                    "version": 1,
+                    "model": "redacted"
+                  },
+                  "blocks": [
+                    {
+                      "type": "reasoning",
+                      "signature": "redacted"
+                    },
+                    {
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "id": "redacted"
+            },
+            "usage": {
+              "inputTokens": 256,
+              "outputTokens": 3,
+              "cacheReadTokens": 54528,
+              "cacheWriteTokens": 0,
+              "totalTokens": 54787
+            },
+            "stream": [
+              {
+                "type": "chunk",
+                "time": 1791416582970,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 0,
+                  "blockType": "redacted"
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1791416583417,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 0,
+                  "block": {
+                    "type": "reasoning",
+                    "text": "redacted"
+                  }
+                }
+              }
+            ]
+          },
+          "surfaceOp": "redacted"
+        }
+      }
+    },
+    "assistant-stream/end": {
+      "type": "item",
+      "streamId": "redacted",
+      "value": {
+        "type": "assistant-stream",
+        "frame": {
+          "type": "end",
+          "attemptId": "redacted",
+          "revision": 28,
+          "index": 8,
+          "outcome": {
+            "kind": "committed",
+            "eventType": "redacted",
+            "seq": 38
+          }
+        }
+      }
+    },
+    "event/step/end": {
+      "type": "item",
+      "streamId": "redacted",
+      "value": {
+        "type": "event",
+        "event": {
+          "type": "step/end",
+          "seq": 39,
+          "time": 1791416583434,
+          "data": {
+            "turn": 3,
+            "step": 1
+          }
+        }
+      }
+    },
+    "event/turn/end": {
+      "type": "item",
+      "streamId": "redacted",
+      "value": {
+        "type": "event",
+        "event": {
+          "type": "turn/end",
+          "seq": 40,
+          "time": 1791416583434,
+          "data": {
+            "turn": 3,
+            "reason": {
+              "kind": "completed"
+            }
+          }
+        }
+      }
+    }
+  }
+}
