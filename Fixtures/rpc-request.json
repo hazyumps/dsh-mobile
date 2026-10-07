@@ -1,0 +1,10 @@
+{
+  "type": "client-request",
+  "rpcId": "fixture-capture",
+  "method": "session/list",
+  "payload": {
+    "args": {
+      "_request": {}
+    }
+  }
+}

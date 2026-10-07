@@ -1,0 +1,295 @@
+{
+  "type": "server-response",
+  "rpcId": "fixture-capture",
+  "result": {
+    "ok": true,
+    "value": {
+      "items": [
+        {
+          "sessionId": "session-0001",
+          "updatedAt": 1791412735279,
+          "agentAvailable": true,
+          "running": true,
+          "blank": false,
+          "cwd": "redacted",
+          "projections": {
+            "kind": "sequenced",
+            "asOfSeq": 995,
+            "values": {
+              "title": "redacted",
+              "goal": null,
+              "tokenUsage": {
+                "uncachedInputTokens": 254283,
+                "outputTokens": 193911,
+                "cacheReadTokens": 28142720,
+                "cacheWriteTokens": 0
+              },
+              "contextPressure": {
+                "pressureTokens": 357086,
+                "projectedTokens": 361893,
+                "contextWindow": 1000000
+              },
+              "contextBreakdown": {
+                "systemTokens": 4192,
+                "toolsTokens": 36501,
+                "messageTokens": 265846
+              },
+              "inbox": {
+                "next-turn": [],
+                "next-step": []
+              },
+              "sessionStats": {
+                "turns": 13,
+                "steps": 129,
+                "llmMs": 1013134,
+                "toolMs": 430013,
+                "ttftMs": 243804,
+                "ttftSteps": 130,
+                "decodeMs": 769330,
+                "decodeTokens": 193911
+              },
+              "turnOutline": [
+                {
+                  "turn": 1,
+                  "seq": 13,
+                  "prompt": "redacted",
+                  "response": "redacted"
+                },
+                {
+                  "turn": 2,
+                  "seq": 199,
+                  "prompt": "redacted",
+                  "response": "redacted"
+                }
+              ],
+              "agentPreset": "standard",
+              "userQuestions": {
+                "active": [],
+                "settled": []
+              },
+              "subagentCatalog": [],
+              "subagentTiming": {
+                "settledMs": 0
+              },
+              "subagent": null,
+              "permissions": {
+                "currentValue": "workspace-write"
+              },
+              "todos": null,
+              "plan": {
+                "active": false,
+                "pending": false
+              },
+              "modelSelection": {
+                "lastUsed": {
+                  "provider": "deepseek-official",
+                  "model": "redacted",
+                  "reasoningEffort": "high"
+                },
+                "next": {
+                  "provider": "deepseek-official",
+                  "model": "redacted",
+                  "reasoningEffort": "high"
+                }
+              },
+              "sessionListMetadata": {
+                "blank": false,
+                "lastPromptAt": 1791412735279
+              },
+              "imageLimits": {
+                "maxImageBytes": 20971520,
+                "maxImagesPerMessage": 20,
+                "maxMessageImageBytes": 209715200,
+                "maxImagePixels": 64000000,
+                "maxImageDimension": 8192,
+                "mediaTypes": [
+                  "image/png",
+                  "image/jpeg"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "sessionId": "session-0002",
+          "updatedAt": 1791412295065,
+          "agentAvailable": true,
+          "running": false,
+          "blank": false,
+          "cwd": "redacted",
+          "projections": {
+            "kind": "sequenced",
+            "asOfSeq": 54,
+            "values": {
+              "title": "redacted",
+              "goal": null,
+              "tokenUsage": {
+                "uncachedInputTokens": 23210,
+                "outputTokens": 5362,
+                "cacheReadTokens": 307200,
+                "cacheWriteTokens": 0
+              },
+              "contextPressure": {
+                "pressureTokens": 68995,
+                "projectedTokens": 70359,
+                "contextWindow": 1000000
+              },
+              "contextBreakdown": {
+                "systemTokens": 4191,
+                "toolsTokens": 36501,
+                "messageTokens": 24795
+              },
+              "inbox": {
+                "next-turn": [],
+                "next-step": []
+              },
+              "sessionStats": {
+                "turns": 1,
+                "steps": 5,
+                "llmMs": 32440,
+                "toolMs": 658,
+                "ttftMs": 7845,
+                "ttftSteps": 5,
+                "decodeMs": 24595,
+                "decodeTokens": 5362
+              },
+              "turnOutline": [
+                {
+                  "turn": 1,
+                  "seq": 4,
+                  "prompt": "redacted",
+                  "response": "redacted"
+                }
+              ],
+              "agentPreset": "standard",
+              "userQuestions": {
+                "active": [],
+                "settled": []
+              },
+              "subagentCatalog": [],
+              "subagentTiming": {
+                "settledMs": 0
+              },
+              "subagent": null,
+              "permissions": {
+                "currentValue": "workspace-write"
+              },
+              "todos": null,
+              "plan": {
+                "active": false,
+                "pending": false
+              },
+              "modelSelection": {
+                "lastUsed": {
+                  "provider": "deepseek-official",
+                  "model": "redacted",
+                  "reasoningEffort": "high"
+                },
+                "next": {
+                  "provider": "deepseek-official",
+                  "model": "redacted",
+                  "reasoningEffort": "high"
+                }
+              },
+              "sessionListMetadata": {
+                "blank": false,
+                "lastPromptAt": 1791412295065
+              },
+              "imageLimits": {
+                "maxImageBytes": 20971520,
+                "maxImagesPerMessage": 20,
+                "maxMessageImageBytes": 209715200,
+                "maxImagePixels": 64000000,
+                "maxImageDimension": 8192,
+                "mediaTypes": [
+                  "image/png",
+                  "image/jpeg"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "sessionId": "session-0003",
+          "updatedAt": 1791411965314,
+          "agentAvailable": true,
+          "running": false,
+          "blank": true,
+          "cwd": "redacted",
+          "projections": {
+            "kind": "sequenced",
+            "asOfSeq": 3,
+            "values": {
+              "title": "redacted",
+              "goal": null,
+              "tokenUsage": {
+                "uncachedInputTokens": 0,
+                "outputTokens": 0,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0
+              },
+              "contextPressure": {},
+              "contextBreakdown": {
+                "systemTokens": 0,
+                "toolsTokens": 0,
+                "messageTokens": 0
+              },
+              "inbox": {
+                "next-turn": [],
+                "next-step": []
+              },
+              "sessionStats": {
+                "turns": 0,
+                "steps": 0,
+                "llmMs": 0,
+                "toolMs": 0,
+                "ttftMs": 0,
+                "ttftSteps": 0,
+                "decodeMs": 0,
+                "decodeTokens": 0
+              },
+              "turnOutline": [],
+              "agentPreset": "standard",
+              "userQuestions": {
+                "active": [],
+                "settled": []
+              },
+              "subagentCatalog": [],
+              "subagentTiming": {
+                "settledMs": 0
+              },
+              "subagent": null,
+              "permissions": {
+                "currentValue": "workspace-write"
+              },
+              "todos": null,
+              "plan": {
+                "active": false,
+                "pending": false
+              },
+              "modelSelection": {
+                "lastUsed": null,
+                "next": null
+              },
+              "sessionListMetadata": {
+                "blank": true,
+                "lastPromptAt": null
+              },
+              "imageLimits": {
+                "maxImageBytes": 20971520,
+                "maxImagesPerMessage": 20,
+                "maxMessageImageBytes": 209715200,
+                "maxImagePixels": 64000000,
+                "maxImageDimension": 8192,
+                "mediaTypes": [
+                  "image/png",
+                  "image/jpeg"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

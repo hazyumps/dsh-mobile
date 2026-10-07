@@ -1,0 +1,9 @@
+{
+  "v": 1,
+  "kind": "dsh-relay-pair",
+  "url": "https://192.0.2.10:3443",
+  "plainUrl": "http://192.0.2.10:3444",
+  "fingerprint": "3q2+7wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+  "code": "48213977",
+  "expiresAt": 1755500000000
+}
