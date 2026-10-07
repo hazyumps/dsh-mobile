@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-cordis-host-runner.types.DynamicCordisHostHalfResult",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-cordis-host-runner/types#DynamicCordisHostHalfResult",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_cordis_host_runner_dynamicCordisRunner_runHostHalf_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_cordis_host_runner_dynamicCordisRunner_runHostHalf_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-cordis-host-runner#dynamicCordisRunner/runHostHalf :: result"
+  ],
+  "x-dsh-rawExpression": "union([object({\n\t\t\t\"ok\": literal(true),\n\t\t\t\"pluginId\": intersection(string(), unknown()),\n\t\t\t\"packageId\": intersection(string(), unknown()),\n\t\t\t\"pluginRunId\": intersection(string(), unknown()),\n\t\t\t\"waitingFor\": array(string()),\n\t\t\t\"startedHere\": boolean()\n\t\t}), intersection(object({ \"ok\": literal(false) }), object({\n\t\t\t\"message\": string(),\n\t\t\t\"stack\": string().optional()\n\t\t}))])",
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "pluginId": {
+          "type": "string"
+        },
+        "packageId": {
+          "type": "string"
+        },
+        "pluginRunId": {
+          "type": "string"
+        },
+        "waitingFor": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "startedHere": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok",
+        "pluginId",
+        "packageId",
+        "pluginRunId",
+        "waitingFor",
+        "startedHere"
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "const": false
+            }
+          },
+          "required": [
+            "ok"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "message": {
+              "type": "string"
+            },
+            "stack": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "message"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-workspace-files.types.WorkspaceFileRange",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-workspace-files/types#WorkspaceFileRange",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_workspace_files_workspaceFiles_read_parameter_2$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_workspace_files_workspaceFiles_read_parameter_2$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-workspace-files#workspaceFiles/read :: parameter:range"
+  ],
+  "x-dsh-rawExpression": "object({\n\t\t\t\"offset\": number().readonly().optional(),\n\t\t\t\"limit\": number().readonly().optional()\n\t\t})",
+  "type": "object",
+  "properties": {
+    "offset": {
+      "type": "number"
+    },
+    "limit": {
+      "type": "number"
+    }
+  },
+  "required": []
+}

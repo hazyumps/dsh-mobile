@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-terminal-controller.terminal.shells.result",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-terminal-controller#terminal/shells:result",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_terminal_controller_terminal_shells_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_terminal_controller_terminal_shells_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-terminal-controller#terminal/shells :: result"
+  ],
+  "x-dsh-rawExpression": "array(object({\n\t\t\t\"path\": string().readonly(),\n\t\t\t\"args\": array(string()).readonly(),\n\t\t\t\"name\": string().readonly()\n\t\t}))",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "path": {
+        "type": "string"
+      },
+      "args": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "name": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "path",
+      "args",
+      "name"
+    ]
+  }
+}

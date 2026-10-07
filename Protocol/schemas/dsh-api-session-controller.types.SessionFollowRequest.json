@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-session-controller.types.SessionFollowRequest",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-session-controller/types#SessionFollowRequest",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_session_controller_session_follow_parameter_0$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_session_controller_session_follow_parameter_0$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-session-controller#session/follow :: parameter:request"
+  ],
+  "x-dsh-rawExpression": "object({\n\t\t\t\"address\": union([object({\n\t\t\t\t\"kind\": literal(\"session\").readonly(),\n\t\t\t\t\"sessionId\": intersection(string(), unknown()).readonly()\n\t\t\t}), object({\n\t\t\t\t\"kind\": literal(\"subagent\").readonly(),\n\t\t\t\t\"parentSessionId\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\"childSessionId\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\"mode\": union([\n\t\t\t\t\tliteral(\"one-shot\"),\n\t\t\t\t\tliteral(\"continuable\"),\n\t\t\t\t\tliteral(\"unknown\")\n\t\t\t\t]).readonly()\n\t\t\t})]).readonly(),\n\t\t\t\"assistantStream\": literal(true).readonly().optional(),\n\t\t\t\"maxMessages\": number().readonly().optional(),\n\t\t\t\"turnWindow\": object({\n\t\t\t\t\"minMessages\": number().readonly(),\n\t\t\t\t\"minTurns\": number().readonly()\n\t\t\t}).readonly().optional()\n\t\t})",
+  "type": "object",
+  "properties": {
+    "address": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "session"
+            },
+            "sessionId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "sessionId"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "subagent"
+            },
+            "parentSessionId": {
+              "type": "string"
+            },
+            "childSessionId": {
+              "type": "string"
+            },
+            "mode": {
+              "anyOf": [
+                {
+                  "const": "one-shot"
+                },
+                {
+                  "const": "continuable"
+                },
+                {
+                  "const": "unknown"
+                }
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "parentSessionId",
+            "childSessionId",
+            "mode"
+          ]
+        }
+      ]
+    },
+    "assistantStream": {
+      "const": true
+    },
+    "maxMessages": {
+      "type": "number"
+    },
+    "turnWindow": {
+      "type": "object",
+      "properties": {
+        "minMessages": {
+          "type": "number"
+        },
+        "minTurns": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "minMessages",
+        "minTurns"
+      ]
+    }
+  },
+  "required": [
+    "address"
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-llm.brand.ToolCallId",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-llm/brand#ToolCallId",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_user_questions_userQuestions_answer_parameter_1$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_user_questions_userQuestions_answer_parameter_1$schema",
+      "_deepseek_ai_dsh_user_questions_userQuestions_attachWait_parameter_1$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-user-questions#userQuestions/answer :: parameter:callId",
+    "@deepseek-ai/dsh-user-questions#userQuestions/attachWait :: parameter:callId"
+  ],
+  "x-dsh-rawExpression": "intersection(string(), unknown())",
+  "type": "string"
+}

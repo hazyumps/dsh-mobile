@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-workspace-files.types.WorkspaceFileWatchFrame",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-workspace-files/types#WorkspaceFileWatchFrame",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_workspace_files_workspaceFiles_changes_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_workspace_files_workspaceFiles_changes_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-workspace-files#workspaceFiles/changes :: result"
+  ],
+  "x-dsh-rawExpression": "union([object({ \"kind\": literal(\"ready\").readonly() }), object({\n\t\t\t\"kind\": literal(\"change\").readonly(),\n\t\t\t\"change\": union([object({\n\t\t\t\t\"absolutePath\": string().readonly(),\n\t\t\t\t\"version\": string().readonly()\n\t\t\t}), object({\n\t\t\t\t\"absolutePath\": string().readonly(),\n\t\t\t\t\"absent\": literal(true).readonly()\n\t\t\t})]).readonly()\n\t\t})])",
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "ready"
+        }
+      },
+      "required": [
+        "kind"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "change"
+        },
+        "change": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "absolutePath": {
+                  "type": "string"
+                },
+                "version": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "absolutePath",
+                "version"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "absolutePath": {
+                  "type": "string"
+                },
+                "absent": {
+                  "const": true
+                }
+              },
+              "required": [
+                "absolutePath",
+                "absent"
+              ]
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "change"
+      ]
+    }
+  ]
+}

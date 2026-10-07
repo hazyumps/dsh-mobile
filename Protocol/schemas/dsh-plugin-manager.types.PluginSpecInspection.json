@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-plugin-manager.types.PluginSpecInspection",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-plugin-manager/types#PluginSpecInspection",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_plugin_manager_pluginManager_inspect_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_plugin_manager_pluginManager_inspect_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-plugin-manager#pluginManager/inspect :: result"
+  ],
+  "x-dsh-rawExpression": "union([object({\n\t\t\t\"status\": literal(\"accepted\").readonly(),\n\t\t\t\"kind\": union([\n\t\t\t\tliteral(\"registry\"),\n\t\t\t\tliteral(\"path\"),\n\t\t\t\tliteral(\"git\"),\n\t\t\t\tliteral(\"tarball\")\n\t\t\t]).readonly(),\n\t\t\t\"name\": string().readonly().optional(),\n\t\t\t\"version\": string().readonly().optional(),\n\t\t\t\"description\": string().readonly().optional(),\n\t\t\t\"bundle\": union([\n\t\t\t\tliteral(null),\n\t\t\t\tliteral(false),\n\t\t\t\tliteral(true)\n\t\t\t]).readonly(),\n\t\t\t\"registry\": union([literal(null), string()]).readonly(),\n\t\t\t\"host\": string().readonly().optional()\n\t\t}), object({\n\t\t\t\"status\": literal(\"refused\").readonly(),\n\t\t\t\"problem\": union([\n\t\t\t\tliteral(\"network\"),\n\t\t\t\tliteral(\"unknown\"),\n\t\t\t\tliteral(\"invalid-spec\"),\n\t\t\t\tliteral(\"not-found\"),\n\t\t\t\tliteral(\"already-installed\"),\n\t\t\t\tliteral(\"not-a-package\"),\n\t\t\t\tliteral(\"not-a-bundle\")\n\t\t\t]).readonly(),\n\t\t\t\"reason\": string().readonly(),\n\t\t\t\"registries\": array(union([literal(null), string()])).readonly().optional()\n\t\t})])",
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "status": {
+          "const": "accepted"
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "const": "registry"
+            },
+            {
+              "const": "path"
+            },
+            {
+              "const": "git"
+            },
+            {
+              "const": "tarball"
+            }
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "bundle": {
+          "anyOf": [
+            {
+              "const": null
+            },
+            {
+              "const": false
+            },
+            {
+              "const": true
+            }
+          ]
+        },
+        "registry": {
+          "anyOf": [
+            {
+              "const": null
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "host": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "kind",
+        "bundle",
+        "registry"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "status": {
+          "const": "refused"
+        },
+        "problem": {
+          "anyOf": [
+            {
+              "const": "network"
+            },
+            {
+              "const": "unknown"
+            },
+            {
+              "const": "invalid-spec"
+            },
+            {
+              "const": "not-found"
+            },
+            {
+              "const": "already-installed"
+            },
+            {
+              "const": "not-a-package"
+            },
+            {
+              "const": "not-a-bundle"
+            }
+          ]
+        },
+        "reason": {
+          "type": "string"
+        },
+        "registries": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "const": null
+              },
+              {
+                "type": "string"
+              }
+            ]
+          }
+        }
+      },
+      "required": [
+        "status",
+        "problem",
+        "reason"
+      ]
+    }
+  ]
+}

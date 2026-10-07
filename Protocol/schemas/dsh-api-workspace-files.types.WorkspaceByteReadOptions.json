@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-workspace-files.types.WorkspaceByteReadOptions",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-workspace-files/types#WorkspaceByteReadOptions",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_workspace_files_workspaceFiles_readBytes_parameter_2$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_workspace_files_workspaceFiles_readBytes_parameter_2$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-workspace-files#workspaceFiles/readBytes :: parameter:options"
+  ],
+  "x-dsh-rawExpression": "object({\n\t\t\t\"range\": object({\n\t\t\t\t\"offset\": number().readonly().optional(),\n\t\t\t\t\"length\": number().readonly().optional()\n\t\t\t}).readonly().optional(),\n\t\t\t\"baseFile\": string().readonly().optional()\n\t\t})",
+  "type": "object",
+  "properties": {
+    "range": {
+      "type": "object",
+      "properties": {
+        "offset": {
+          "type": "number"
+        },
+        "length": {
+          "type": "number"
+        }
+      },
+      "required": []
+    },
+    "baseFile": {
+      "type": "string"
+    }
+  },
+  "required": []
+}

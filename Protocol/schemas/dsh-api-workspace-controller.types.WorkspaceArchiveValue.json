@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-workspace-controller.types.WorkspaceArchiveValue",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-workspace-controller/types#WorkspaceArchiveValue",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_workspace_controller_workspace_archiveSession_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_workspace_controller_workspace_archiveSession_result$schema",
+      "_deepseek_ai_dsh_api_workspace_controller_workspace_unarchiveSession_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-workspace-controller#workspace/archiveSession :: result",
+    "@deepseek-ai/dsh-api-workspace-controller#workspace/unarchiveSession :: result"
+  ],
+  "x-dsh-rawExpression": "object({ \"archivedSessionIds\": array(intersection(string(), unknown())).readonly() })",
+  "type": "object",
+  "properties": {
+    "archivedSessionIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "archivedSessionIds"
+  ]
+}

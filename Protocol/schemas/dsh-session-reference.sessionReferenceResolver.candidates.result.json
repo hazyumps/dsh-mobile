@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-session-reference.sessionReferenceResolver.candidates.result",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-session-reference#sessionReferenceResolver/candidates:result",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_session_reference_sessionReferenceResolver_candidates_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_session_reference_sessionReferenceResolver_candidates_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-session-reference#sessionReferenceResolver/candidates :: result"
+  ],
+  "x-dsh-rawExpression": "array(object({\n\t\t\t\"mention\": string(),\n\t\t\t\"sessionId\": intersection(string(), unknown()),\n\t\t\t\"label\": string(),\n\t\t\t\"displayTitle\": string().optional(),\n\t\t\t\"cwd\": string().optional(),\n\t\t\t\"sameWorkspace\": boolean(),\n\t\t\t\"createdAt\": number()\n\t\t}))",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "mention": {
+        "type": "string"
+      },
+      "sessionId": {
+        "type": "string"
+      },
+      "label": {
+        "type": "string"
+      },
+      "displayTitle": {
+        "type": "string"
+      },
+      "cwd": {
+        "type": "string"
+      },
+      "sameWorkspace": {
+        "type": "boolean"
+      },
+      "createdAt": {
+        "type": "number"
+      }
+    },
+    "required": [
+      "mention",
+      "sessionId",
+      "label",
+      "sameWorkspace",
+      "createdAt"
+    ]
+  }
+}

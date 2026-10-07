@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-terminal-controller.types.WebTerminalId",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-terminal-controller/types#WebTerminalId",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_terminal_controller_terminal_close_parameter_1$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_terminal_controller_terminal_close_parameter_1$schema",
+      "_deepseek_ai_dsh_api_terminal_controller_terminal_follow_parameter_1$schema",
+      "_deepseek_ai_dsh_api_terminal_controller_terminal_rename_parameter_1$schema",
+      "_deepseek_ai_dsh_api_terminal_controller_terminal_resize_parameter_1$schema",
+      "_deepseek_ai_dsh_api_terminal_controller_terminal_retain_parameter_1$schema",
+      "_deepseek_ai_dsh_api_terminal_controller_terminal_write_parameter_1$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-terminal-controller#terminal/close :: parameter:id",
+    "@deepseek-ai/dsh-api-terminal-controller#terminal/follow :: parameter:id",
+    "@deepseek-ai/dsh-api-terminal-controller#terminal/rename :: parameter:id",
+    "@deepseek-ai/dsh-api-terminal-controller#terminal/resize :: parameter:id",
+    "@deepseek-ai/dsh-api-terminal-controller#terminal/retain :: parameter:id",
+    "@deepseek-ai/dsh-api-terminal-controller#terminal/write :: parameter:id"
+  ],
+  "x-dsh-rawExpression": "intersection(string(), unknown())",
+  "type": "string"
+}

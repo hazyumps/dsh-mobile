@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-subagent.subagents.interruptByParent.mode",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-subagent#subagents/interruptByParent:mode",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_subagent_subagents_interruptByParent_parameter_2$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_subagent_subagents_interruptByParent_parameter_2$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-subagent#subagents/interruptByParent :: parameter:mode"
+  ],
+  "x-dsh-rawExpression": "literal(\"continuable\")",
+  "const": "continuable"
+}

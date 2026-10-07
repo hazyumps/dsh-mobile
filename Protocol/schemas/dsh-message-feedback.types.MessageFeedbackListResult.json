@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-message-feedback.types.MessageFeedbackListResult",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-message-feedback/types#MessageFeedbackListResult",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_message_feedback_messageFeedback_list_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_message_feedback_messageFeedback_list_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-message-feedback#messageFeedback/list :: result"
+  ],
+  "x-dsh-rawExpression": "union([object({\n\t\t\t\"ok\": literal(true).readonly(),\n\t\t\t\"value\": object({ \"items\": array(object({\n\t\t\t\t\"messageId\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\"rating\": union([literal(\"positive\"), literal(\"negative\")]).readonly(),\n\t\t\t\t\"note\": string().readonly().optional(),\n\t\t\t\t\"category\": union([\n\t\t\t\t\tliteral(\"other\"),\n\t\t\t\t\tliteral(\"task-result\"),\n\t\t\t\t\tliteral(\"instruction-following\"),\n\t\t\t\t\tliteral(\"product-interaction\"),\n\t\t\t\t\tliteral(\"service-stability\"),\n\t\t\t\t\tliteral(\"resource-cost\"),\n\t\t\t\t\tliteral(\"security-privacy-permission\")\n\t\t\t\t]).readonly().optional(),\n\t\t\t\t\"version\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\"createdAt\": number().readonly(),\n\t\t\t\t\"updatedAt\": number().readonly()\n\t\t\t})).readonly() }).readonly()\n\t\t}), object({\n\t\t\t\"ok\": literal(false).readonly(),\n\t\t\t\"error\": object({\n\t\t\t\t\"code\": literal(\"session-not-found\").readonly(),\n\t\t\t\t\"sessionId\": intersection(string(), unknown()).readonly()\n\t\t\t}).readonly()\n\t\t})])",
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "value": {
+          "type": "object",
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "messageId": {
+                    "type": "string"
+                  },
+                  "rating": {
+                    "anyOf": [
+                      {
+                        "const": "positive"
+                      },
+                      {
+                        "const": "negative"
+                      }
+                    ]
+                  },
+                  "note": {
+                    "type": "string"
+                  },
+                  "category": {
+                    "anyOf": [
+                      {
+                        "const": "other"
+                      },
+                      {
+                        "const": "task-result"
+                      },
+                      {
+                        "const": "instruction-following"
+                      },
+                      {
+                        "const": "product-interaction"
+                      },
+                      {
+                        "const": "service-stability"
+                      },
+                      {
+                        "const": "resource-cost"
+                      },
+                      {
+                        "const": "security-privacy-permission"
+                      }
+                    ]
+                  },
+                  "version": {
+                    "type": "string"
+                  },
+                  "createdAt": {
+                    "type": "number"
+                  },
+                  "updatedAt": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "messageId",
+                  "rating",
+                  "version",
+                  "createdAt",
+                  "updatedAt"
+                ]
+              }
+            }
+          },
+          "required": [
+            "items"
+          ]
+        }
+      },
+      "required": [
+        "ok",
+        "value"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "error": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "session-not-found"
+            },
+            "sessionId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "sessionId"
+          ]
+        }
+      },
+      "required": [
+        "ok",
+        "error"
+      ]
+    }
+  ]
+}

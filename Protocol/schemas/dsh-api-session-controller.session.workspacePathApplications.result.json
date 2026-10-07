@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-session-controller.session.workspacePathApplications.result",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-session-controller#session/workspacePathApplications:result",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_session_controller_session_workspacePathApplications_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_session_controller_session_workspacePathApplications_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-session-controller#session/workspacePathApplications :: result"
+  ],
+  "x-dsh-rawExpression": "array(object({\n\t\t\t\"id\": string().readonly(),\n\t\t\t\"name\": string().readonly(),\n\t\t\t\"default\": boolean().readonly(),\n\t\t\t\"icon\": union([literal(null), string()]).readonly()\n\t\t}))",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "name": {
+        "type": "string"
+      },
+      "default": {
+        "type": "boolean"
+      },
+      "icon": {
+        "anyOf": [
+          {
+            "const": null
+          },
+          {
+            "type": "string"
+          }
+        ]
+      }
+    },
+    "required": [
+      "id",
+      "name",
+      "default",
+      "icon"
+    ]
+  }
+}

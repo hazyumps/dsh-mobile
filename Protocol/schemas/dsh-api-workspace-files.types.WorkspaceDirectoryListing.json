@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-workspace-files.types.WorkspaceDirectoryListing",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-workspace-files/types#WorkspaceDirectoryListing",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_workspace_files_workspaceFiles_list_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_workspace_files_workspaceFiles_list_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-workspace-files#workspaceFiles/list :: result"
+  ],
+  "x-dsh-rawExpression": "object({\n\t\t\t\"path\": string().readonly(),\n\t\t\t\"entries\": array(object({\n\t\t\t\t\"name\": string().readonly(),\n\t\t\t\t\"type\": union([\n\t\t\t\t\tliteral(\"file\"),\n\t\t\t\t\tliteral(\"directory\"),\n\t\t\t\t\tliteral(\"other\")\n\t\t\t\t]).readonly(),\n\t\t\t\t\"size\": number().readonly().optional()\n\t\t\t})).readonly(),\n\t\t\t\"truncated\": boolean().readonly()\n\t\t})",
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string"
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "const": "file"
+              },
+              {
+                "const": "directory"
+              },
+              {
+                "const": "other"
+              }
+            ]
+          },
+          "size": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "name",
+          "type"
+        ]
+      }
+    },
+    "truncated": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "path",
+    "entries",
+    "truncated"
+  ]
+}

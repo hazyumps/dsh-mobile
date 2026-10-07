@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-cordis-host-runner.types.DynamicCordisClientSource",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-cordis-host-runner/types#DynamicCordisClientSource",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_cordis_host_runner_dynamicCordisRunner_getClientCode_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_cordis_host_runner_dynamicCordisRunner_getClientCode_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-cordis-host-runner#dynamicCordisRunner/getClientCode :: result"
+  ],
+  "x-dsh-rawExpression": "object({\n\t\t\t\"code\": string(),\n\t\t\t\"name\": string(),\n\t\t\t\"pluginId\": intersection(string(), unknown()),\n\t\t\t\"packageId\": intersection(string(), unknown()),\n\t\t\t\"pluginRunId\": intersection(string(), unknown())\n\t\t})",
+  "type": "object",
+  "properties": {
+    "code": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "pluginId": {
+      "type": "string"
+    },
+    "packageId": {
+      "type": "string"
+    },
+    "pluginRunId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "code",
+    "name",
+    "pluginId",
+    "packageId",
+    "pluginRunId"
+  ]
+}

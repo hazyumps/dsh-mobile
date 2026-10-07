@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-agent-preset-registry.types.AgentPresetRoster",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-agent-preset-registry/types#AgentPresetRoster",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_agent_preset_registry_agentPresets_list_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_agent_preset_registry_agentPresets_list_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-agent-preset-registry#agentPresets/list :: result"
+  ],
+  "x-dsh-rawExpression": "object({ \"presets\": array(object({\n\t\t\t\"id\": string().readonly(),\n\t\t\t\"isDefault\": boolean().readonly(),\n\t\t\t\"name\": string().readonly().optional(),\n\t\t\t\"description\": string().readonly().optional(),\n\t\t\t\"broken\": string().readonly().optional()\n\t\t})).readonly() })",
+  "type": "object",
+  "properties": {
+    "presets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "isDefault": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "broken": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "isDefault"
+        ]
+      }
+    }
+  },
+  "required": [
+    "presets"
+  ]
+}

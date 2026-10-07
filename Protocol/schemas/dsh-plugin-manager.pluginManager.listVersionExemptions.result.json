@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-plugin-manager.pluginManager.listVersionExemptions.result",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-plugin-manager#pluginManager/listVersionExemptions:result",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_plugin_manager_pluginManager_listVersionExemptions_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_plugin_manager_pluginManager_listVersionExemptions_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-plugin-manager#pluginManager/listVersionExemptions :: result"
+  ],
+  "x-dsh-rawExpression": "object({\n\t\t\t\"exemptions\": record(string(), array(string())),\n\t\t\t\"warnings\": array(string())\n\t\t})",
+  "type": "object",
+  "properties": {
+    "exemptions": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "exemptions",
+    "warnings"
+  ]
+}

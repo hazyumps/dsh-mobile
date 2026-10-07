@@ -1,0 +1,1091 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-session-controller.types.SessionControlFrame",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-session-controller/types#SessionControlFrame",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_session_controller_session_control_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_session_controller_session_control_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-session-controller#session/control :: result"
+  ],
+  "x-dsh-rawExpression": "union([object({\n\t\t\t\"type\": literal(\"baseline\").readonly(),\n\t\t\t\"value\": object({ \"projections\": record(intersection(string(), unknown()), object({\n\t\t\t\t\"asOfSeq\": number().readonly(),\n\t\t\t\t\"values\": intersection(object({\n\t\t\t\t\t\"inbox\": object({\n\t\t\t\t\t\t\"next-turn\": array(union([\n\t\t\t\t\t\t\tliteral(null),\n\t\t\t\t\t\t\tstring(),\n\t\t\t\t\t\t\tnumber(),\n\t\t\t\t\t\t\tliteral(false),\n\t\t\t\t\t\t\tliteral(true),\n\t\t\t\t\t\t\tarray(lazy(() => JsonValueRemoteCodec$schema5())),\n\t\t\t\t\t\t\trecord(string(), lazy(() => JsonValueRemoteCodec$schema5()))\n\t\t\t\t\t\t])).readonly(),\n\t\t\t\t\t\t\"next-step\": array(union([\n\t\t\t\t\t\t\tliteral(null),\n\t\t\t\t\t\t\tstring(),\n\t\t\t\t\t\t\tnumber(),\n\t\t\t\t\t\t\tliteral(false),\n\t\t\t\t\t\t\tliteral(true),\n\t\t\t\t\t\t\tarray(lazy(() => JsonValueRemoteCodec$schema5())),\n\t\t\t\t\t\t\trecord(string(), lazy(() => JsonValueRemoteCodec$schema5()))\n\t\t\t\t\t\t])).readonly()\n\t\t\t\t\t}).optional(),\n\t\t\t\t\t\"agentPreset\": union([literal(null), string()]).optional(),\n\t\t\t\t\t\"title\": union([literal(null), string()]).optional(),\n\t\t\t\t\t\"todos\": union([literal(null), array(object({\n\t\t\t\t\t\t\"content\": string(),\n\t\t\t\t\t\t\"status\": union([\n\t\t\t\t\t\t\tliteral(\"completed\"),\n\t\t\t\t\t\t\tliteral(\"pending\"),\n\t\t\t\t\t\t\tliteral(\"in_progress\")\n\t\t\t\t\t\t])\n\t\t\t\t\t}))]).optional(),\n\t\t\t\t\t\"sessionListMetadata\": object({\n\t\t\t\t\t\t\"blank\": boolean().readonly(),\n\t\t\t\t\t\t\"lastPromptAt\": union([literal(null), number()]).readonly()\n\t\t\t\t\t}).optional(),\n\t\t\t\t\t\"imageLimits\": object({\n\t\t\t\t\t\t\"maxImageBytes\": number(),\n\t\t\t\t\t\t\"maxImagesPerMessage\": number(),\n\t\t\t\t\t\t\"maxMessageImageBytes\": number(),\n\t\t\t\t\t\t\"maxImagePixels\": number(),\n\t\t\t\t\t\t\"maxImageDimension\": number(),\n\t\t\t\t\t\t\"mediaTypes\": array(union([\n\t\t\t\t\t\t\tliteral(\"image/png\"),\n\t\t\t\t\t\t\tliteral(\"image/jpeg\"),\n\t\t\t\t\t\t\tliteral(\"image/webp\"),\n\t\t\t\t\t\t\tliteral(\"image/gif\")\n\t\t\t\t\t\t]))\n\t\t\t\t\t}).optional(),\n\t\t\t\t\t\"modelSelection\": object({\n\t\t\t\t\t\t\"lastUsed\": union([literal(null), object({\n\t\t\t\t\t\t\t\"provider\": string().readonly(),\n\t\t\t\t\t\t\t\"model\": string().readonly(),\n\t\t\t\t\t\t\t\"reasoningEffort\": string().readonly().optional()\n\t\t\t\t\t\t})]).readonly(),\n\t\t\t\t\t\t\"next\": union([literal(null), object({\n\t\t\t\t\t\t\t\"provider\": string().readonly(),\n\t\t\t\t\t\t\t\"model\": string().readonly(),\n\t\t\t\t\t\t\t\"reasoningEffort\": string().readonly().optional()\n\t\t\t\t\t\t})]).readonly()\n\t\t\t\t\t}).optional(),\n\t\t\t\t\t\"permissions\": object({ \"currentValue\": string() }).optional(),\n\t\t\t\t\t\"subagentCatalog\": array(union([\n\t\t\t\t\t\tintersection(object({\n\t\t\t\t\t\t\t\"id\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\t\t\t\"createdAt\": number().readonly()\n\t\t\t\t\t\t}), object({\n\t\t\t\t\t\t\t\"mode\": literal(\"one-shot\").readonly(),\n\t\t\t\t\t\t\t\"label\": string().readonly().optional()\n\t\t\t\t\t\t})),\n\t\t\t\t\t\tintersection(object({\n\t\t\t\t\t\t\t\"id\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\t\t\t\"createdAt\": number().readonly()\n\t\t\t\t\t\t}), object({\n\t\t\t\t\t\t\t\"mode\": literal(\"continuable\").readonly(),\n\t\t\t\t\t\t\t\"label\": string().readonly()\n\t\t\t\t\t\t})),\n\t\t\t\t\t\tintersection(object({\n\t\t\t\t\t\t\t\"id\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\t\t\t\"createdAt\": number().readonly()\n\t\t\t\t\t\t}), object({\n\t\t\t\t\t\t\t\"mode\": literal(\"unknown\").readonly(),\n\t\t\t\t\t\t\t\"label\": string().readonly().optional()\n\t\t\t\t\t\t}))\n\t\t\t\t\t])).optional(),\n\t\t\t\t\t\"subagentTiming\": object({\n\t\t\t\t\t\t\"settledMs\": number(),\n\t\t\t\t\t\t\"active\": object({\n\t\t\t\t\t\t\t\"since\": number(),\n\t\t\t\t\t\t\t\"through\": number()\n\t\t\t\t\t\t}).optional(),\n\t\t\t\t\t\t\"lastTurnCompleted\": boolean().optional()\n\t\t\t\t\t}).optional(),\n\t\t\t\t\t\"subagent\": union([\n\t\t\t\t\t\tliteral(null),\n\t\t\t\t\t\tobject({\n\t\t\t\t\t\t\t\"mode\": literal(\"one-shot\"),\n\t\t\t\t\t\t\t\"label\": string().optional(),\n\t\t\t\t\t\t\t\"seq\": intersection(number(), unknown())\n\t\t\t\t\t\t}),\n\t\t\t\t\t\tobject({\n\t\t\t\t\t\t\t\"mode\": literal(\"continuable\"),\n\t\t\t\t\t\t\t\"label\": string(),\n\t\t\t\t\t\t\t\"seq\": intersection(number(), unknown())\n\t\t\t\t\t\t})\n\t\t\t\t\t]).optional(),\n\t\t\t\t\t\"goal\": union([literal(null), object({\n\t\t\t\t\t\t\"goal\": object({\n\t\t\t\t\t\t\t\"objective\": string().readonly(),\n\t\t\t\t\t\t\t\"phase\": union([\n\t\t\t\t\t\t\t\tliteral(\"active\"),\n\t\t\t\t\t\t\t\tliteral(\"paused\"),\n\t\t\t\t\t\t\t\tliteral(\"blocked\"),\n\t\t\t\t\t\t\t\tliteral(\"complete\")\n\t\t\t\t\t\t\t]).readonly(),\n\t\t\t\t\t\t\t\"blockedReason\": object({\n\t\t\t\t\t\t\t\t\"code\": string().readonly(),\n\t\t\t\t\t\t\t\t\"message\": string().readonly()\n\t\t\t\t\t\t\t}).readonly().optional(),\n\t\t\t\t\t\t\t\"maxGoalRounds\": number().readonly(),\n\t\t\t\t\t\t\t\"id\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\t\t\t\"revision\": number().readonly()\n\t\t\t\t\t\t}).readonly(),\n\t\t\t\t\t\t\"roundsStarted\": number().readonly(),\n\t\t\t\t\t\t\"createdAt\": number().readonly(),\n\t\t\t\t\t\t\"updatedAt\": number().readonly()\n\t\t\t\t\t})]).optional(),\n\t\t\t\t\t\"userQuestions\": object({\n\t\t\t\t\t\t\"active\": array(object({\n\t\t\t\t\t\t\t\"callId\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\t\t\t\"questions\": array(object({\n\t\t\t\t\t\t\t\t\"id\": string(),\n\t\t\t\t\t\t\t\t\"question\": string(),\n\t\t\t\t\t\t\t\t\"detail\": string().optional(),\n\t\t\t\t\t\t\t\t\"header\": string().optional(),\n\t\t\t\t\t\t\t\t\"options\": array(object({\n\t\t\t\t\t\t\t\t\t\"label\": string(),\n\t\t\t\t\t\t\t\t\t\"description\": string().optional()\n\t\t\t\t\t\t\t\t})).optional(),\n\t\t\t\t\t\t\t\t\"multiSelect\": boolean().optional(),\n\t\t\t\t\t\t\t\t\"intent\": object({\n\t\t\t\t\t\t\t\t\t\"kind\": literal(\"plan-review\"),\n\t\t\t\t\t\t\t\t\t\"approve\": string(),\n\t\t\t\t\t\t\t\t\t\"callId\": intersection(string(), unknown()).optional()\n\t\t\t\t\t\t\t\t}).optional()\n\t\t\t\t\t\t\t})).readonly(),\n\t\t\t\t\t\t\t\"state\": union([literal(\"open\"), literal(\"continued\")]).readonly()\n\t\t\t\t\t\t})).readonly(),\n\t\t\t\t\t\t\"settled\": array(object({\n\t\t\t\t\t\t\t\"callId\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\t\t\t\"answers\": array(object({\n\t\t\t\t\t\t\t\t\"id\": string(),\n\t\t\t\t\t\t\t\t\"selected\": array(string()),\n\t\t\t\t\t\t\t\t\"custom\": string().optional()\n\t\t\t\t\t\t\t})).readonly()\n\t\t\t\t\t\t})).readonly()\n\t\t\t\t\t}).optional()\n\t\t\t\t}), record(string(), union([\n\t\t\t\t\tliteral(null),\n\t\t\t\t\tstring(),\n\t\t\t\t\tnumber(),\n\t\t\t\t\tliteral(false),\n\t\t\t\t\tliteral(true),\n\t\t\t\t\tarray(lazy(() => JsonValueRemoteCodec$schema5())),\n\t\t\t\t\trecord(string(), lazy(() => JsonValueRemoteCodec$schema5()))\n\t\t\t\t])).readonly()).readonly()\n\t\t\t})).readonly().readonly() }).readonly()\n\t\t}), intersection(object({ \"type\": literal(\"projection\").readonly() }), object({\n\t\t\t\"sessionId\": intersection(string(), unknown()).readonly(),\n\t\t\t\"key\": string().readonly(),\n\t\t\t\"value\": union([\n\t\t\t\tliteral(null),\n\t\t\t\tstring(),\n\t\t\t\tnumber(),\n\t\t\t\tliteral(false),\n\t\t\t\tliteral(true),\n\t\t\t\tarray(lazy(() => JsonValueRemoteCodec$schema5())),\n\t\t\t\trecord(string(), lazy(() => JsonValueRemoteCodec$schema5()))\n\t\t\t]).readonly(),\n\t\t\t\"seq\": number().readonly()\n\t\t}))])",
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "baseline"
+        },
+        "value": {
+          "type": "object",
+          "properties": {
+            "projections": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "asOfSeq": {
+                    "type": "number"
+                  },
+                  "values": {
+                    "allOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "inbox": {
+                            "type": "object",
+                            "properties": {
+                              "next-turn": {
+                                "type": "array",
+                                "items": {
+                                  "anyOf": [
+                                    {
+                                      "const": null
+                                    },
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "const": false
+                                    },
+                                    {
+                                      "const": true
+                                    },
+                                    {
+                                      "type": "array",
+                                      "items": {
+                                        "anyOf": [
+                                          {
+                                            "const": null
+                                          },
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "const": false
+                                          },
+                                          {
+                                            "const": true
+                                          },
+                                          {
+                                            "type": "array",
+                                            "items": {
+                                              "$ref": "#/$defs/JsonValueRemoteCodec$schema5"
+                                            }
+                                          },
+                                          {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                              "$ref": "#/$defs/JsonValueRemoteCodec$schema5"
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "anyOf": [
+                                          {
+                                            "const": null
+                                          },
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "const": false
+                                          },
+                                          {
+                                            "const": true
+                                          },
+                                          {
+                                            "type": "array",
+                                            "items": {
+                                              "$ref": "#/$defs/JsonValueRemoteCodec$schema5"
+                                            }
+                                          },
+                                          {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                              "$ref": "#/$defs/JsonValueRemoteCodec$schema5"
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  ]
+                                }
+                              },
+                              "next-step": {
+                                "type": "array",
+                                "items": {
+                                  "anyOf": [
+                                    {
+                                      "const": null
+                                    },
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "const": false
+                                    },
+                                    {
+                                      "const": true
+                                    },
+                                    {
+                                      "type": "array",
+                                      "items": {
+                                        "anyOf": [
+                                          {
+                                            "const": null
+                                          },
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "const": false
+                                          },
+                                          {
+                                            "const": true
+                                          },
+                                          {
+                                            "type": "array",
+                                            "items": {
+                                              "$ref": "#/$defs/JsonValueRemoteCodec$schema5"
+                                            }
+                                          },
+                                          {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                              "$ref": "#/$defs/JsonValueRemoteCodec$schema5"
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "anyOf": [
+                                          {
+                                            "const": null
+                                          },
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "const": false
+                                          },
+                                          {
+                                            "const": true
+                                          },
+                                          {
+                                            "type": "array",
+                                            "items": {
+                                              "$ref": "#/$defs/JsonValueRemoteCodec$schema5"
+                                            }
+                                          },
+                                          {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                              "$ref": "#/$defs/JsonValueRemoteCodec$schema5"
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "required": [
+                              "next-turn",
+                              "next-step"
+                            ]
+                          },
+                          "agentPreset": {
+                            "anyOf": [
+                              {
+                                "const": null
+                              },
+                              {
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "title": {
+                            "anyOf": [
+                              {
+                                "const": null
+                              },
+                              {
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "todos": {
+                            "anyOf": [
+                              {
+                                "const": null
+                              },
+                              {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "content": {
+                                      "type": "string"
+                                    },
+                                    "status": {
+                                      "anyOf": [
+                                        {
+                                          "const": "completed"
+                                        },
+                                        {
+                                          "const": "pending"
+                                        },
+                                        {
+                                          "const": "in_progress"
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "content",
+                                    "status"
+                                  ]
+                                }
+                              }
+                            ]
+                          },
+                          "sessionListMetadata": {
+                            "type": "object",
+                            "properties": {
+                              "blank": {
+                                "type": "boolean"
+                              },
+                              "lastPromptAt": {
+                                "anyOf": [
+                                  {
+                                    "const": null
+                                  },
+                                  {
+                                    "type": "number"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "blank",
+                              "lastPromptAt"
+                            ]
+                          },
+                          "imageLimits": {
+                            "type": "object",
+                            "properties": {
+                              "maxImageBytes": {
+                                "type": "number"
+                              },
+                              "maxImagesPerMessage": {
+                                "type": "number"
+                              },
+                              "maxMessageImageBytes": {
+                                "type": "number"
+                              },
+                              "maxImagePixels": {
+                                "type": "number"
+                              },
+                              "maxImageDimension": {
+                                "type": "number"
+                              },
+                              "mediaTypes": {
+                                "type": "array",
+                                "items": {
+                                  "anyOf": [
+                                    {
+                                      "const": "image/png"
+                                    },
+                                    {
+                                      "const": "image/jpeg"
+                                    },
+                                    {
+                                      "const": "image/webp"
+                                    },
+                                    {
+                                      "const": "image/gif"
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "required": [
+                              "maxImageBytes",
+                              "maxImagesPerMessage",
+                              "maxMessageImageBytes",
+                              "maxImagePixels",
+                              "maxImageDimension",
+                              "mediaTypes"
+                            ]
+                          },
+                          "modelSelection": {
+                            "type": "object",
+                            "properties": {
+                              "lastUsed": {
+                                "anyOf": [
+                                  {
+                                    "const": null
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "provider": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      },
+                                      "reasoningEffort": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "provider",
+                                      "model"
+                                    ]
+                                  }
+                                ]
+                              },
+                              "next": {
+                                "anyOf": [
+                                  {
+                                    "const": null
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "provider": {
+                                        "type": "string"
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      },
+                                      "reasoningEffort": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "provider",
+                                      "model"
+                                    ]
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "lastUsed",
+                              "next"
+                            ]
+                          },
+                          "permissions": {
+                            "type": "object",
+                            "properties": {
+                              "currentValue": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "currentValue"
+                            ]
+                          },
+                          "subagentCatalog": {
+                            "type": "array",
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "allOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string"
+                                        },
+                                        "createdAt": {
+                                          "type": "number"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "createdAt"
+                                      ]
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "mode": {
+                                          "const": "one-shot"
+                                        },
+                                        "label": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "mode"
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "allOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string"
+                                        },
+                                        "createdAt": {
+                                          "type": "number"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "createdAt"
+                                      ]
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "mode": {
+                                          "const": "continuable"
+                                        },
+                                        "label": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "mode",
+                                        "label"
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "allOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string"
+                                        },
+                                        "createdAt": {
+                                          "type": "number"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "createdAt"
+                                      ]
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "mode": {
+                                          "const": "unknown"
+                                        },
+                                        "label": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "mode"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          },
+                          "subagentTiming": {
+                            "type": "object",
+                            "properties": {
+                              "settledMs": {
+                                "type": "number"
+                              },
+                              "active": {
+                                "type": "object",
+                                "properties": {
+                                  "since": {
+                                    "type": "number"
+                                  },
+                                  "through": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "since",
+                                  "through"
+                                ]
+                              },
+                              "lastTurnCompleted": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "settledMs"
+                            ]
+                          },
+                          "subagent": {
+                            "anyOf": [
+                              {
+                                "const": null
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "mode": {
+                                    "const": "one-shot"
+                                  },
+                                  "label": {
+                                    "type": "string"
+                                  },
+                                  "seq": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "mode",
+                                  "seq"
+                                ]
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "mode": {
+                                    "const": "continuable"
+                                  },
+                                  "label": {
+                                    "type": "string"
+                                  },
+                                  "seq": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "mode",
+                                  "label",
+                                  "seq"
+                                ]
+                              }
+                            ]
+                          },
+                          "goal": {
+                            "anyOf": [
+                              {
+                                "const": null
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "goal": {
+                                    "type": "object",
+                                    "properties": {
+                                      "objective": {
+                                        "type": "string"
+                                      },
+                                      "phase": {
+                                        "anyOf": [
+                                          {
+                                            "const": "active"
+                                          },
+                                          {
+                                            "const": "paused"
+                                          },
+                                          {
+                                            "const": "blocked"
+                                          },
+                                          {
+                                            "const": "complete"
+                                          }
+                                        ]
+                                      },
+                                      "blockedReason": {
+                                        "type": "object",
+                                        "properties": {
+                                          "code": {
+                                            "type": "string"
+                                          },
+                                          "message": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "code",
+                                          "message"
+                                        ]
+                                      },
+                                      "maxGoalRounds": {
+                                        "type": "number"
+                                      },
+                                      "id": {
+                                        "type": "string"
+                                      },
+                                      "revision": {
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": [
+                                      "objective",
+                                      "phase",
+                                      "maxGoalRounds",
+                                      "id",
+                                      "revision"
+                                    ]
+                                  },
+                                  "roundsStarted": {
+                                    "type": "number"
+                                  },
+                                  "createdAt": {
+                                    "type": "number"
+                                  },
+                                  "updatedAt": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "goal",
+                                  "roundsStarted",
+                                  "createdAt",
+                                  "updatedAt"
+                                ]
+                              }
+                            ]
+                          },
+                          "userQuestions": {
+                            "type": "object",
+                            "properties": {
+                              "active": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "callId": {
+                                      "type": "string"
+                                    },
+                                    "questions": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "id": {
+                                            "type": "string"
+                                          },
+                                          "question": {
+                                            "type": "string"
+                                          },
+                                          "detail": {
+                                            "type": "string"
+                                          },
+                                          "header": {
+                                            "type": "string"
+                                          },
+                                          "options": {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "object",
+                                              "properties": {
+                                                "label": {
+                                                  "type": "string"
+                                                },
+                                                "description": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "label"
+                                              ]
+                                            }
+                                          },
+                                          "multiSelect": {
+                                            "type": "boolean"
+                                          },
+                                          "intent": {
+                                            "type": "object",
+                                            "properties": {
+                                              "kind": {
+                                                "const": "plan-review"
+                                              },
+                                              "approve": {
+                                                "type": "string"
+                                              },
+                                              "callId": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "kind",
+                                              "approve"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "id",
+                                          "question"
+                                        ]
+                                      }
+                                    },
+                                    "state": {
+                                      "anyOf": [
+                                        {
+                                          "const": "open"
+                                        },
+                                        {
+                                          "const": "continued"
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "callId",
+                                    "questions",
+                                    "state"
+                                  ]
+                                }
+                              },
+                              "settled": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "callId": {
+                                      "type": "string"
+                                    },
+                                    "answers": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "id": {
+                                            "type": "string"
+                                          },
+                                          "selected": {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "custom": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "id",
+                                          "selected"
+                                        ]
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "callId",
+                                    "answers"
+                                  ]
+                                }
+                              }
+                            },
+                            "required": [
+                              "active",
+                              "settled"
+                            ]
+                          }
+                        },
+                        "required": []
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": {
+                          "anyOf": [
+                            {
+                              "const": null
+                            },
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "const": false
+                            },
+                            {
+                              "const": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "anyOf": [
+                                  {
+                                    "const": null
+                                  },
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "const": false
+                                  },
+                                  {
+                                    "const": true
+                                  },
+                                  {
+                                    "type": "array",
+                                    "items": {
+                                      "$ref": "#/$defs/JsonValueRemoteCodec$schema5"
+                                    }
+                                  },
+                                  {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "$ref": "#/$defs/JsonValueRemoteCodec$schema5"
+                                    }
+                                  }
+                                ]
+                              }
+                            },
+                            {
+                              "type": "object",
+                              "additionalProperties": {
+                                "anyOf": [
+                                  {
+                                    "const": null
+                                  },
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "const": false
+                                  },
+                                  {
+                                    "const": true
+                                  },
+                                  {
+                                    "type": "array",
+                                    "items": {
+                                      "$ref": "#/$defs/JsonValueRemoteCodec$schema5"
+                                    }
+                                  },
+                                  {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                      "$ref": "#/$defs/JsonValueRemoteCodec$schema5"
+                                    }
+                                  }
+                                ]
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "asOfSeq",
+                  "values"
+                ]
+              }
+            }
+          },
+          "required": [
+            "projections"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "value"
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "projection"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string"
+            },
+            "key": {
+              "type": "string"
+            },
+            "value": {
+              "anyOf": [
+                {
+                  "const": null
+                },
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "const": false
+                },
+                {
+                  "const": true
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "const": null
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "const": false
+                      },
+                      {
+                        "const": true
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/JsonValueRemoteCodec$schema5"
+                        }
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": {
+                          "$ref": "#/$defs/JsonValueRemoteCodec$schema5"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "const": null
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "const": false
+                      },
+                      {
+                        "const": true
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/JsonValueRemoteCodec$schema5"
+                        }
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": {
+                          "$ref": "#/$defs/JsonValueRemoteCodec$schema5"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            "seq": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "sessionId",
+            "key",
+            "value",
+            "seq"
+          ]
+        }
+      ]
+    }
+  ],
+  "$defs": {
+    "JsonValueRemoteCodec$schema5": {
+      "anyOf": [
+        {
+          "const": null
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "const": false
+        },
+        {
+          "const": true
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/JsonValueRemoteCodec$schema5"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValueRemoteCodec$schema5"
+          }
+        }
+      ]
+    }
+  }
+}

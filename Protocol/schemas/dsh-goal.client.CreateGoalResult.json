@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-goal.client.CreateGoalResult",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-goal/client#CreateGoalResult",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_goal_goals_create_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_goal_goals_create_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-goal#goals/create :: result"
+  ],
+  "x-dsh-rawExpression": "object({ \"ref\": object({\n\t\t\t\"id\": intersection(string(), unknown()).readonly(),\n\t\t\t\"revision\": number().readonly()\n\t\t}).readonly() })",
+  "type": "object",
+  "properties": {
+    "ref": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "revision"
+      ]
+    }
+  },
+  "required": [
+    "ref"
+  ]
+}

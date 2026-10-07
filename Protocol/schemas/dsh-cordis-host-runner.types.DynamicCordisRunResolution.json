@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-cordis-host-runner.types.DynamicCordisRunResolution",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-cordis-host-runner/types#DynamicCordisRunResolution",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_cordis_host_runner_dynamicCordisRunner_resolveRequestRun_parameter_1$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_cordis_host_runner_dynamicCordisRunner_resolveRequestRun_parameter_1$schema",
+      "_deepseek_ai_dsh_cordis_host_runner_dynamicCordisRunner_settleUserRun_parameter_2$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-cordis-host-runner#dynamicCordisRunner/resolveRequestRun :: parameter:resolution",
+    "@deepseek-ai/dsh-cordis-host-runner#dynamicCordisRunner/settleUserRun :: parameter:resolution"
+  ],
+  "x-dsh-rawExpression": "union([object({\n\t\t\t\"ok\": literal(true),\n\t\t\t\"pluginRunId\": intersection(string(), unknown()),\n\t\t\t\"waitingFor\": array(string()).optional()\n\t\t}), object({\n\t\t\t\"ok\": literal(false),\n\t\t\t\"reason\": union([\n\t\t\t\tliteral(\"rejected\"),\n\t\t\t\tliteral(\"host-half-failed\"),\n\t\t\t\tliteral(\"client-half-failed\")\n\t\t\t]),\n\t\t\t\"pluginRunId\": intersection(string(), unknown()).optional(),\n\t\t\t\"startedHere\": boolean().optional(),\n\t\t\t\"message\": string().optional(),\n\t\t\t\"stack\": string().optional()\n\t\t})])",
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "pluginRunId": {
+          "type": "string"
+        },
+        "waitingFor": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "ok",
+        "pluginRunId"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "const": "rejected"
+            },
+            {
+              "const": "host-half-failed"
+            },
+            {
+              "const": "client-half-failed"
+            }
+          ]
+        },
+        "pluginRunId": {
+          "type": "string"
+        },
+        "startedHere": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        },
+        "stack": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ok",
+        "reason"
+      ]
+    }
+  ]
+}

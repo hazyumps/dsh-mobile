@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-workspace-files.types.WorkspaceFileBytes",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-workspace-files/types#WorkspaceFileBytes",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_workspace_files_workspaceFiles_readBytes_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_workspace_files_workspaceFiles_readBytes_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-workspace-files#workspaceFiles/readBytes :: result"
+  ],
+  "x-dsh-rawExpression": "object({\n\t\t\t\"offset\": number().readonly(),\n\t\t\t\"data\": _instanceof(Uint8Array),\n\t\t\t\"eof\": boolean().readonly(),\n\t\t\t\"absolutePath\": string().readonly(),\n\t\t\t\"version\": string().readonly(),\n\t\t\t\"bytes\": number().readonly().optional()\n\t\t})",
+  "type": "object",
+  "properties": {
+    "offset": {
+      "type": "number"
+    },
+    "data": {
+      "type": "null"
+    },
+    "eof": {
+      "type": "boolean"
+    },
+    "absolutePath": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    },
+    "bytes": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "offset",
+    "data",
+    "eof",
+    "absolutePath",
+    "version"
+  ]
+}

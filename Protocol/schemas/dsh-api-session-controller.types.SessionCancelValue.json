@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-session-controller.types.SessionCancelValue",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-session-controller/types#SessionCancelValue",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_session_controller_session_cancel_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_session_controller_session_cancel_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-session-controller#session/cancel :: result"
+  ],
+  "x-dsh-rawExpression": "object({ \"accepted\": literal(true).readonly() })",
+  "type": "object",
+  "properties": {
+    "accepted": {
+      "const": true
+    }
+  },
+  "required": [
+    "accepted"
+  ]
+}

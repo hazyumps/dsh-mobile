@@ -1,0 +1,206 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-workspace-controller.types.WorkspaceFollowFrame",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-workspace-controller/types#WorkspaceFollowFrame",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_workspace_controller_workspace_follow_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_workspace_controller_workspace_follow_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-workspace-controller#workspace/follow :: result"
+  ],
+  "x-dsh-rawExpression": "union([\n\t\t\tobject({\n\t\t\t\t\"type\": literal(\"baseline\").readonly(),\n\t\t\t\t\"value\": object({\n\t\t\t\t\t\"items\": array(object({\n\t\t\t\t\t\t\"workspaceId\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\t\t\"path\": string().readonly(),\n\t\t\t\t\t\t\"title\": string().readonly(),\n\t\t\t\t\t\t\"sessionIds\": array(intersection(string(), unknown())).readonly(),\n\t\t\t\t\t\t\"createdAt\": string().readonly(),\n\t\t\t\t\t\t\"updatedAt\": string().readonly()\n\t\t\t\t\t})).readonly(),\n\t\t\t\t\t\"archivedSessionIds\": array(intersection(string(), unknown())).readonly(),\n\t\t\t\t\t\"pinnedSessionIds\": array(intersection(string(), unknown())).readonly()\n\t\t\t\t}).readonly()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"type\": literal(\"upsert\").readonly(),\n\t\t\t\t\"workspace\": object({\n\t\t\t\t\t\"workspaceId\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\t\"path\": string().readonly(),\n\t\t\t\t\t\"title\": string().readonly(),\n\t\t\t\t\t\"sessionIds\": array(intersection(string(), unknown())).readonly(),\n\t\t\t\t\t\"createdAt\": string().readonly(),\n\t\t\t\t\t\"updatedAt\": string().readonly()\n\t\t\t\t}).readonly()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"type\": literal(\"remove\").readonly(),\n\t\t\t\t\"workspaceId\": intersection(string(), unknown()).readonly()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"type\": literal(\"order\").readonly(),\n\t\t\t\t\"workspaceIds\": array(intersection(string(), unknown())).readonly()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"type\": literal(\"archived\").readonly(),\n\t\t\t\t\"archivedSessionIds\": array(intersection(string(), unknown())).readonly()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"type\": literal(\"pinned\").readonly(),\n\t\t\t\t\"pinnedSessionIds\": array(intersection(string(), unknown())).readonly()\n\t\t\t})\n\t\t])",
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "baseline"
+        },
+        "value": {
+          "type": "object",
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "workspaceId": {
+                    "type": "string"
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "sessionIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "createdAt": {
+                    "type": "string"
+                  },
+                  "updatedAt": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "workspaceId",
+                  "path",
+                  "title",
+                  "sessionIds",
+                  "createdAt",
+                  "updatedAt"
+                ]
+              }
+            },
+            "archivedSessionIds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "pinnedSessionIds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "items",
+            "archivedSessionIds",
+            "pinnedSessionIds"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "value"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "upsert"
+        },
+        "workspace": {
+          "type": "object",
+          "properties": {
+            "workspaceId": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "sessionIds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "createdAt": {
+              "type": "string"
+            },
+            "updatedAt": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "workspaceId",
+            "path",
+            "title",
+            "sessionIds",
+            "createdAt",
+            "updatedAt"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "workspace"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "remove"
+        },
+        "workspaceId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "workspaceId"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "order"
+        },
+        "workspaceIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "type",
+        "workspaceIds"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "archived"
+        },
+        "archivedSessionIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "type",
+        "archivedSessionIds"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "pinned"
+        },
+        "pinnedSessionIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "type",
+        "pinnedSessionIds"
+      ]
+    }
+  ]
+}

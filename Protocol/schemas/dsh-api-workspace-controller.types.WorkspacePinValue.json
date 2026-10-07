@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-workspace-controller.types.WorkspacePinValue",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-workspace-controller/types#WorkspacePinValue",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_workspace_controller_workspace_pinSession_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_workspace_controller_workspace_pinSession_result$schema",
+      "_deepseek_ai_dsh_api_workspace_controller_workspace_unpinSession_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-workspace-controller#workspace/pinSession :: result",
+    "@deepseek-ai/dsh-api-workspace-controller#workspace/unpinSession :: result"
+  ],
+  "x-dsh-rawExpression": "object({ \"pinnedSessionIds\": array(intersection(string(), unknown())).readonly() })",
+  "type": "object",
+  "properties": {
+    "pinnedSessionIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "pinnedSessionIds"
+  ]
+}

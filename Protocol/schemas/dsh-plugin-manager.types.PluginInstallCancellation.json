@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-plugin-manager.types.PluginInstallCancellation",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-plugin-manager/types#PluginInstallCancellation",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_plugin_manager_pluginManager_cancelInstall_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_plugin_manager_pluginManager_cancelInstall_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-plugin-manager#pluginManager/cancelInstall :: result"
+  ],
+  "x-dsh-rawExpression": "object({ \"status\": union([\n\t\t\tliteral(\"cancelled\"),\n\t\t\tliteral(\"not-running\"),\n\t\t\tliteral(\"too-late\")\n\t\t]).readonly() })",
+  "type": "object",
+  "properties": {
+    "status": {
+      "anyOf": [
+        {
+          "const": "cancelled"
+        },
+        {
+          "const": "not-running"
+        },
+        {
+          "const": "too-late"
+        }
+      ]
+    }
+  },
+  "required": [
+    "status"
+  ]
+}

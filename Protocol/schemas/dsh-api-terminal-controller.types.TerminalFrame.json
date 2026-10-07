@@ -1,0 +1,233 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-terminal-controller.types.TerminalFrame",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-terminal-controller/types#TerminalFrame",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_terminal_controller_terminal_follow_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_terminal_controller_terminal_follow_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-terminal-controller#terminal/follow :: result"
+  ],
+  "x-dsh-rawExpression": "union([\n\t\t\tobject({\n\t\t\t\t\"type\": literal(\"snapshot\").readonly(),\n\t\t\t\t\"sequence\": number().readonly(),\n\t\t\t\t\"screen\": string().readonly(),\n\t\t\t\t\"info\": object({\n\t\t\t\t\t\"id\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\t\"title\": string().readonly(),\n\t\t\t\t\t\"shell\": object({\n\t\t\t\t\t\t\"path\": string().readonly(),\n\t\t\t\t\t\t\"args\": array(string()).readonly(),\n\t\t\t\t\t\t\"name\": string().readonly()\n\t\t\t\t\t}).readonly(),\n\t\t\t\t\t\"cwd\": string().readonly(),\n\t\t\t\t\t\"cols\": number().readonly(),\n\t\t\t\t\t\"rows\": number().readonly(),\n\t\t\t\t\t\"state\": union([\n\t\t\t\t\t\tliteral(\"failed\"),\n\t\t\t\t\t\tliteral(\"running\"),\n\t\t\t\t\t\tliteral(\"exited\")\n\t\t\t\t\t]).readonly(),\n\t\t\t\t\t\"exitCode\": union([literal(null), number()]).readonly(),\n\t\t\t\t\t\"error\": string().readonly().optional(),\n\t\t\t\t\t\"controllerId\": intersection(string(), unknown()).readonly().optional()\n\t\t\t\t}).readonly()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"type\": literal(\"output\").readonly(),\n\t\t\t\t\"sequence\": number().readonly(),\n\t\t\t\t\"data\": string().readonly()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"type\": literal(\"state\").readonly(),\n\t\t\t\t\"info\": object({\n\t\t\t\t\t\"id\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\t\"title\": string().readonly(),\n\t\t\t\t\t\"shell\": object({\n\t\t\t\t\t\t\"path\": string().readonly(),\n\t\t\t\t\t\t\"args\": array(string()).readonly(),\n\t\t\t\t\t\t\"name\": string().readonly()\n\t\t\t\t\t}).readonly(),\n\t\t\t\t\t\"cwd\": string().readonly(),\n\t\t\t\t\t\"cols\": number().readonly(),\n\t\t\t\t\t\"rows\": number().readonly(),\n\t\t\t\t\t\"state\": union([\n\t\t\t\t\t\tliteral(\"failed\"),\n\t\t\t\t\t\tliteral(\"running\"),\n\t\t\t\t\t\tliteral(\"exited\")\n\t\t\t\t\t]).readonly(),\n\t\t\t\t\t\"exitCode\": union([literal(null), number()]).readonly(),\n\t\t\t\t\t\"error\": string().readonly().optional(),\n\t\t\t\t\t\"controllerId\": intersection(string(), unknown()).readonly().optional()\n\t\t\t\t}).readonly()\n\t\t\t})\n\t\t])",
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "snapshot"
+        },
+        "sequence": {
+          "type": "number"
+        },
+        "screen": {
+          "type": "string"
+        },
+        "info": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "shell": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "args": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "args",
+                "name"
+              ]
+            },
+            "cwd": {
+              "type": "string"
+            },
+            "cols": {
+              "type": "number"
+            },
+            "rows": {
+              "type": "number"
+            },
+            "state": {
+              "anyOf": [
+                {
+                  "const": "failed"
+                },
+                {
+                  "const": "running"
+                },
+                {
+                  "const": "exited"
+                }
+              ]
+            },
+            "exitCode": {
+              "anyOf": [
+                {
+                  "const": null
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "error": {
+              "type": "string"
+            },
+            "controllerId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "title",
+            "shell",
+            "cwd",
+            "cols",
+            "rows",
+            "state",
+            "exitCode"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "sequence",
+        "screen",
+        "info"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "output"
+        },
+        "sequence": {
+          "type": "number"
+        },
+        "data": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "sequence",
+        "data"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "state"
+        },
+        "info": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "shell": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "args": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "args",
+                "name"
+              ]
+            },
+            "cwd": {
+              "type": "string"
+            },
+            "cols": {
+              "type": "number"
+            },
+            "rows": {
+              "type": "number"
+            },
+            "state": {
+              "anyOf": [
+                {
+                  "const": "failed"
+                },
+                {
+                  "const": "running"
+                },
+                {
+                  "const": "exited"
+                }
+              ]
+            },
+            "exitCode": {
+              "anyOf": [
+                {
+                  "const": null
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "error": {
+              "type": "string"
+            },
+            "controllerId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "title",
+            "shell",
+            "cwd",
+            "cols",
+            "rows",
+            "state",
+            "exitCode"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "info"
+      ]
+    }
+  ]
+}

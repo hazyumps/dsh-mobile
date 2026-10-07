@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-cordis-host-runner.types.CordisDynamicPluginId",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-cordis-host-runner/types#CordisDynamicPluginId",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_cordis_host_runner_dynamicCordisRunner_getClientCode_parameter_1$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_cordis_host_runner_dynamicCordisRunner_getClientCode_parameter_1$schema",
+      "_deepseek_ai_dsh_cordis_host_runner_dynamicCordisRunner_invoke_parameter_0$schema",
+      "_deepseek_ai_dsh_cordis_host_runner_dynamicCordisRunner_reportClientGuardFailure_parameter_1$schema",
+      "_deepseek_ai_dsh_cordis_host_runner_dynamicCordisRunner_reportRenderFailure_parameter_1$schema",
+      "_deepseek_ai_dsh_cordis_host_runner_dynamicCordisRunner_runHostHalf_parameter_1$schema",
+      "_deepseek_ai_dsh_cordis_host_runner_dynamicCordisRunner_settleUserRun_parameter_1$schema",
+      "_deepseek_ai_dsh_cordis_host_runner_dynamicCordisRunner_stopFromPanel_parameter_1$schema",
+      "_deepseek_ai_dsh_cordis_host_runner_dynamicCordisRunner_undefineFromPanel_parameter_1$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-cordis-host-runner#dynamicCordisRunner/getClientCode :: parameter:pluginId",
+    "@deepseek-ai/dsh-cordis-host-runner#dynamicCordisRunner/invoke :: parameter:pluginId",
+    "@deepseek-ai/dsh-cordis-host-runner#dynamicCordisRunner/reportClientGuardFailure :: parameter:pluginId",
+    "@deepseek-ai/dsh-cordis-host-runner#dynamicCordisRunner/reportRenderFailure :: parameter:pluginId",
+    "@deepseek-ai/dsh-cordis-host-runner#dynamicCordisRunner/runHostHalf :: parameter:pluginId",
+    "@deepseek-ai/dsh-cordis-host-runner#dynamicCordisRunner/settleUserRun :: parameter:pluginId",
+    "@deepseek-ai/dsh-cordis-host-runner#dynamicCordisRunner/stopFromPanel :: parameter:pluginId",
+    "@deepseek-ai/dsh-cordis-host-runner#dynamicCordisRunner/undefineFromPanel :: parameter:pluginId"
+  ],
+  "x-dsh-rawExpression": "intersection(string(), unknown())",
+  "type": "string"
+}

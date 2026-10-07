@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-message-feedback.types.MessageFeedbackPutRequest",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-message-feedback/types#MessageFeedbackPutRequest",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_message_feedback_messageFeedback_put_parameter_0$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_message_feedback_messageFeedback_put_parameter_0$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-message-feedback#messageFeedback/put :: parameter:request"
+  ],
+  "x-dsh-rawExpression": "object({\n\t\t\t\"sessionId\": intersection(string(), unknown()).readonly(),\n\t\t\t\"messageId\": intersection(string(), unknown()).readonly(),\n\t\t\t\"rating\": union([literal(\"positive\"), literal(\"negative\")]).readonly(),\n\t\t\t\"note\": string().readonly().optional(),\n\t\t\t\"category\": union([\n\t\t\t\tliteral(\"other\"),\n\t\t\t\tliteral(\"task-result\"),\n\t\t\t\tliteral(\"instruction-following\"),\n\t\t\t\tliteral(\"product-interaction\"),\n\t\t\t\tliteral(\"service-stability\"),\n\t\t\t\tliteral(\"resource-cost\"),\n\t\t\t\tliteral(\"security-privacy-permission\")\n\t\t\t]).readonly().optional(),\n\t\t\t\"ifVersion\": union([literal(null), intersection(string(), unknown())]).readonly()\n\t\t})",
+  "type": "object",
+  "properties": {
+    "sessionId": {
+      "type": "string"
+    },
+    "messageId": {
+      "type": "string"
+    },
+    "rating": {
+      "anyOf": [
+        {
+          "const": "positive"
+        },
+        {
+          "const": "negative"
+        }
+      ]
+    },
+    "note": {
+      "type": "string"
+    },
+    "category": {
+      "anyOf": [
+        {
+          "const": "other"
+        },
+        {
+          "const": "task-result"
+        },
+        {
+          "const": "instruction-following"
+        },
+        {
+          "const": "product-interaction"
+        },
+        {
+          "const": "service-stability"
+        },
+        {
+          "const": "resource-cost"
+        },
+        {
+          "const": "security-privacy-permission"
+        }
+      ]
+    },
+    "ifVersion": {
+      "anyOf": [
+        {
+          "const": null
+        },
+        {
+          "type": "string"
+        }
+      ]
+    }
+  },
+  "required": [
+    "sessionId",
+    "messageId",
+    "rating",
+    "ifVersion"
+  ]
+}

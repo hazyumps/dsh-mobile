@@ -1,0 +1,261 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-job-controller.types.JobFollowFrame",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-job-controller/types#JobFollowFrame",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_job_controller_job_follow_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_job_controller_job_follow_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-job-controller#job/follow :: result"
+  ],
+  "x-dsh-rawExpression": "union([\n\t\t\tobject({\n\t\t\t\t\"type\": literal(\"opened\").readonly(),\n\t\t\t\t\"job\": object({\n\t\t\t\t\t\"id\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\t\"kind\": string().readonly(),\n\t\t\t\t\t\"label\": string().readonly(),\n\t\t\t\t\t\"owner\": intersection(string(), unknown()).readonly().optional(),\n\t\t\t\t\t\"outputLimitBytes\": number().readonly().optional(),\n\t\t\t\t\t\"status\": union([\n\t\t\t\t\t\tliteral(\"failed\"),\n\t\t\t\t\t\tliteral(\"running\"),\n\t\t\t\t\t\tliteral(\"stopping\"),\n\t\t\t\t\t\tliteral(\"completed\"),\n\t\t\t\t\t\tliteral(\"killed\")\n\t\t\t\t\t]).readonly(),\n\t\t\t\t\t\"progress\": string().readonly().optional(),\n\t\t\t\t\t\"detail\": string().readonly().optional(),\n\t\t\t\t\t\"startedAt\": number().readonly(),\n\t\t\t\t\t\"finishedAt\": number().readonly().optional(),\n\t\t\t\t\t\"output\": object({\n\t\t\t\t\t\t\"total\": number().readonly(),\n\t\t\t\t\t\t\"earliest\": number().readonly(),\n\t\t\t\t\t\t\"spillPaths\": array(string()).readonly().optional()\n\t\t\t\t\t}).readonly()\n\t\t\t\t}).readonly(),\n\t\t\t\t\"from\": number().readonly()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"type\": literal(\"output\").readonly(),\n\t\t\t\t\"chunks\": array(object({\n\t\t\t\t\t\"at\": number().readonly(),\n\t\t\t\t\t\"text\": string().readonly(),\n\t\t\t\t\t\"channel\": union([\n\t\t\t\t\t\tliteral(\"stdout\"),\n\t\t\t\t\t\tliteral(\"stderr\"),\n\t\t\t\t\t\tliteral(\"log\")\n\t\t\t\t\t]).readonly().optional(),\n\t\t\t\t\t\"gapBefore\": literal(true).readonly().optional()\n\t\t\t\t})).readonly(),\n\t\t\t\t\"next\": number().readonly(),\n\t\t\t\t\"lossy\": literal(true).readonly().optional()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"type\": literal(\"status\").readonly(),\n\t\t\t\t\"job\": object({\n\t\t\t\t\t\"id\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\t\"kind\": string().readonly(),\n\t\t\t\t\t\"label\": string().readonly(),\n\t\t\t\t\t\"owner\": intersection(string(), unknown()).readonly().optional(),\n\t\t\t\t\t\"outputLimitBytes\": number().readonly().optional(),\n\t\t\t\t\t\"status\": union([\n\t\t\t\t\t\tliteral(\"failed\"),\n\t\t\t\t\t\tliteral(\"running\"),\n\t\t\t\t\t\tliteral(\"stopping\"),\n\t\t\t\t\t\tliteral(\"completed\"),\n\t\t\t\t\t\tliteral(\"killed\")\n\t\t\t\t\t]).readonly(),\n\t\t\t\t\t\"progress\": string().readonly().optional(),\n\t\t\t\t\t\"detail\": string().readonly().optional(),\n\t\t\t\t\t\"startedAt\": number().readonly(),\n\t\t\t\t\t\"finishedAt\": number().readonly().optional(),\n\t\t\t\t\t\"output\": object({\n\t\t\t\t\t\t\"total\": number().readonly(),\n\t\t\t\t\t\t\"earliest\": number().readonly(),\n\t\t\t\t\t\t\"spillPaths\": array(string()).readonly().optional()\n\t\t\t\t\t}).readonly()\n\t\t\t\t}).readonly()\n\t\t\t})\n\t\t])",
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "opened"
+        },
+        "job": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "owner": {
+              "type": "string"
+            },
+            "outputLimitBytes": {
+              "type": "number"
+            },
+            "status": {
+              "anyOf": [
+                {
+                  "const": "failed"
+                },
+                {
+                  "const": "running"
+                },
+                {
+                  "const": "stopping"
+                },
+                {
+                  "const": "completed"
+                },
+                {
+                  "const": "killed"
+                }
+              ]
+            },
+            "progress": {
+              "type": "string"
+            },
+            "detail": {
+              "type": "string"
+            },
+            "startedAt": {
+              "type": "number"
+            },
+            "finishedAt": {
+              "type": "number"
+            },
+            "output": {
+              "type": "object",
+              "properties": {
+                "total": {
+                  "type": "number"
+                },
+                "earliest": {
+                  "type": "number"
+                },
+                "spillPaths": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "total",
+                "earliest"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "kind",
+            "label",
+            "status",
+            "startedAt",
+            "output"
+          ]
+        },
+        "from": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "type",
+        "job",
+        "from"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "output"
+        },
+        "chunks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "at": {
+                "type": "number"
+              },
+              "text": {
+                "type": "string"
+              },
+              "channel": {
+                "anyOf": [
+                  {
+                    "const": "stdout"
+                  },
+                  {
+                    "const": "stderr"
+                  },
+                  {
+                    "const": "log"
+                  }
+                ]
+              },
+              "gapBefore": {
+                "const": true
+              }
+            },
+            "required": [
+              "at",
+              "text"
+            ]
+          }
+        },
+        "next": {
+          "type": "number"
+        },
+        "lossy": {
+          "const": true
+        }
+      },
+      "required": [
+        "type",
+        "chunks",
+        "next"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "status"
+        },
+        "job": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "owner": {
+              "type": "string"
+            },
+            "outputLimitBytes": {
+              "type": "number"
+            },
+            "status": {
+              "anyOf": [
+                {
+                  "const": "failed"
+                },
+                {
+                  "const": "running"
+                },
+                {
+                  "const": "stopping"
+                },
+                {
+                  "const": "completed"
+                },
+                {
+                  "const": "killed"
+                }
+              ]
+            },
+            "progress": {
+              "type": "string"
+            },
+            "detail": {
+              "type": "string"
+            },
+            "startedAt": {
+              "type": "number"
+            },
+            "finishedAt": {
+              "type": "number"
+            },
+            "output": {
+              "type": "object",
+              "properties": {
+                "total": {
+                  "type": "number"
+                },
+                "earliest": {
+                  "type": "number"
+                },
+                "spillPaths": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "total",
+                "earliest"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "kind",
+            "label",
+            "status",
+            "startedAt",
+            "output"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "job"
+      ]
+    }
+  ]
+}

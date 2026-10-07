@@ -1,0 +1,819 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-client-product-analytics.types.ProductEvent",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-client-product-analytics/types#ProductEvent",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_client_product_analytics_productAnalytics_report_parameter_0$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_client_product_analytics_productAnalytics_report_parameter_0$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-client-product-analytics#productAnalytics/report :: parameter:event"
+  ],
+  "x-dsh-rawExpression": "union([\n\t\t\tobject({\n\t\t\t\t\"eventName\": literal(\"desktop_app_launch\"),\n\t\t\t\t\"attributes\": record(string(), never()),\n\t\t\t\t\"timestamp\": number()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"eventName\": literal(\"auth_page_view\"),\n\t\t\t\t\"attributes\": record(string(), never()),\n\t\t\t\t\"timestamp\": number()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"eventName\": literal(\"auth_page_click\"),\n\t\t\t\t\"attributes\": object({ \"button_name\": union([literal(\"sign_in\"), literal(\"api-key\")]) }),\n\t\t\t\t\"timestamp\": number()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"eventName\": literal(\"api_key_save_click\"),\n\t\t\t\t\"attributes\": record(string(), never()),\n\t\t\t\t\"timestamp\": number()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"eventName\": literal(\"onboarding_page_view\"),\n\t\t\t\t\"attributes\": object({ \"page_name\": union([\n\t\t\t\t\tliteral(\"onboarding_welcome\"),\n\t\t\t\t\tliteral(\"onboarding_recharge\"),\n\t\t\t\t\tliteral(\"onboarding_use_case\"),\n\t\t\t\t\tliteral(\"onboarding_process\")\n\t\t\t\t]) }),\n\t\t\t\t\"timestamp\": number()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"eventName\": literal(\"onboarding_page_click\"),\n\t\t\t\t\"attributes\": object({\n\t\t\t\t\t\"page_name\": union([\n\t\t\t\t\t\tliteral(\"onboarding_welcome\"),\n\t\t\t\t\t\tliteral(\"onboarding_recharge\"),\n\t\t\t\t\t\tliteral(\"onboarding_use_case\"),\n\t\t\t\t\t\tliteral(\"onboarding_process\")\n\t\t\t\t\t]),\n\t\t\t\t\t\"button_name\": union([\n\t\t\t\t\t\tliteral(\"next\"),\n\t\t\t\t\t\tliteral(\"back\"),\n\t\t\t\t\t\tliteral(\"skip\"),\n\t\t\t\t\t\tliteral(\"charge\"),\n\t\t\t\t\t\tliteral(\"later\"),\n\t\t\t\t\t\tliteral(\"continue\")\n\t\t\t\t\t]),\n\t\t\t\t\t\"selected_content\": union([\n\t\t\t\t\t\tliteral(\"office\"),\n\t\t\t\t\t\tliteral(\"code\"),\n\t\t\t\t\t\tliteral(\"code_office\"),\n\t\t\t\t\t\tliteral(\"focus_result\"),\n\t\t\t\t\t\tliteral(\"key_detail\"),\n\t\t\t\t\t\tliteral(\"full_process\")\n\t\t\t\t\t]).optional()\n\t\t\t\t}),\n\t\t\t\t\"timestamp\": number()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"eventName\": literal(\"onboarding_popup_view\"),\n\t\t\t\t\"attributes\": object({ \"popup_name\": union([literal(\"skip_charge\"), literal(\"skip_setting\")]) }),\n\t\t\t\t\"timestamp\": number()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"eventName\": literal(\"onboarding_popup_click\"),\n\t\t\t\t\"attributes\": object({\n\t\t\t\t\t\"popup_name\": union([literal(\"skip_charge\"), literal(\"skip_setting\")]),\n\t\t\t\t\t\"button_name\": union([\n\t\t\t\t\t\tliteral(\"charge\"),\n\t\t\t\t\t\tliteral(\"know\"),\n\t\t\t\t\t\tliteral(\"enter\"),\n\t\t\t\t\t\tliteral(\"setting\"),\n\t\t\t\t\t\tliteral(\"close\")\n\t\t\t\t\t])\n\t\t\t\t}),\n\t\t\t\t\"timestamp\": number()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"eventName\": literal(\"desktop_upgrade_click\"),\n\t\t\t\t\"attributes\": record(string(), never()),\n\t\t\t\t\"timestamp\": number()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"eventName\": literal(\"desktop_upgrade_download_result\"),\n\t\t\t\t\"attributes\": object({\n\t\t\t\t\t\"is_success\": boolean(),\n\t\t\t\t\t\"error_reason\": string().optional()\n\t\t\t\t}),\n\t\t\t\t\"timestamp\": number()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"eventName\": literal(\"desktop_upgrade_install_restart_click\"),\n\t\t\t\t\"attributes\": record(string(), never()),\n\t\t\t\t\"timestamp\": number()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"eventName\": literal(\"send_button_click\"),\n\t\t\t\t\"attributes\": object({\n\t\t\t\t\t\"session_id\": intersection(string(), unknown()).optional(),\n\t\t\t\t\t\"model_name\": string().optional(),\n\t\t\t\t\t\"thinking_effort\": string().optional(),\n\t\t\t\t\t\"run_mode\": union([\n\t\t\t\t\t\tliteral(\"goal\"),\n\t\t\t\t\t\tliteral(\"plan\"),\n\t\t\t\t\t\tliteral(\"default\")\n\t\t\t\t\t]),\n\t\t\t\t\t\"msg_type\": union([\n\t\t\t\t\t\tliteral(\"queue\"),\n\t\t\t\t\t\tliteral(\"steer\"),\n\t\t\t\t\t\tliteral(\"default\")\n\t\t\t\t\t])\n\t\t\t\t}),\n\t\t\t\t\"timestamp\": number()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"eventName\": literal(\"model_switch\"),\n\t\t\t\t\"attributes\": object({\n\t\t\t\t\t\"session_id\": intersection(string(), unknown()).optional(),\n\t\t\t\t\t\"switch_from\": string(),\n\t\t\t\t\t\"switch_to\": string()\n\t\t\t\t}),\n\t\t\t\t\"timestamp\": number()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"eventName\": literal(\"thinking_level_switch\"),\n\t\t\t\t\"attributes\": object({\n\t\t\t\t\t\"session_id\": intersection(string(), unknown()).optional(),\n\t\t\t\t\t\"switch_from\": string(),\n\t\t\t\t\t\"switch_to\": string(),\n\t\t\t\t\t\"model_name\": string()\n\t\t\t\t}),\n\t\t\t\t\"timestamp\": number()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"eventName\": literal(\"context_compression\"),\n\t\t\t\t\"attributes\": object({\n\t\t\t\t\t\"session_id\": intersection(string(), unknown()),\n\t\t\t\t\t\"trigger_type\": union([literal(\"auto\"), literal(\"manual\")])\n\t\t\t\t}),\n\t\t\t\t\"timestamp\": number()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"eventName\": literal(\"branch_session_click\"),\n\t\t\t\t\"attributes\": object({\n\t\t\t\t\t\"session_id\": intersection(string(), unknown()),\n\t\t\t\t\t\"parent_session_id\": intersection(string(), unknown()),\n\t\t\t\t\t\"parent_message_id\": intersection(string(), unknown()).optional(),\n\t\t\t\t\t\"click_position\": union([literal(\"footer\"), literal(\"sidebar\")])\n\t\t\t\t}),\n\t\t\t\t\"timestamp\": number()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"eventName\": literal(\"sidebar_menu_click\"),\n\t\t\t\t\"attributes\": object({ \"menu_name\": union([literal(\"plugin\"), literal(\"cron\")]) }),\n\t\t\t\t\"timestamp\": number()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"eventName\": literal(\"plugin_toggle\"),\n\t\t\t\t\"attributes\": object({\n\t\t\t\t\t\"plugin_name\": string(),\n\t\t\t\t\t\"plugin_type\": union([literal(\"plugin\"), literal(\"bundle\")]),\n\t\t\t\t\t\"is_enabled\": boolean(),\n\t\t\t\t\t\"is_builtin\": boolean()\n\t\t\t\t}),\n\t\t\t\t\"timestamp\": number()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"eventName\": literal(\"plugin_add_button_click\"),\n\t\t\t\t\"attributes\": record(string(), never()),\n\t\t\t\t\"timestamp\": number()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"eventName\": literal(\"plugin_install_click\"),\n\t\t\t\t\"attributes\": object({ \"input_value\": string() }),\n\t\t\t\t\"timestamp\": number()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"eventName\": literal(\"install_plugin_result\"),\n\t\t\t\t\"attributes\": object({\n\t\t\t\t\t\"input_value\": string(),\n\t\t\t\t\t\"is_success\": boolean(),\n\t\t\t\t\t\"error_reason\": string().optional(),\n\t\t\t\t\t\"duration\": number(),\n\t\t\t\t\t\"plugin_name\": string().optional()\n\t\t\t\t}),\n\t\t\t\t\"timestamp\": number()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"eventName\": literal(\"confirm_uninstall_plugin\"),\n\t\t\t\t\"attributes\": object({ \"plugin_name\": string() }),\n\t\t\t\t\"timestamp\": number()\n\t\t\t})\n\t\t])",
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "eventName": {
+          "const": "desktop_app_launch"
+        },
+        "attributes": {
+          "type": "object",
+          "additionalProperties": {
+            "not": {}
+          }
+        },
+        "timestamp": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "eventName",
+        "attributes",
+        "timestamp"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "eventName": {
+          "const": "auth_page_view"
+        },
+        "attributes": {
+          "type": "object",
+          "additionalProperties": {
+            "not": {}
+          }
+        },
+        "timestamp": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "eventName",
+        "attributes",
+        "timestamp"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "eventName": {
+          "const": "auth_page_click"
+        },
+        "attributes": {
+          "type": "object",
+          "properties": {
+            "button_name": {
+              "anyOf": [
+                {
+                  "const": "sign_in"
+                },
+                {
+                  "const": "api-key"
+                }
+              ]
+            }
+          },
+          "required": [
+            "button_name"
+          ]
+        },
+        "timestamp": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "eventName",
+        "attributes",
+        "timestamp"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "eventName": {
+          "const": "api_key_save_click"
+        },
+        "attributes": {
+          "type": "object",
+          "additionalProperties": {
+            "not": {}
+          }
+        },
+        "timestamp": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "eventName",
+        "attributes",
+        "timestamp"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "eventName": {
+          "const": "onboarding_page_view"
+        },
+        "attributes": {
+          "type": "object",
+          "properties": {
+            "page_name": {
+              "anyOf": [
+                {
+                  "const": "onboarding_welcome"
+                },
+                {
+                  "const": "onboarding_recharge"
+                },
+                {
+                  "const": "onboarding_use_case"
+                },
+                {
+                  "const": "onboarding_process"
+                }
+              ]
+            }
+          },
+          "required": [
+            "page_name"
+          ]
+        },
+        "timestamp": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "eventName",
+        "attributes",
+        "timestamp"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "eventName": {
+          "const": "onboarding_page_click"
+        },
+        "attributes": {
+          "type": "object",
+          "properties": {
+            "page_name": {
+              "anyOf": [
+                {
+                  "const": "onboarding_welcome"
+                },
+                {
+                  "const": "onboarding_recharge"
+                },
+                {
+                  "const": "onboarding_use_case"
+                },
+                {
+                  "const": "onboarding_process"
+                }
+              ]
+            },
+            "button_name": {
+              "anyOf": [
+                {
+                  "const": "next"
+                },
+                {
+                  "const": "back"
+                },
+                {
+                  "const": "skip"
+                },
+                {
+                  "const": "charge"
+                },
+                {
+                  "const": "later"
+                },
+                {
+                  "const": "continue"
+                }
+              ]
+            },
+            "selected_content": {
+              "anyOf": [
+                {
+                  "const": "office"
+                },
+                {
+                  "const": "code"
+                },
+                {
+                  "const": "code_office"
+                },
+                {
+                  "const": "focus_result"
+                },
+                {
+                  "const": "key_detail"
+                },
+                {
+                  "const": "full_process"
+                }
+              ]
+            }
+          },
+          "required": [
+            "page_name",
+            "button_name"
+          ]
+        },
+        "timestamp": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "eventName",
+        "attributes",
+        "timestamp"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "eventName": {
+          "const": "onboarding_popup_view"
+        },
+        "attributes": {
+          "type": "object",
+          "properties": {
+            "popup_name": {
+              "anyOf": [
+                {
+                  "const": "skip_charge"
+                },
+                {
+                  "const": "skip_setting"
+                }
+              ]
+            }
+          },
+          "required": [
+            "popup_name"
+          ]
+        },
+        "timestamp": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "eventName",
+        "attributes",
+        "timestamp"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "eventName": {
+          "const": "onboarding_popup_click"
+        },
+        "attributes": {
+          "type": "object",
+          "properties": {
+            "popup_name": {
+              "anyOf": [
+                {
+                  "const": "skip_charge"
+                },
+                {
+                  "const": "skip_setting"
+                }
+              ]
+            },
+            "button_name": {
+              "anyOf": [
+                {
+                  "const": "charge"
+                },
+                {
+                  "const": "know"
+                },
+                {
+                  "const": "enter"
+                },
+                {
+                  "const": "setting"
+                },
+                {
+                  "const": "close"
+                }
+              ]
+            }
+          },
+          "required": [
+            "popup_name",
+            "button_name"
+          ]
+        },
+        "timestamp": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "eventName",
+        "attributes",
+        "timestamp"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "eventName": {
+          "const": "desktop_upgrade_click"
+        },
+        "attributes": {
+          "type": "object",
+          "additionalProperties": {
+            "not": {}
+          }
+        },
+        "timestamp": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "eventName",
+        "attributes",
+        "timestamp"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "eventName": {
+          "const": "desktop_upgrade_download_result"
+        },
+        "attributes": {
+          "type": "object",
+          "properties": {
+            "is_success": {
+              "type": "boolean"
+            },
+            "error_reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "is_success"
+          ]
+        },
+        "timestamp": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "eventName",
+        "attributes",
+        "timestamp"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "eventName": {
+          "const": "desktop_upgrade_install_restart_click"
+        },
+        "attributes": {
+          "type": "object",
+          "additionalProperties": {
+            "not": {}
+          }
+        },
+        "timestamp": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "eventName",
+        "attributes",
+        "timestamp"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "eventName": {
+          "const": "send_button_click"
+        },
+        "attributes": {
+          "type": "object",
+          "properties": {
+            "session_id": {
+              "type": "string"
+            },
+            "model_name": {
+              "type": "string"
+            },
+            "thinking_effort": {
+              "type": "string"
+            },
+            "run_mode": {
+              "anyOf": [
+                {
+                  "const": "goal"
+                },
+                {
+                  "const": "plan"
+                },
+                {
+                  "const": "default"
+                }
+              ]
+            },
+            "msg_type": {
+              "anyOf": [
+                {
+                  "const": "queue"
+                },
+                {
+                  "const": "steer"
+                },
+                {
+                  "const": "default"
+                }
+              ]
+            }
+          },
+          "required": [
+            "run_mode",
+            "msg_type"
+          ]
+        },
+        "timestamp": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "eventName",
+        "attributes",
+        "timestamp"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "eventName": {
+          "const": "model_switch"
+        },
+        "attributes": {
+          "type": "object",
+          "properties": {
+            "session_id": {
+              "type": "string"
+            },
+            "switch_from": {
+              "type": "string"
+            },
+            "switch_to": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "switch_from",
+            "switch_to"
+          ]
+        },
+        "timestamp": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "eventName",
+        "attributes",
+        "timestamp"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "eventName": {
+          "const": "thinking_level_switch"
+        },
+        "attributes": {
+          "type": "object",
+          "properties": {
+            "session_id": {
+              "type": "string"
+            },
+            "switch_from": {
+              "type": "string"
+            },
+            "switch_to": {
+              "type": "string"
+            },
+            "model_name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "switch_from",
+            "switch_to",
+            "model_name"
+          ]
+        },
+        "timestamp": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "eventName",
+        "attributes",
+        "timestamp"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "eventName": {
+          "const": "context_compression"
+        },
+        "attributes": {
+          "type": "object",
+          "properties": {
+            "session_id": {
+              "type": "string"
+            },
+            "trigger_type": {
+              "anyOf": [
+                {
+                  "const": "auto"
+                },
+                {
+                  "const": "manual"
+                }
+              ]
+            }
+          },
+          "required": [
+            "session_id",
+            "trigger_type"
+          ]
+        },
+        "timestamp": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "eventName",
+        "attributes",
+        "timestamp"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "eventName": {
+          "const": "branch_session_click"
+        },
+        "attributes": {
+          "type": "object",
+          "properties": {
+            "session_id": {
+              "type": "string"
+            },
+            "parent_session_id": {
+              "type": "string"
+            },
+            "parent_message_id": {
+              "type": "string"
+            },
+            "click_position": {
+              "anyOf": [
+                {
+                  "const": "footer"
+                },
+                {
+                  "const": "sidebar"
+                }
+              ]
+            }
+          },
+          "required": [
+            "session_id",
+            "parent_session_id",
+            "click_position"
+          ]
+        },
+        "timestamp": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "eventName",
+        "attributes",
+        "timestamp"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "eventName": {
+          "const": "sidebar_menu_click"
+        },
+        "attributes": {
+          "type": "object",
+          "properties": {
+            "menu_name": {
+              "anyOf": [
+                {
+                  "const": "plugin"
+                },
+                {
+                  "const": "cron"
+                }
+              ]
+            }
+          },
+          "required": [
+            "menu_name"
+          ]
+        },
+        "timestamp": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "eventName",
+        "attributes",
+        "timestamp"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "eventName": {
+          "const": "plugin_toggle"
+        },
+        "attributes": {
+          "type": "object",
+          "properties": {
+            "plugin_name": {
+              "type": "string"
+            },
+            "plugin_type": {
+              "anyOf": [
+                {
+                  "const": "plugin"
+                },
+                {
+                  "const": "bundle"
+                }
+              ]
+            },
+            "is_enabled": {
+              "type": "boolean"
+            },
+            "is_builtin": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "plugin_name",
+            "plugin_type",
+            "is_enabled",
+            "is_builtin"
+          ]
+        },
+        "timestamp": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "eventName",
+        "attributes",
+        "timestamp"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "eventName": {
+          "const": "plugin_add_button_click"
+        },
+        "attributes": {
+          "type": "object",
+          "additionalProperties": {
+            "not": {}
+          }
+        },
+        "timestamp": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "eventName",
+        "attributes",
+        "timestamp"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "eventName": {
+          "const": "plugin_install_click"
+        },
+        "attributes": {
+          "type": "object",
+          "properties": {
+            "input_value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "input_value"
+          ]
+        },
+        "timestamp": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "eventName",
+        "attributes",
+        "timestamp"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "eventName": {
+          "const": "install_plugin_result"
+        },
+        "attributes": {
+          "type": "object",
+          "properties": {
+            "input_value": {
+              "type": "string"
+            },
+            "is_success": {
+              "type": "boolean"
+            },
+            "error_reason": {
+              "type": "string"
+            },
+            "duration": {
+              "type": "number"
+            },
+            "plugin_name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "input_value",
+            "is_success",
+            "duration"
+          ]
+        },
+        "timestamp": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "eventName",
+        "attributes",
+        "timestamp"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "eventName": {
+          "const": "confirm_uninstall_plugin"
+        },
+        "attributes": {
+          "type": "object",
+          "properties": {
+            "plugin_name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "plugin_name"
+          ]
+        },
+        "timestamp": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "eventName",
+        "attributes",
+        "timestamp"
+      ]
+    }
+  ]
+}

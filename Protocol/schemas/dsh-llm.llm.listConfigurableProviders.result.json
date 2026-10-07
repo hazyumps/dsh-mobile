@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-llm.llm.listConfigurableProviders.result",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-llm#llm/listConfigurableProviders:result",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_llm_llm_listConfigurableProviders_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_llm_llm_listConfigurableProviders_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-llm#llm/listConfigurableProviders :: result"
+  ],
+  "x-dsh-rawExpression": "array(object({\n\t\t\t\"provider\": string(),\n\t\t\t\"displayName\": string(),\n\t\t\t\"settingsNs\": string(),\n\t\t\t\"settingsPath\": array(string()),\n\t\t\t\"declared\": boolean().optional(),\n\t\t\t\"error\": string().optional()\n\t\t}))",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "provider": {
+        "type": "string"
+      },
+      "displayName": {
+        "type": "string"
+      },
+      "settingsNs": {
+        "type": "string"
+      },
+      "settingsPath": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "declared": {
+        "type": "boolean"
+      },
+      "error": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "provider",
+      "displayName",
+      "settingsNs",
+      "settingsPath"
+    ]
+  }
+}

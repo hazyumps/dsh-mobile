@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-account-controller.account.getBalance.result",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-account-controller#account/getBalance:result",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_account_controller_account_getBalance_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_account_controller_account_getBalance_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-account-controller#account/getBalance :: result"
+  ],
+  "x-dsh-rawExpression": "union([\n\t\t\tliteral(null),\n\t\t\tobject({\n\t\t\t\t\"status\": literal(\"ready\").readonly(),\n\t\t\t\t\"value\": array(object({\n\t\t\t\t\t\"currency\": union([literal(\"CNY\"), literal(\"USD\")]).readonly(),\n\t\t\t\t\t\"balance\": string().readonly()\n\t\t\t\t})).readonly(),\n\t\t\t\t\"bonusWallets\": array(object({\n\t\t\t\t\t\"currency\": union([literal(\"CNY\"), literal(\"USD\")]).readonly(),\n\t\t\t\t\t\"balance\": string().readonly()\n\t\t\t\t})).readonly()\n\t\t\t}),\n\t\t\tobject({ \"status\": literal(\"failed\").readonly() })\n\t\t])",
+  "anyOf": [
+    {
+      "const": null
+    },
+    {
+      "type": "object",
+      "properties": {
+        "status": {
+          "const": "ready"
+        },
+        "value": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "currency": {
+                "anyOf": [
+                  {
+                    "const": "CNY"
+                  },
+                  {
+                    "const": "USD"
+                  }
+                ]
+              },
+              "balance": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "currency",
+              "balance"
+            ]
+          }
+        },
+        "bonusWallets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "currency": {
+                "anyOf": [
+                  {
+                    "const": "CNY"
+                  },
+                  {
+                    "const": "USD"
+                  }
+                ]
+              },
+              "balance": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "currency",
+              "balance"
+            ]
+          }
+        }
+      },
+      "required": [
+        "status",
+        "value",
+        "bonusWallets"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "status": {
+          "const": "failed"
+        }
+      },
+      "required": [
+        "status"
+      ]
+    }
+  ]
+}

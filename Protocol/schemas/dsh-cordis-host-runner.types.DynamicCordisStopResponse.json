@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-cordis-host-runner.types.DynamicCordisStopResponse",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-cordis-host-runner/types#DynamicCordisStopResponse",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_cordis_host_runner_dynamicCordisRunner_stopFromPanel_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_cordis_host_runner_dynamicCordisRunner_stopFromPanel_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-cordis-host-runner#dynamicCordisRunner/stopFromPanel :: result"
+  ],
+  "x-dsh-rawExpression": "union([object({ \"ok\": literal(true) }), object({\n\t\t\t\"ok\": literal(false),\n\t\t\t\"reason\": union([literal(\"plugin-missing\"), literal(\"not-running\")]),\n\t\t\t\"message\": string()\n\t\t})])",
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "const": true
+        }
+      },
+      "required": [
+        "ok"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "const": "plugin-missing"
+            },
+            {
+              "const": "not-running"
+            }
+          ]
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ok",
+        "reason",
+        "message"
+      ]
+    }
+  ]
+}

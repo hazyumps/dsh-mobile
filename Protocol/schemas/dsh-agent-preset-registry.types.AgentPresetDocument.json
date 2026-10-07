@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-agent-preset-registry.types.AgentPresetDocument",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-agent-preset-registry/types#AgentPresetDocument",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_agent_preset_registry_agentPresets_read_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_agent_preset_registry_agentPresets_read_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-agent-preset-registry#agentPresets/read :: result"
+  ],
+  "x-dsh-rawExpression": "object({\n\t\t\t\"agentPreset\": string().readonly(),\n\t\t\t\"content\": string().readonly(),\n\t\t\t\"name\": string().readonly().optional(),\n\t\t\t\"description\": string().readonly().optional()\n\t\t})",
+  "type": "object",
+  "properties": {
+    "agentPreset": {
+      "type": "string"
+    },
+    "content": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "agentPreset",
+    "content"
+  ]
+}

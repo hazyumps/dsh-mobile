@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-terminal-controller.types.TerminalAttachmentId",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-terminal-controller/types#TerminalAttachmentId",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_terminal_controller_terminal_follow_parameter_2$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_terminal_controller_terminal_follow_parameter_2$schema",
+      "_deepseek_ai_dsh_api_terminal_controller_terminal_resize_parameter_2$schema",
+      "_deepseek_ai_dsh_api_terminal_controller_terminal_write_parameter_2$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-terminal-controller#terminal/follow :: parameter:attachmentId",
+    "@deepseek-ai/dsh-api-terminal-controller#terminal/resize :: parameter:attachmentId",
+    "@deepseek-ai/dsh-api-terminal-controller#terminal/write :: parameter:attachmentId"
+  ],
+  "x-dsh-rawExpression": "intersection(string(), unknown())",
+  "type": "string"
+}

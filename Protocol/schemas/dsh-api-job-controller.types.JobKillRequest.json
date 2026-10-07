@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-job-controller.types.JobKillRequest",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-job-controller/types#JobKillRequest",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_job_controller_job_kill_parameter_0$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_job_controller_job_kill_parameter_0$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-job-controller#job/kill :: parameter:request"
+  ],
+  "x-dsh-rawExpression": "object({\n\t\t\t\"sessionId\": intersection(string(), unknown()).readonly(),\n\t\t\t\"jobId\": intersection(string(), unknown()).readonly()\n\t\t})",
+  "type": "object",
+  "properties": {
+    "sessionId": {
+      "type": "string"
+    },
+    "jobId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "sessionId",
+    "jobId"
+  ]
+}

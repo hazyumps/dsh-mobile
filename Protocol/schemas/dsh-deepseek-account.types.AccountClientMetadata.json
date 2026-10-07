@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-deepseek-account.types.AccountClientMetadata",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-deepseek-account/types#AccountClientMetadata",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_account_controller_account_ackBonusNotified_parameter_2$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_account_controller_account_ackBonusNotified_parameter_2$schema",
+      "_deepseek_ai_dsh_api_account_controller_account_getBalance_parameter_0$schema",
+      "_deepseek_ai_dsh_api_account_controller_account_getProfile_parameter_0$schema",
+      "_deepseek_ai_dsh_api_account_controller_account_getUnnotifiedBonuses_parameter_0$schema",
+      "_deepseek_ai_dsh_api_account_controller_account_signOut_parameter_0$schema",
+      "_deepseek_ai_dsh_api_account_controller_account_startSignIn_parameter_0$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-account-controller#account/ackBonusNotified :: parameter:client",
+    "@deepseek-ai/dsh-api-account-controller#account/getBalance :: parameter:client",
+    "@deepseek-ai/dsh-api-account-controller#account/getProfile :: parameter:client",
+    "@deepseek-ai/dsh-api-account-controller#account/getUnnotifiedBonuses :: parameter:client",
+    "@deepseek-ai/dsh-api-account-controller#account/signOut :: parameter:client",
+    "@deepseek-ai/dsh-api-account-controller#account/startSignIn :: parameter:client"
+  ],
+  "x-dsh-rawExpression": "object({\n\t\t\t\"version\": string().readonly(),\n\t\t\t\"locale\": string().readonly(),\n\t\t\t\"timezoneOffsetSeconds\": number().readonly()\n\t\t})",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string"
+    },
+    "locale": {
+      "type": "string"
+    },
+    "timezoneOffsetSeconds": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "version",
+    "locale",
+    "timezoneOffsetSeconds"
+  ]
+}

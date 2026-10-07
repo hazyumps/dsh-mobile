@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-session-reference.sessionReferenceResolver.candidates.query",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-session-reference#sessionReferenceResolver/candidates:query",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_session_reference_sessionReferenceResolver_candidates_parameter_1$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_session_reference_sessionReferenceResolver_candidates_parameter_1$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-session-reference#sessionReferenceResolver/candidates :: parameter:query"
+  ],
+  "x-dsh-rawExpression": "string()",
+  "type": "string"
+}

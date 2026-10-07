@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-cordis-host-runner.types.DynamicCordisRunResponse",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-cordis-host-runner/types#DynamicCordisRunResponse",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_cordis_host_runner_dynamicCordisRunner_settleUserRun_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_cordis_host_runner_dynamicCordisRunner_settleUserRun_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-cordis-host-runner#dynamicCordisRunner/settleUserRun :: result"
+  ],
+  "x-dsh-rawExpression": "union([object({\n\t\t\t\"ok\": literal(true),\n\t\t\t\"status\": union([\n\t\t\t\tliteral(\"running\"),\n\t\t\t\tliteral(\"awaiting-approval\"),\n\t\t\t\tliteral(\"starting\")\n\t\t\t]),\n\t\t\t\"pluginId\": intersection(string(), unknown()),\n\t\t\t\"packageId\": intersection(string(), unknown()),\n\t\t\t\"pluginRunId\": intersection(string(), unknown()),\n\t\t\t\"waitingFor\": array(string()),\n\t\t\t\"clientWaitingFor\": array(string()).optional(),\n\t\t\t\"currentPackageId\": intersection(string(), unknown()).optional(),\n\t\t\t\"nextPackageId\": intersection(string(), unknown()).optional(),\n\t\t\t\"mode\": union([literal(\"run\"), literal(\"update\")])\n\t\t}), object({\n\t\t\t\"ok\": literal(false),\n\t\t\t\"reason\": union([\n\t\t\t\tliteral(\"cancelled\"),\n\t\t\t\tliteral(\"plugin-missing\"),\n\t\t\t\tliteral(\"rejected\"),\n\t\t\t\tliteral(\"host-half-failed\"),\n\t\t\t\tliteral(\"client-half-failed\"),\n\t\t\t\tliteral(\"package-missing\"),\n\t\t\t\tliteral(\"invalid-mode\"),\n\t\t\t\tliteral(\"transition-in-flight\"),\n\t\t\t\tliteral(\"not-running\")\n\t\t\t]),\n\t\t\t\"message\": string(),\n\t\t\t\"stack\": string().optional()\n\t\t})])",
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "status": {
+          "anyOf": [
+            {
+              "const": "running"
+            },
+            {
+              "const": "awaiting-approval"
+            },
+            {
+              "const": "starting"
+            }
+          ]
+        },
+        "pluginId": {
+          "type": "string"
+        },
+        "packageId": {
+          "type": "string"
+        },
+        "pluginRunId": {
+          "type": "string"
+        },
+        "waitingFor": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "clientWaitingFor": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "currentPackageId": {
+          "type": "string"
+        },
+        "nextPackageId": {
+          "type": "string"
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "const": "run"
+            },
+            {
+              "const": "update"
+            }
+          ]
+        }
+      },
+      "required": [
+        "ok",
+        "status",
+        "pluginId",
+        "packageId",
+        "pluginRunId",
+        "waitingFor",
+        "mode"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "const": "cancelled"
+            },
+            {
+              "const": "plugin-missing"
+            },
+            {
+              "const": "rejected"
+            },
+            {
+              "const": "host-half-failed"
+            },
+            {
+              "const": "client-half-failed"
+            },
+            {
+              "const": "package-missing"
+            },
+            {
+              "const": "invalid-mode"
+            },
+            {
+              "const": "transition-in-flight"
+            },
+            {
+              "const": "not-running"
+            }
+          ]
+        },
+        "message": {
+          "type": "string"
+        },
+        "stack": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ok",
+        "reason",
+        "message"
+      ]
+    }
+  ]
+}

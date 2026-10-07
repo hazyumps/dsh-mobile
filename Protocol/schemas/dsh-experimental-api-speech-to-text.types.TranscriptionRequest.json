@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-experimental-api-speech-to-text.types.TranscriptionRequest",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-experimental-api-speech-to-text/types#TranscriptionRequest",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_experimental_api_speech_to_text_speech_transcribe_parameter_0$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-experimental-client-ui-voice-input/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_experimental_api_speech_to_text_speech_transcribe_parameter_0$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-experimental-api-speech-to-text#speech/transcribe :: parameter:request"
+  ],
+  "x-dsh-rawExpression": "object({\n\t\t\t\"audioBase64\": string().readonly(),\n\t\t\t\"providerId\": intersection(string(), unknown()).readonly().optional(),\n\t\t\t\"language\": string().readonly().optional()\n\t\t})",
+  "type": "object",
+  "properties": {
+    "audioBase64": {
+      "type": "string"
+    },
+    "providerId": {
+      "type": "string"
+    },
+    "language": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "audioBase64"
+  ]
+}

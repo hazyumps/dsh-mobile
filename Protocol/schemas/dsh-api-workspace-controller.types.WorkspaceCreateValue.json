@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-workspace-controller.types.WorkspaceCreateValue",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-workspace-controller/types#WorkspaceCreateValue",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_workspace_controller_workspace_create_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_workspace_controller_workspace_create_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-workspace-controller#workspace/create :: result"
+  ],
+  "x-dsh-rawExpression": "object({\n\t\t\t\"workspace\": object({\n\t\t\t\t\"workspaceId\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\"path\": string().readonly(),\n\t\t\t\t\"title\": string().readonly(),\n\t\t\t\t\"sessionIds\": array(intersection(string(), unknown())).readonly(),\n\t\t\t\t\"createdAt\": string().readonly(),\n\t\t\t\t\"updatedAt\": string().readonly()\n\t\t\t}).readonly(),\n\t\t\t\"created\": boolean().readonly()\n\t\t})",
+  "type": "object",
+  "properties": {
+    "workspace": {
+      "type": "object",
+      "properties": {
+        "workspaceId": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "sessionIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspaceId",
+        "path",
+        "title",
+        "sessionIds",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "created": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "workspace",
+    "created"
+  ]
+}

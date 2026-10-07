@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-session-controller.types.SessionListRequest",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-session-controller/types#SessionListRequest",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_session_controller_session_list_parameter_0$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_session_controller_session_list_parameter_0$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-session-controller#session/list :: parameter:_request"
+  ],
+  "x-dsh-rawExpression": "object({ \"cursor\": string().readonly().optional() })",
+  "type": "object",
+  "properties": {
+    "cursor": {
+      "type": "string"
+    }
+  },
+  "required": []
+}

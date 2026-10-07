@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-terminal-controller.types.TerminalCreateRequest",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-terminal-controller/types#TerminalCreateRequest",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_terminal_controller_terminal_create_parameter_1$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_terminal_controller_terminal_create_parameter_1$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-terminal-controller#terminal/create :: parameter:request"
+  ],
+  "x-dsh-rawExpression": "object({\n\t\t\t\"shellPath\": string().readonly().optional(),\n\t\t\t\"id\": intersection(string(), unknown()).readonly(),\n\t\t\t\"cols\": number().readonly(),\n\t\t\t\"rows\": number().readonly()\n\t\t})",
+  "type": "object",
+  "properties": {
+    "shellPath": {
+      "type": "string"
+    },
+    "id": {
+      "type": "string"
+    },
+    "cols": {
+      "type": "number"
+    },
+    "rows": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "id",
+    "cols",
+    "rows"
+  ]
+}

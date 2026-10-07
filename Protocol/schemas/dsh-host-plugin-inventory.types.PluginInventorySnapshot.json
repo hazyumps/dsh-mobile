@@ -1,0 +1,298 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-host-plugin-inventory.types.PluginInventorySnapshot",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-host-plugin-inventory/types#PluginInventorySnapshot",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_host_plugin_inventory_pluginInventory_list_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_host_plugin_inventory_pluginInventory_list_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-host-plugin-inventory#pluginInventory/list :: result"
+  ],
+  "x-dsh-rawExpression": "object({\n\t\t\t\"managementAvailable\": boolean().readonly().optional(),\n\t\t\t\"entries\": array(object({\n\t\t\t\t\"entryId\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\"moduleName\": string().readonly(),\n\t\t\t\t\"meta\": object({\n\t\t\t\t\t\"title\": union([string(), intersection(object({ \"en\": string().readonly() }), record(string(), string()).readonly())]).readonly().optional(),\n\t\t\t\t\t\"description\": union([string(), intersection(object({ \"en\": string().readonly() }), record(string(), string()).readonly())]).readonly().optional(),\n\t\t\t\t\t\"icon\": string().readonly().optional(),\n\t\t\t\t\t\"error\": string().readonly().optional()\n\t\t\t\t}).readonly().optional(),\n\t\t\t\t\"enabled\": boolean().readonly(),\n\t\t\t\t\"fiberPhase\": union([\n\t\t\t\t\tliteral(null),\n\t\t\t\t\tliteral(\"failed\"),\n\t\t\t\t\tliteral(\"pending\"),\n\t\t\t\t\tliteral(\"active\"),\n\t\t\t\t\tliteral(\"loading\"),\n\t\t\t\t\tliteral(\"unloading\")\n\t\t\t\t]).readonly()\n\t\t\t})).readonly(),\n\t\t\t\"agentPresets\": array(object({\n\t\t\t\t\"id\": string().readonly(),\n\t\t\t\t\"name\": string().readonly().optional(),\n\t\t\t\t\"isDefault\": boolean().readonly(),\n\t\t\t\t\"broken\": string().readonly().optional(),\n\t\t\t\t\"rows\": array(object({\n\t\t\t\t\t\"entryId\": union([literal(null), string()]).readonly(),\n\t\t\t\t\t\"moduleName\": string().readonly(),\n\t\t\t\t\t\"meta\": object({\n\t\t\t\t\t\t\"title\": union([string(), intersection(object({ \"en\": string().readonly() }), record(string(), string()).readonly())]).readonly().optional(),\n\t\t\t\t\t\t\"description\": union([string(), intersection(object({ \"en\": string().readonly() }), record(string(), string()).readonly())]).readonly().optional(),\n\t\t\t\t\t\t\"icon\": string().readonly().optional(),\n\t\t\t\t\t\t\"error\": string().readonly().optional()\n\t\t\t\t\t}).readonly().optional(),\n\t\t\t\t\t\"enabled\": union([\n\t\t\t\t\t\tliteral(false),\n\t\t\t\t\t\tliteral(true),\n\t\t\t\t\t\tliteral(\"conditional\")\n\t\t\t\t\t]).readonly(),\n\t\t\t\t\t\"condition\": string().readonly().optional(),\n\t\t\t\t\t\"fiberPhase\": union([\n\t\t\t\t\t\tliteral(null),\n\t\t\t\t\t\tliteral(\"failed\"),\n\t\t\t\t\t\tliteral(\"pending\"),\n\t\t\t\t\t\tliteral(\"active\"),\n\t\t\t\t\t\tliteral(\"loading\"),\n\t\t\t\t\t\tliteral(\"unloading\")\n\t\t\t\t\t]).readonly()\n\t\t\t\t})).readonly()\n\t\t\t})).readonly().optional()\n\t\t})",
+  "type": "object",
+  "properties": {
+    "managementAvailable": {
+      "type": "boolean"
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "entryId": {
+            "type": "string"
+          },
+          "moduleName": {
+            "type": "string"
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "allOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "en": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "en"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              "description": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "allOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "en": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "en"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              "icon": {
+                "type": "string"
+              },
+              "error": {
+                "type": "string"
+              }
+            },
+            "required": []
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "fiberPhase": {
+            "anyOf": [
+              {
+                "const": null
+              },
+              {
+                "const": "failed"
+              },
+              {
+                "const": "pending"
+              },
+              {
+                "const": "active"
+              },
+              {
+                "const": "loading"
+              },
+              {
+                "const": "unloading"
+              }
+            ]
+          }
+        },
+        "required": [
+          "entryId",
+          "moduleName",
+          "enabled",
+          "fiberPhase"
+        ]
+      }
+    },
+    "agentPresets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "isDefault": {
+            "type": "boolean"
+          },
+          "broken": {
+            "type": "string"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "entryId": {
+                  "anyOf": [
+                    {
+                      "const": null
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "moduleName": {
+                  "type": "string"
+                },
+                "meta": {
+                  "type": "object",
+                  "properties": {
+                    "title": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "allOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "en": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "en"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "string"
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "description": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "allOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "en": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "en"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "string"
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "icon": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": []
+                },
+                "enabled": {
+                  "anyOf": [
+                    {
+                      "const": false
+                    },
+                    {
+                      "const": true
+                    },
+                    {
+                      "const": "conditional"
+                    }
+                  ]
+                },
+                "condition": {
+                  "type": "string"
+                },
+                "fiberPhase": {
+                  "anyOf": [
+                    {
+                      "const": null
+                    },
+                    {
+                      "const": "failed"
+                    },
+                    {
+                      "const": "pending"
+                    },
+                    {
+                      "const": "active"
+                    },
+                    {
+                      "const": "loading"
+                    },
+                    {
+                      "const": "unloading"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "entryId",
+                "moduleName",
+                "enabled",
+                "fiberPhase"
+              ]
+            }
+          }
+        },
+        "required": [
+          "id",
+          "isDefault",
+          "rows"
+        ]
+      }
+    }
+  },
+  "required": [
+    "entries"
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-schedule.client.ScheduleDeleteResult",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-schedule/client#ScheduleDeleteResult",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_schedule_schedule_delete_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_schedule_schedule_delete_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-schedule#schedule/delete :: result"
+  ],
+  "x-dsh-rawExpression": "union([object({\n\t\t\t\"id\": intersection(string(), unknown()).readonly(),\n\t\t\t\"deleted\": literal(true).readonly()\n\t\t}), object({\n\t\t\t\"id\": intersection(string(), unknown()).readonly(),\n\t\t\t\"deleted\": literal(false).readonly(),\n\t\t\t\"code\": literal(\"schedule_not_found\").readonly()\n\t\t})])",
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "deleted": {
+          "const": true
+        }
+      },
+      "required": [
+        "id",
+        "deleted"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "deleted": {
+          "const": false
+        },
+        "code": {
+          "const": "schedule_not_found"
+        }
+      },
+      "required": [
+        "id",
+        "deleted",
+        "code"
+      ]
+    }
+  ]
+}

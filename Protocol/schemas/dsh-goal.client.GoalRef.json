@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-goal.client.GoalRef",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-goal/client#GoalRef",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_goal_goals_clear_parameter_1$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_goal_goals_clear_parameter_1$schema",
+      "_deepseek_ai_dsh_goal_goals_clear_result$schema",
+      "_deepseek_ai_dsh_goal_goals_complete_parameter_1$schema",
+      "_deepseek_ai_dsh_goal_goals_edit_parameter_1$schema",
+      "_deepseek_ai_dsh_goal_goals_pause_parameter_1$schema",
+      "_deepseek_ai_dsh_goal_goals_resume_parameter_1$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-goal#goals/clear :: parameter:ref",
+    "@deepseek-ai/dsh-goal#goals/clear :: result",
+    "@deepseek-ai/dsh-goal#goals/complete :: parameter:ref",
+    "@deepseek-ai/dsh-goal#goals/edit :: parameter:ref",
+    "@deepseek-ai/dsh-goal#goals/pause :: parameter:ref",
+    "@deepseek-ai/dsh-goal#goals/resume :: parameter:ref"
+  ],
+  "x-dsh-rawExpression": "object({\n\t\t\t\"id\": intersection(string(), unknown()).readonly(),\n\t\t\t\"revision\": number().readonly()\n\t\t})",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "revision": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "id",
+    "revision"
+  ]
+}

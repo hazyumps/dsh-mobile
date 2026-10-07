@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-plugin-manager.types.InstallBundleOptions",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-plugin-manager/types#InstallBundleOptions",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_plugin_manager_pluginManager_installBundle_parameter_1$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_plugin_manager_pluginManager_installBundle_parameter_1$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-plugin-manager#pluginManager/installBundle :: parameter:options"
+  ],
+  "x-dsh-rawExpression": "union([_undefined(), object({\n\t\t\t\"enabled\": boolean().optional(),\n\t\t\t\"requestId\": intersection(string(), unknown()).optional(),\n\t\t\t\"approvedBuilds\": array(string()).optional(),\n\t\t\t\"registry\": union([literal(null), string()]).optional()\n\t\t})])",
+  "x-dsh-mayBeAbsent": true,
+  "type": "object",
+  "properties": {
+    "enabled": {
+      "type": "boolean"
+    },
+    "requestId": {
+      "type": "string"
+    },
+    "approvedBuilds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "registry": {
+      "anyOf": [
+        {
+          "const": null
+        },
+        {
+          "type": "string"
+        }
+      ]
+    }
+  },
+  "required": []
+}

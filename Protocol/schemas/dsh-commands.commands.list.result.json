@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-commands.commands.list.result",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-commands#commands/list:result",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_commands_commands_list_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_commands_commands_list_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-commands#commands/list :: result"
+  ],
+  "x-dsh-rawExpression": "array(object({\n\t\t\t\"definitionId\": intersection(string(), unknown()).readonly().optional(),\n\t\t\t\"name\": string().readonly(),\n\t\t\t\"description\": string().readonly(),\n\t\t\t\"input\": object({\n\t\t\t\t\"hint\": string().readonly(),\n\t\t\t\t\"attachments\": boolean().readonly().optional()\n\t\t\t}).readonly().optional()\n\t\t}))",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "definitionId": {
+        "type": "string"
+      },
+      "name": {
+        "type": "string"
+      },
+      "description": {
+        "type": "string"
+      },
+      "input": {
+        "type": "object",
+        "properties": {
+          "hint": {
+            "type": "string"
+          },
+          "attachments": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "hint"
+        ]
+      }
+    },
+    "required": [
+      "name",
+      "description"
+    ]
+  }
+}

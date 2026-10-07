@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-goal.client.CreateGoalRequest",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-goal/client#CreateGoalRequest",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_goal_goals_create_parameter_1$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_goal_goals_create_parameter_1$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-goal#goals/create :: parameter:request"
+  ],
+  "x-dsh-rawExpression": "object({\n\t\t\t\"objective\": string().readonly(),\n\t\t\t\"maxGoalRounds\": number().readonly().optional()\n\t\t})",
+  "type": "object",
+  "properties": {
+    "objective": {
+      "type": "string"
+    },
+    "maxGoalRounds": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "objective"
+  ]
+}

@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-settings-controller.settings.update.patch",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-settings-controller#settings/update:patch",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_settings_controller_settings_update_parameter_1$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_settings_controller_settings_update_parameter_1$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-settings-controller#settings/update :: parameter:patch"
+  ],
+  "x-dsh-rawExpression": "record(string(), union([\n\t\t\tliteral(null),\n\t\t\tstring(),\n\t\t\tnumber(),\n\t\t\tliteral(false),\n\t\t\tliteral(true),\n\t\t\tarray(lazy(() => JsonValueRemoteCodec$schema$2())),\n\t\t\trecord(string(), lazy(() => JsonValueRemoteCodec$schema$2()))\n\t\t]))",
+  "type": "object",
+  "additionalProperties": {
+    "anyOf": [
+      {
+        "const": null
+      },
+      {
+        "type": "string"
+      },
+      {
+        "type": "number"
+      },
+      {
+        "const": false
+      },
+      {
+        "const": true
+      },
+      {
+        "type": "array",
+        "items": {
+          "anyOf": [
+            {
+              "const": null
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "const": false
+            },
+            {
+              "const": true
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/JsonValueRemoteCodec$schema$2"
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValueRemoteCodec$schema$2"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "object",
+        "additionalProperties": {
+          "anyOf": [
+            {
+              "const": null
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "const": false
+            },
+            {
+              "const": true
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/JsonValueRemoteCodec$schema$2"
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValueRemoteCodec$schema$2"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "$defs": {
+    "JsonValueRemoteCodec$schema$2": {
+      "anyOf": [
+        {
+          "const": null
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "const": false
+        },
+        {
+          "const": true
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/JsonValueRemoteCodec$schema$2"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValueRemoteCodec$schema$2"
+          }
+        }
+      ]
+    }
+  }
+}

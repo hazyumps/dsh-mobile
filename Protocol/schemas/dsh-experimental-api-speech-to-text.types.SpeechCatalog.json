@@ -1,0 +1,587 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-experimental-api-speech-to-text.types.SpeechCatalog",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-experimental-api-speech-to-text/types#SpeechCatalog",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_experimental_api_speech_to_text_speech_catalog_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-experimental-client-ui-voice-input/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_experimental_api_speech_to_text_speech_catalog_result$schema",
+      "_deepseek_ai_dsh_experimental_api_speech_to_text_speech_follow_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-experimental-api-speech-to-text#speech/catalog :: result",
+    "@deepseek-ai/dsh-experimental-api-speech-to-text#speech/follow :: result"
+  ],
+  "x-dsh-rawExpression": "object({\n\t\t\t\"maxAudioBytes\": number().readonly(),\n\t\t\t\"maxDurationSeconds\": number().readonly(),\n\t\t\t\"providers\": array(object({\n\t\t\t\t\"preparation\": union([\n\t\t\t\t\tintersection(object({ \"phase\": union([\n\t\t\t\t\t\tliteral(\"cancelled\"),\n\t\t\t\t\t\tliteral(\"ready\"),\n\t\t\t\t\t\tliteral(\"unprepared\"),\n\t\t\t\t\t\tliteral(\"standby\")\n\t\t\t\t\t]).readonly() }), object({\n\t\t\t\t\t\t\"step\": union([\n\t\t\t\t\t\t\tliteral(\"check\"),\n\t\t\t\t\t\t\tliteral(\"model\"),\n\t\t\t\t\t\t\tliteral(\"vad\"),\n\t\t\t\t\t\t\tliteral(\"verify\"),\n\t\t\t\t\t\t\tliteral(\"load\")\n\t\t\t\t\t\t]).readonly().optional(),\n\t\t\t\t\t\t\"steps\": array(object({\n\t\t\t\t\t\t\t\"kind\": union([\n\t\t\t\t\t\t\t\tliteral(\"check\"),\n\t\t\t\t\t\t\t\tliteral(\"model\"),\n\t\t\t\t\t\t\t\tliteral(\"vad\"),\n\t\t\t\t\t\t\t\tliteral(\"verify\"),\n\t\t\t\t\t\t\t\tliteral(\"load\")\n\t\t\t\t\t\t\t]).readonly(),\n\t\t\t\t\t\t\t\"status\": union([\n\t\t\t\t\t\t\t\tliteral(\"cancelled\"),\n\t\t\t\t\t\t\t\tliteral(\"failed\"),\n\t\t\t\t\t\t\t\tliteral(\"running\"),\n\t\t\t\t\t\t\t\tliteral(\"pending\"),\n\t\t\t\t\t\t\t\tliteral(\"complete\")\n\t\t\t\t\t\t\t]).readonly(),\n\t\t\t\t\t\t\t\"startedAt\": number().readonly().optional()\n\t\t\t\t\t\t})).readonly().optional()\n\t\t\t\t\t})),\n\t\t\t\t\tintersection(object({\n\t\t\t\t\t\t\"phase\": literal(\"downloading\").readonly(),\n\t\t\t\t\t\t\"resource\": string().readonly(),\n\t\t\t\t\t\t\"completedBytes\": number().readonly(),\n\t\t\t\t\t\t\"totalBytes\": number().readonly().optional()\n\t\t\t\t\t}), object({\n\t\t\t\t\t\t\"step\": union([\n\t\t\t\t\t\t\tliteral(\"check\"),\n\t\t\t\t\t\t\tliteral(\"model\"),\n\t\t\t\t\t\t\tliteral(\"vad\"),\n\t\t\t\t\t\t\tliteral(\"verify\"),\n\t\t\t\t\t\t\tliteral(\"load\")\n\t\t\t\t\t\t]).readonly().optional(),\n\t\t\t\t\t\t\"steps\": array(object({\n\t\t\t\t\t\t\t\"kind\": union([\n\t\t\t\t\t\t\t\tliteral(\"check\"),\n\t\t\t\t\t\t\t\tliteral(\"model\"),\n\t\t\t\t\t\t\t\tliteral(\"vad\"),\n\t\t\t\t\t\t\t\tliteral(\"verify\"),\n\t\t\t\t\t\t\t\tliteral(\"load\")\n\t\t\t\t\t\t\t]).readonly(),\n\t\t\t\t\t\t\t\"status\": union([\n\t\t\t\t\t\t\t\tliteral(\"cancelled\"),\n\t\t\t\t\t\t\t\tliteral(\"failed\"),\n\t\t\t\t\t\t\t\tliteral(\"running\"),\n\t\t\t\t\t\t\t\tliteral(\"pending\"),\n\t\t\t\t\t\t\t\tliteral(\"complete\")\n\t\t\t\t\t\t\t]).readonly(),\n\t\t\t\t\t\t\t\"startedAt\": number().readonly().optional()\n\t\t\t\t\t\t})).readonly().optional()\n\t\t\t\t\t})),\n\t\t\t\t\tintersection(object({\n\t\t\t\t\t\t\"phase\": union([\n\t\t\t\t\t\t\tliteral(\"checking\"),\n\t\t\t\t\t\t\tliteral(\"loading\"),\n\t\t\t\t\t\t\tliteral(\"waking\"),\n\t\t\t\t\t\t\tliteral(\"cancelling\")\n\t\t\t\t\t\t]).readonly(),\n\t\t\t\t\t\t\"startedAt\": number().readonly()\n\t\t\t\t\t}), object({\n\t\t\t\t\t\t\"step\": union([\n\t\t\t\t\t\t\tliteral(\"check\"),\n\t\t\t\t\t\t\tliteral(\"model\"),\n\t\t\t\t\t\t\tliteral(\"vad\"),\n\t\t\t\t\t\t\tliteral(\"verify\"),\n\t\t\t\t\t\t\tliteral(\"load\")\n\t\t\t\t\t\t]).readonly().optional(),\n\t\t\t\t\t\t\"steps\": array(object({\n\t\t\t\t\t\t\t\"kind\": union([\n\t\t\t\t\t\t\t\tliteral(\"check\"),\n\t\t\t\t\t\t\t\tliteral(\"model\"),\n\t\t\t\t\t\t\t\tliteral(\"vad\"),\n\t\t\t\t\t\t\t\tliteral(\"verify\"),\n\t\t\t\t\t\t\t\tliteral(\"load\")\n\t\t\t\t\t\t\t]).readonly(),\n\t\t\t\t\t\t\t\"status\": union([\n\t\t\t\t\t\t\t\tliteral(\"cancelled\"),\n\t\t\t\t\t\t\t\tliteral(\"failed\"),\n\t\t\t\t\t\t\t\tliteral(\"running\"),\n\t\t\t\t\t\t\t\tliteral(\"pending\"),\n\t\t\t\t\t\t\t\tliteral(\"complete\")\n\t\t\t\t\t\t\t]).readonly(),\n\t\t\t\t\t\t\t\"startedAt\": number().readonly().optional()\n\t\t\t\t\t\t})).readonly().optional()\n\t\t\t\t\t})),\n\t\t\t\t\tintersection(object({\n\t\t\t\t\t\t\"phase\": literal(\"failed\").readonly(),\n\t\t\t\t\t\t\"message\": string().readonly(),\n\t\t\t\t\t\t\"download\": object({\n\t\t\t\t\t\t\t\"resource\": string().readonly(),\n\t\t\t\t\t\t\t\"source\": string().readonly(),\n\t\t\t\t\t\t\t\"reason\": union([\n\t\t\t\t\t\t\t\tliteral(\"network\"),\n\t\t\t\t\t\t\t\tliteral(\"storage\"),\n\t\t\t\t\t\t\t\tliteral(\"unknown\"),\n\t\t\t\t\t\t\t\tliteral(\"dns\"),\n\t\t\t\t\t\t\t\tliteral(\"timeout\"),\n\t\t\t\t\t\t\t\tliteral(\"certificate\"),\n\t\t\t\t\t\t\t\tliteral(\"http\"),\n\t\t\t\t\t\t\t\tliteral(\"integrity\")\n\t\t\t\t\t\t\t]).readonly(),\n\t\t\t\t\t\t\t\"code\": string().readonly().optional(),\n\t\t\t\t\t\t\t\"status\": number().readonly().optional()\n\t\t\t\t\t\t}).readonly().optional()\n\t\t\t\t\t}), object({\n\t\t\t\t\t\t\"step\": union([\n\t\t\t\t\t\t\tliteral(\"check\"),\n\t\t\t\t\t\t\tliteral(\"model\"),\n\t\t\t\t\t\t\tliteral(\"vad\"),\n\t\t\t\t\t\t\tliteral(\"verify\"),\n\t\t\t\t\t\t\tliteral(\"load\")\n\t\t\t\t\t\t]).readonly().optional(),\n\t\t\t\t\t\t\"steps\": array(object({\n\t\t\t\t\t\t\t\"kind\": union([\n\t\t\t\t\t\t\t\tliteral(\"check\"),\n\t\t\t\t\t\t\t\tliteral(\"model\"),\n\t\t\t\t\t\t\t\tliteral(\"vad\"),\n\t\t\t\t\t\t\t\tliteral(\"verify\"),\n\t\t\t\t\t\t\t\tliteral(\"load\")\n\t\t\t\t\t\t\t]).readonly(),\n\t\t\t\t\t\t\t\"status\": union([\n\t\t\t\t\t\t\t\tliteral(\"cancelled\"),\n\t\t\t\t\t\t\t\tliteral(\"failed\"),\n\t\t\t\t\t\t\t\tliteral(\"running\"),\n\t\t\t\t\t\t\t\tliteral(\"pending\"),\n\t\t\t\t\t\t\t\tliteral(\"complete\")\n\t\t\t\t\t\t\t]).readonly(),\n\t\t\t\t\t\t\t\"startedAt\": number().readonly().optional()\n\t\t\t\t\t\t})).readonly().optional()\n\t\t\t\t\t}))\n\t\t\t\t]).readonly(),\n\t\t\t\t\"id\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\"name\": string().readonly(),\n\t\t\t\t\"location\": union([literal(\"host-local\"), literal(\"cloud\")]).readonly(),\n\t\t\t\t\"languages\": array(string()).readonly(),\n\t\t\t\t\"setupEstimate\": object({\n\t\t\t\t\t\"recommendedDiskBytes\": number().readonly(),\n\t\t\t\t\t\"expectedMemoryBytes\": number().readonly(),\n\t\t\t\t\t\"minimumMinutes\": number().readonly(),\n\t\t\t\t\t\"maximumMinutes\": number().readonly()\n\t\t\t\t}).readonly().optional(),\n\t\t\t\t\"downloadSources\": array(string()).readonly().optional()\n\t\t\t})).readonly(),\n\t\t\t\"selection\": object({\n\t\t\t\t\"providerId\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\"language\": string().readonly()\n\t\t\t}).readonly()\n\t\t})",
+  "type": "object",
+  "properties": {
+    "maxAudioBytes": {
+      "type": "number"
+    },
+    "maxDurationSeconds": {
+      "type": "number"
+    },
+    "providers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "preparation": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "phase": {
+                        "anyOf": [
+                          {
+                            "const": "cancelled"
+                          },
+                          {
+                            "const": "ready"
+                          },
+                          {
+                            "const": "unprepared"
+                          },
+                          {
+                            "const": "standby"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "phase"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "step": {
+                        "anyOf": [
+                          {
+                            "const": "check"
+                          },
+                          {
+                            "const": "model"
+                          },
+                          {
+                            "const": "vad"
+                          },
+                          {
+                            "const": "verify"
+                          },
+                          {
+                            "const": "load"
+                          }
+                        ]
+                      },
+                      "steps": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "anyOf": [
+                                {
+                                  "const": "check"
+                                },
+                                {
+                                  "const": "model"
+                                },
+                                {
+                                  "const": "vad"
+                                },
+                                {
+                                  "const": "verify"
+                                },
+                                {
+                                  "const": "load"
+                                }
+                              ]
+                            },
+                            "status": {
+                              "anyOf": [
+                                {
+                                  "const": "cancelled"
+                                },
+                                {
+                                  "const": "failed"
+                                },
+                                {
+                                  "const": "running"
+                                },
+                                {
+                                  "const": "pending"
+                                },
+                                {
+                                  "const": "complete"
+                                }
+                              ]
+                            },
+                            "startedAt": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "status"
+                          ]
+                        }
+                      }
+                    },
+                    "required": []
+                  }
+                ]
+              },
+              {
+                "allOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "phase": {
+                        "const": "downloading"
+                      },
+                      "resource": {
+                        "type": "string"
+                      },
+                      "completedBytes": {
+                        "type": "number"
+                      },
+                      "totalBytes": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "phase",
+                      "resource",
+                      "completedBytes"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "step": {
+                        "anyOf": [
+                          {
+                            "const": "check"
+                          },
+                          {
+                            "const": "model"
+                          },
+                          {
+                            "const": "vad"
+                          },
+                          {
+                            "const": "verify"
+                          },
+                          {
+                            "const": "load"
+                          }
+                        ]
+                      },
+                      "steps": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "anyOf": [
+                                {
+                                  "const": "check"
+                                },
+                                {
+                                  "const": "model"
+                                },
+                                {
+                                  "const": "vad"
+                                },
+                                {
+                                  "const": "verify"
+                                },
+                                {
+                                  "const": "load"
+                                }
+                              ]
+                            },
+                            "status": {
+                              "anyOf": [
+                                {
+                                  "const": "cancelled"
+                                },
+                                {
+                                  "const": "failed"
+                                },
+                                {
+                                  "const": "running"
+                                },
+                                {
+                                  "const": "pending"
+                                },
+                                {
+                                  "const": "complete"
+                                }
+                              ]
+                            },
+                            "startedAt": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "status"
+                          ]
+                        }
+                      }
+                    },
+                    "required": []
+                  }
+                ]
+              },
+              {
+                "allOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "phase": {
+                        "anyOf": [
+                          {
+                            "const": "checking"
+                          },
+                          {
+                            "const": "loading"
+                          },
+                          {
+                            "const": "waking"
+                          },
+                          {
+                            "const": "cancelling"
+                          }
+                        ]
+                      },
+                      "startedAt": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "phase",
+                      "startedAt"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "step": {
+                        "anyOf": [
+                          {
+                            "const": "check"
+                          },
+                          {
+                            "const": "model"
+                          },
+                          {
+                            "const": "vad"
+                          },
+                          {
+                            "const": "verify"
+                          },
+                          {
+                            "const": "load"
+                          }
+                        ]
+                      },
+                      "steps": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "anyOf": [
+                                {
+                                  "const": "check"
+                                },
+                                {
+                                  "const": "model"
+                                },
+                                {
+                                  "const": "vad"
+                                },
+                                {
+                                  "const": "verify"
+                                },
+                                {
+                                  "const": "load"
+                                }
+                              ]
+                            },
+                            "status": {
+                              "anyOf": [
+                                {
+                                  "const": "cancelled"
+                                },
+                                {
+                                  "const": "failed"
+                                },
+                                {
+                                  "const": "running"
+                                },
+                                {
+                                  "const": "pending"
+                                },
+                                {
+                                  "const": "complete"
+                                }
+                              ]
+                            },
+                            "startedAt": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "status"
+                          ]
+                        }
+                      }
+                    },
+                    "required": []
+                  }
+                ]
+              },
+              {
+                "allOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "phase": {
+                        "const": "failed"
+                      },
+                      "message": {
+                        "type": "string"
+                      },
+                      "download": {
+                        "type": "object",
+                        "properties": {
+                          "resource": {
+                            "type": "string"
+                          },
+                          "source": {
+                            "type": "string"
+                          },
+                          "reason": {
+                            "anyOf": [
+                              {
+                                "const": "network"
+                              },
+                              {
+                                "const": "storage"
+                              },
+                              {
+                                "const": "unknown"
+                              },
+                              {
+                                "const": "dns"
+                              },
+                              {
+                                "const": "timeout"
+                              },
+                              {
+                                "const": "certificate"
+                              },
+                              {
+                                "const": "http"
+                              },
+                              {
+                                "const": "integrity"
+                              }
+                            ]
+                          },
+                          "code": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "resource",
+                          "source",
+                          "reason"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "phase",
+                      "message"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "step": {
+                        "anyOf": [
+                          {
+                            "const": "check"
+                          },
+                          {
+                            "const": "model"
+                          },
+                          {
+                            "const": "vad"
+                          },
+                          {
+                            "const": "verify"
+                          },
+                          {
+                            "const": "load"
+                          }
+                        ]
+                      },
+                      "steps": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "anyOf": [
+                                {
+                                  "const": "check"
+                                },
+                                {
+                                  "const": "model"
+                                },
+                                {
+                                  "const": "vad"
+                                },
+                                {
+                                  "const": "verify"
+                                },
+                                {
+                                  "const": "load"
+                                }
+                              ]
+                            },
+                            "status": {
+                              "anyOf": [
+                                {
+                                  "const": "cancelled"
+                                },
+                                {
+                                  "const": "failed"
+                                },
+                                {
+                                  "const": "running"
+                                },
+                                {
+                                  "const": "pending"
+                                },
+                                {
+                                  "const": "complete"
+                                }
+                              ]
+                            },
+                            "startedAt": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "status"
+                          ]
+                        }
+                      }
+                    },
+                    "required": []
+                  }
+                ]
+              }
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "const": "host-local"
+              },
+              {
+                "const": "cloud"
+              }
+            ]
+          },
+          "languages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "setupEstimate": {
+            "type": "object",
+            "properties": {
+              "recommendedDiskBytes": {
+                "type": "number"
+              },
+              "expectedMemoryBytes": {
+                "type": "number"
+              },
+              "minimumMinutes": {
+                "type": "number"
+              },
+              "maximumMinutes": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "recommendedDiskBytes",
+              "expectedMemoryBytes",
+              "minimumMinutes",
+              "maximumMinutes"
+            ]
+          },
+          "downloadSources": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "preparation",
+          "id",
+          "name",
+          "location",
+          "languages"
+        ]
+      }
+    },
+    "selection": {
+      "type": "object",
+      "properties": {
+        "providerId": {
+          "type": "string"
+        },
+        "language": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "providerId",
+        "language"
+      ]
+    }
+  },
+  "required": [
+    "maxAudioBytes",
+    "maxDurationSeconds",
+    "providers",
+    "selection"
+  ]
+}

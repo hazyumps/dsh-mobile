@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-office-to-pdf.types.OfficeToPdfGeneration",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-office-to-pdf/types#OfficeToPdfGeneration",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_office_to_pdf_officeToPdf_generation_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_office_to_pdf_officeToPdf_generation_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-office-to-pdf#officeToPdf/generation :: result"
+  ],
+  "x-dsh-rawExpression": "intersection(string(), unknown())",
+  "type": "string"
+}

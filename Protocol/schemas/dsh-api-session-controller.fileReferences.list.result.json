@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-session-controller.fileReferences.list.result",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-session-controller#fileReferences/list:result",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_session_controller_fileReferences_list_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_session_controller_fileReferences_list_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-session-controller#fileReferences/list :: result"
+  ],
+  "x-dsh-rawExpression": "array(object({\n\t\t\t\"path\": string(),\n\t\t\t\"kind\": union([literal(\"file\"), literal(\"directory\")])\n\t\t}))",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "path": {
+        "type": "string"
+      },
+      "kind": {
+        "anyOf": [
+          {
+            "const": "file"
+          },
+          {
+            "const": "directory"
+          }
+        ]
+      }
+    },
+    "required": [
+      "path",
+      "kind"
+    ]
+  }
+}

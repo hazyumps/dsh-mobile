@@ -1,0 +1,390 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-schedule.client.ScheduleUpdateResult",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-schedule/client#ScheduleUpdateResult",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_schedule_schedule_update_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_schedule_schedule_update_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-schedule#schedule/update :: result"
+  ],
+  "x-dsh-rawExpression": "union([\n\t\t\tobject({\n\t\t\t\t\"id\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\"updated\": boolean().readonly(),\n\t\t\t\t\"record\": union([\n\t\t\t\t\tobject({\n\t\t\t\t\t\t\"id\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\t\t\"kind\": literal(\"after\").readonly(),\n\t\t\t\t\t\t\"title\": string().readonly(),\n\t\t\t\t\t\t\"prompt\": string().readonly(),\n\t\t\t\t\t\t\"afterSeconds\": number().readonly(),\n\t\t\t\t\t\t\"scheduledAt\": string().readonly()\n\t\t\t\t\t}),\n\t\t\t\t\tobject({\n\t\t\t\t\t\t\"id\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\t\t\"kind\": literal(\"at\").readonly(),\n\t\t\t\t\t\t\"title\": string().readonly(),\n\t\t\t\t\t\t\"prompt\": string().readonly(),\n\t\t\t\t\t\t\"scheduledAt\": string().readonly()\n\t\t\t\t\t}),\n\t\t\t\t\tobject({\n\t\t\t\t\t\t\"id\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\t\t\"kind\": literal(\"every\").readonly(),\n\t\t\t\t\t\t\"title\": string().readonly(),\n\t\t\t\t\t\t\"prompt\": string().readonly(),\n\t\t\t\t\t\t\"everySeconds\": number().readonly(),\n\t\t\t\t\t\t\"scheduledAt\": string().readonly()\n\t\t\t\t\t}),\n\t\t\t\t\tobject({\n\t\t\t\t\t\t\"id\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\t\t\"kind\": literal(\"daily\").readonly(),\n\t\t\t\t\t\t\"title\": string().readonly(),\n\t\t\t\t\t\t\"prompt\": string().readonly(),\n\t\t\t\t\t\t\"time\": string().readonly(),\n\t\t\t\t\t\t\"timeZone\": string().readonly(),\n\t\t\t\t\t\t\"scheduledAt\": string().readonly()\n\t\t\t\t\t}),\n\t\t\t\t\tobject({\n\t\t\t\t\t\t\"id\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\t\t\"kind\": literal(\"weekly\").readonly(),\n\t\t\t\t\t\t\"title\": string().readonly(),\n\t\t\t\t\t\t\"prompt\": string().readonly(),\n\t\t\t\t\t\t\"time\": string().readonly(),\n\t\t\t\t\t\t\"timeZone\": string().readonly(),\n\t\t\t\t\t\t\"weekdays\": array(number()).readonly(),\n\t\t\t\t\t\t\"scheduledAt\": string().readonly()\n\t\t\t\t\t}),\n\t\t\t\t\tobject({\n\t\t\t\t\t\t\"id\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\t\t\"kind\": literal(\"cron\").readonly(),\n\t\t\t\t\t\t\"title\": string().readonly(),\n\t\t\t\t\t\t\"prompt\": string().readonly(),\n\t\t\t\t\t\t\"expression\": string().readonly(),\n\t\t\t\t\t\t\"timeZone\": string().readonly(),\n\t\t\t\t\t\t\"scheduledAt\": string().readonly()\n\t\t\t\t\t})\n\t\t\t\t]).readonly()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"id\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\"updated\": literal(false).readonly(),\n\t\t\t\t\"code\": union([\n\t\t\t\t\tliteral(\"schedule_not_found\"),\n\t\t\t\t\tliteral(\"schedule_ended\"),\n\t\t\t\t\tliteral(\"schedule_conflict\")\n\t\t\t\t]).readonly()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"code\": literal(\"invalid_prompt\").readonly(),\n\t\t\t\t\"message\": string().readonly()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"code\": literal(\"invalid_selector\").readonly(),\n\t\t\t\t\"message\": string().readonly()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"code\": literal(\"invalid_rule\").readonly(),\n\t\t\t\t\"message\": string().readonly()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"code\": literal(\"invalid_time_zone\").readonly(),\n\t\t\t\t\"message\": string().readonly()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"code\": literal(\"not_future\").readonly(),\n\t\t\t\t\"message\": string().readonly()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"code\": literal(\"time_out_of_range\").readonly(),\n\t\t\t\t\"message\": string().readonly()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"code\": literal(\"frequency_too_high\").readonly(),\n\t\t\t\t\"message\": string().readonly()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"code\": literal(\"internal_error\").readonly(),\n\t\t\t\t\"message\": string().readonly()\n\t\t\t})\n\t\t])",
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "updated": {
+          "type": "boolean"
+        },
+        "record": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "kind": {
+                  "const": "after"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "prompt": {
+                  "type": "string"
+                },
+                "afterSeconds": {
+                  "type": "number"
+                },
+                "scheduledAt": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "title",
+                "prompt",
+                "afterSeconds",
+                "scheduledAt"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "kind": {
+                  "const": "at"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "prompt": {
+                  "type": "string"
+                },
+                "scheduledAt": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "title",
+                "prompt",
+                "scheduledAt"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "kind": {
+                  "const": "every"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "prompt": {
+                  "type": "string"
+                },
+                "everySeconds": {
+                  "type": "number"
+                },
+                "scheduledAt": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "title",
+                "prompt",
+                "everySeconds",
+                "scheduledAt"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "kind": {
+                  "const": "daily"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "prompt": {
+                  "type": "string"
+                },
+                "time": {
+                  "type": "string"
+                },
+                "timeZone": {
+                  "type": "string"
+                },
+                "scheduledAt": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "title",
+                "prompt",
+                "time",
+                "timeZone",
+                "scheduledAt"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "kind": {
+                  "const": "weekly"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "prompt": {
+                  "type": "string"
+                },
+                "time": {
+                  "type": "string"
+                },
+                "timeZone": {
+                  "type": "string"
+                },
+                "weekdays": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  }
+                },
+                "scheduledAt": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "title",
+                "prompt",
+                "time",
+                "timeZone",
+                "weekdays",
+                "scheduledAt"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "kind": {
+                  "const": "cron"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "prompt": {
+                  "type": "string"
+                },
+                "expression": {
+                  "type": "string"
+                },
+                "timeZone": {
+                  "type": "string"
+                },
+                "scheduledAt": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "title",
+                "prompt",
+                "expression",
+                "timeZone",
+                "scheduledAt"
+              ]
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "updated",
+        "record"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "updated": {
+          "const": false
+        },
+        "code": {
+          "anyOf": [
+            {
+              "const": "schedule_not_found"
+            },
+            {
+              "const": "schedule_ended"
+            },
+            {
+              "const": "schedule_conflict"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "updated",
+        "code"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "code": {
+          "const": "invalid_prompt"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "code": {
+          "const": "invalid_selector"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "code": {
+          "const": "invalid_rule"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "code": {
+          "const": "invalid_time_zone"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "code": {
+          "const": "not_future"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "code": {
+          "const": "time_out_of_range"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "code": {
+          "const": "frequency_too_high"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "code": {
+          "const": "internal_error"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ]
+    }
+  ]
+}

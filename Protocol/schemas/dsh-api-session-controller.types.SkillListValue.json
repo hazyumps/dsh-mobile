@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-session-controller.types.SkillListValue",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-session-controller/types#SkillListValue",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_session_controller_skills_list_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_session_controller_skills_list_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-session-controller#skills/list :: result"
+  ],
+  "x-dsh-rawExpression": "object({ \"skills\": array(object({\n\t\t\t\"path\": string().readonly().optional(),\n\t\t\t\"name\": string().readonly(),\n\t\t\t\"description\": string().readonly(),\n\t\t\t\"whenToUse\": string().readonly().optional(),\n\t\t\t\"modelInvocable\": boolean().readonly()\n\t\t})).readonly() })",
+  "type": "object",
+  "properties": {
+    "skills": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "whenToUse": {
+            "type": "string"
+          },
+          "modelInvocable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "modelInvocable"
+        ]
+      }
+    }
+  },
+  "required": [
+    "skills"
+  ]
+}

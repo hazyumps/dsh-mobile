@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-settings-controller.types.SettingsDocumentOpenValue",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-settings-controller/types#SettingsDocumentOpenValue",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_settings_controller_settings_openSettingsDocument_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_settings_controller_settings_openSettingsDocument_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-settings-controller#settings/openSettingsDocument :: result"
+  ],
+  "x-dsh-rawExpression": "object({ \"opened\": literal(true).readonly() })",
+  "type": "object",
+  "properties": {
+    "opened": {
+      "const": true
+    }
+  },
+  "required": [
+    "opened"
+  ]
+}

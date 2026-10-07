@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-commands.commands.execute.result",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-commands#commands/execute:result",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_commands_commands_execute_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_commands_commands_execute_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-commands#commands/execute :: result"
+  ],
+  "x-dsh-rawExpression": "union([_undefined(), object({\n\t\t\t\"commandId\": intersection(string(), unknown()).readonly(),\n\t\t\t\"result\": union([object({\n\t\t\t\t\"kind\": literal(\"success\").readonly(),\n\t\t\t\t\"text\": string().readonly().optional(),\n\t\t\t\t\"sourceEventSeq\": intersection(number(), unknown()).readonly().optional()\n\t\t\t}), object({\n\t\t\t\t\"kind\": literal(\"error\").readonly(),\n\t\t\t\t\"text\": string().readonly()\n\t\t\t})]).readonly()\n\t\t})])",
+  "x-dsh-mayBeAbsent": true,
+  "type": "object",
+  "properties": {
+    "commandId": {
+      "type": "string"
+    },
+    "result": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "success"
+            },
+            "text": {
+              "type": "string"
+            },
+            "sourceEventSeq": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "error"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "text"
+          ]
+        }
+      ]
+    }
+  },
+  "required": [
+    "commandId",
+    "result"
+  ]
+}

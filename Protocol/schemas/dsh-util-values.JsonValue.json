@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-util-values.JsonValue",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-util-values#JsonValue",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_cordis_host_runner_dynamicCordisRunner_invoke_parameter_3$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_cordis_host_runner_dynamicCordisRunner_invoke_parameter_3$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-cordis-host-runner#dynamicCordisRunner/invoke :: parameter:args"
+  ],
+  "x-dsh-rawExpression": "union([\n\t\t\tliteral(null),\n\t\t\tstring(),\n\t\t\tnumber(),\n\t\t\tliteral(false),\n\t\t\tliteral(true),\n\t\t\tarray(lazy(() => JsonValueRemoteCodec$schema3$1())),\n\t\t\trecord(string(), lazy(() => JsonValueRemoteCodec$schema3$1()))\n\t\t])",
+  "anyOf": [
+    {
+      "const": null
+    },
+    {
+      "type": "string"
+    },
+    {
+      "type": "number"
+    },
+    {
+      "const": false
+    },
+    {
+      "const": true
+    },
+    {
+      "type": "array",
+      "items": {
+        "anyOf": [
+          {
+            "const": null
+          },
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "const": false
+          },
+          {
+            "const": true
+          },
+          {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/JsonValueRemoteCodec$schema3$1"
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/$defs/JsonValueRemoteCodec$schema3$1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "const": null
+          },
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "const": false
+          },
+          {
+            "const": true
+          },
+          {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/JsonValueRemoteCodec$schema3$1"
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/$defs/JsonValueRemoteCodec$schema3$1"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "$defs": {
+    "JsonValueRemoteCodec$schema3$1": {
+      "anyOf": [
+        {
+          "const": null
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "const": false
+        },
+        {
+          "const": true
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/JsonValueRemoteCodec$schema3$1"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValueRemoteCodec$schema3$1"
+          }
+        }
+      ]
+    }
+  }
+}

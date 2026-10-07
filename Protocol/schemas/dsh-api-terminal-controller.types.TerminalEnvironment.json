@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-terminal-controller.types.TerminalEnvironment",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-terminal-controller/types#TerminalEnvironment",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_terminal_controller_terminal_environment_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_terminal_controller_terminal_environment_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-terminal-controller#terminal/environment :: result"
+  ],
+  "x-dsh-rawExpression": "object({\n\t\t\t\"cwd\": string().readonly(),\n\t\t\t\"maxInputBytes\": number().readonly(),\n\t\t\t\"maxCols\": number().readonly(),\n\t\t\t\"maxRows\": number().readonly(),\n\t\t\t\"scrollback\": number().readonly()\n\t\t})",
+  "type": "object",
+  "properties": {
+    "cwd": {
+      "type": "string"
+    },
+    "maxInputBytes": {
+      "type": "number"
+    },
+    "maxCols": {
+      "type": "number"
+    },
+    "maxRows": {
+      "type": "number"
+    },
+    "scrollback": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "cwd",
+    "maxInputBytes",
+    "maxCols",
+    "maxRows",
+    "scrollback"
+  ]
+}

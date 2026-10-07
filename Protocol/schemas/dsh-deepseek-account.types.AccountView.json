@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-deepseek-account.types.AccountView",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-deepseek-account/types#AccountView",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_account_controller_account_cancelSignIn_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_account_controller_account_cancelSignIn_result$schema",
+      "_deepseek_ai_dsh_api_account_controller_account_getState_result$schema",
+      "_deepseek_ai_dsh_api_account_controller_account_signOut_result$schema",
+      "_deepseek_ai_dsh_api_account_controller_account_startSignIn_result$schema",
+      "_deepseek_ai_dsh_api_account_controller_account_watch_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-account-controller#account/cancelSignIn :: result",
+    "@deepseek-ai/dsh-api-account-controller#account/getState :: result",
+    "@deepseek-ai/dsh-api-account-controller#account/signOut :: result",
+    "@deepseek-ai/dsh-api-account-controller#account/startSignIn :: result",
+    "@deepseek-ai/dsh-api-account-controller#account/watch :: result"
+  ],
+  "x-dsh-rawExpression": "object({\n\t\t\t\"status\": union([literal(\"signed-out\"), literal(\"credential-stored\")]).readonly(),\n\t\t\t\"links\": object({\n\t\t\t\t\"usageUrl\": string().readonly(),\n\t\t\t\t\"topUpUrl\": string().readonly()\n\t\t\t}).readonly(),\n\t\t\t\"attempt\": union([literal(null), object({\n\t\t\t\t\"id\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\"phase\": union([\n\t\t\t\t\tliteral(\"initializing\"),\n\t\t\t\t\tliteral(\"waiting-browser\"),\n\t\t\t\t\tliteral(\"exchanging\"),\n\t\t\t\t\tliteral(\"committing\"),\n\t\t\t\t\tliteral(\"succeeded\"),\n\t\t\t\t\tliteral(\"cancelled\"),\n\t\t\t\t\tliteral(\"expired\"),\n\t\t\t\t\tliteral(\"failed\")\n\t\t\t\t]).readonly(),\n\t\t\t\t\"authorizeUrl\": string().readonly().optional(),\n\t\t\t\t\"expiresAt\": number().readonly().optional(),\n\t\t\t\t\"errorCode\": union([\n\t\t\t\t\tliteral(\"expired\"),\n\t\t\t\t\tliteral(\"network\"),\n\t\t\t\t\tliteral(\"protocol\"),\n\t\t\t\t\tliteral(\"storage\")\n\t\t\t\t]).readonly().optional()\n\t\t\t})]).readonly()\n\t\t})",
+  "type": "object",
+  "properties": {
+    "status": {
+      "anyOf": [
+        {
+          "const": "signed-out"
+        },
+        {
+          "const": "credential-stored"
+        }
+      ]
+    },
+    "links": {
+      "type": "object",
+      "properties": {
+        "usageUrl": {
+          "type": "string"
+        },
+        "topUpUrl": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "usageUrl",
+        "topUpUrl"
+      ]
+    },
+    "attempt": {
+      "anyOf": [
+        {
+          "const": null
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "phase": {
+              "anyOf": [
+                {
+                  "const": "initializing"
+                },
+                {
+                  "const": "waiting-browser"
+                },
+                {
+                  "const": "exchanging"
+                },
+                {
+                  "const": "committing"
+                },
+                {
+                  "const": "succeeded"
+                },
+                {
+                  "const": "cancelled"
+                },
+                {
+                  "const": "expired"
+                },
+                {
+                  "const": "failed"
+                }
+              ]
+            },
+            "authorizeUrl": {
+              "type": "string"
+            },
+            "expiresAt": {
+              "type": "number"
+            },
+            "errorCode": {
+              "anyOf": [
+                {
+                  "const": "expired"
+                },
+                {
+                  "const": "network"
+                },
+                {
+                  "const": "protocol"
+                },
+                {
+                  "const": "storage"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "phase"
+          ]
+        }
+      ]
+    }
+  },
+  "required": [
+    "status",
+    "links",
+    "attempt"
+  ]
+}

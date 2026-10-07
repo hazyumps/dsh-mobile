@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-user-questions.types.AskUserQuestionAnswer",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-user-questions/types#AskUserQuestionAnswer",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_user_questions_userQuestions_answer_parameter_2$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_user_questions_userQuestions_answer_parameter_2$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-user-questions#userQuestions/answer :: parameter:answer"
+  ],
+  "x-dsh-rawExpression": "object({ \"answers\": array(object({\n\t\t\t\"id\": string(),\n\t\t\t\"selected\": array(string()),\n\t\t\t\"custom\": string().optional()\n\t\t})) })",
+  "type": "object",
+  "properties": {
+    "answers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "selected": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "custom": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "selected"
+        ]
+      }
+    }
+  },
+  "required": [
+    "answers"
+  ]
+}

@@ -1,0 +1,262 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-cordis-host-runner.dynamicCordisRunner.syncInspectManifest.providers",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-cordis-host-runner#dynamicCordisRunner/syncInspectManifest:providers",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_cordis_host_runner_dynamicCordisRunner_syncInspectManifest_parameter_0$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_cordis_host_runner_dynamicCordisRunner_syncInspectManifest_parameter_0$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-cordis-host-runner#dynamicCordisRunner/syncInspectManifest :: parameter:providers"
+  ],
+  "x-dsh-rawExpression": "array(object({\n\t\t\t\"id\": string(),\n\t\t\t\"description\": string(),\n\t\t\t\"methods\": array(object({\n\t\t\t\t\"name\": string(),\n\t\t\t\t\"description\": string(),\n\t\t\t\t\"inputSchema\": union([\n\t\t\t\t\tliteral(null),\n\t\t\t\t\tstring(),\n\t\t\t\t\tnumber(),\n\t\t\t\t\tliteral(false),\n\t\t\t\t\tliteral(true),\n\t\t\t\t\tarray(lazy(() => JsonValueRemoteCodec$schema$1())),\n\t\t\t\t\trecord(string(), lazy(() => JsonValueRemoteCodec$schema$1()))\n\t\t\t\t]),\n\t\t\t\t\"outputSchema\": union([\n\t\t\t\t\tliteral(null),\n\t\t\t\t\tstring(),\n\t\t\t\t\tnumber(),\n\t\t\t\t\tliteral(false),\n\t\t\t\t\tliteral(true),\n\t\t\t\t\tarray(lazy(() => JsonValueRemoteCodec$schema$1())),\n\t\t\t\t\trecord(string(), lazy(() => JsonValueRemoteCodec$schema$1()))\n\t\t\t\t])\n\t\t\t}))\n\t\t}))",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "description": {
+        "type": "string"
+      },
+      "methods": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "inputSchema": {
+              "anyOf": [
+                {
+                  "const": null
+                },
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "const": false
+                },
+                {
+                  "const": true
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "const": null
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "const": false
+                      },
+                      {
+                        "const": true
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/JsonValueRemoteCodec$schema$1"
+                        }
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": {
+                          "$ref": "#/$defs/JsonValueRemoteCodec$schema$1"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "const": null
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "const": false
+                      },
+                      {
+                        "const": true
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/JsonValueRemoteCodec$schema$1"
+                        }
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": {
+                          "$ref": "#/$defs/JsonValueRemoteCodec$schema$1"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            "outputSchema": {
+              "anyOf": [
+                {
+                  "const": null
+                },
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "const": false
+                },
+                {
+                  "const": true
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "const": null
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "const": false
+                      },
+                      {
+                        "const": true
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/JsonValueRemoteCodec$schema$1"
+                        }
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": {
+                          "$ref": "#/$defs/JsonValueRemoteCodec$schema$1"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "const": null
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "const": false
+                      },
+                      {
+                        "const": true
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/JsonValueRemoteCodec$schema$1"
+                        }
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": {
+                          "$ref": "#/$defs/JsonValueRemoteCodec$schema$1"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          "required": [
+            "name",
+            "description",
+            "inputSchema",
+            "outputSchema"
+          ]
+        }
+      }
+    },
+    "required": [
+      "id",
+      "description",
+      "methods"
+    ]
+  },
+  "$defs": {
+    "JsonValueRemoteCodec$schema$1": {
+      "anyOf": [
+        {
+          "const": null
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "const": false
+        },
+        {
+          "const": true
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/JsonValueRemoteCodec$schema$1"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValueRemoteCodec$schema$1"
+          }
+        }
+      ]
+    }
+  }
+}

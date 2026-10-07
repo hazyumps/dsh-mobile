@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-session-controller.types.SessionPromptRequest",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-session-controller/types#SessionPromptRequest",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_session_controller_session_prompt_parameter_0$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_session_controller_session_prompt_parameter_0$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-session-controller#session/prompt :: parameter:request"
+  ],
+  "x-dsh-rawExpression": "object({\n\t\t\t\"requestId\": intersection(string(), unknown()).readonly(),\n\t\t\t\"sessionId\": intersection(string(), unknown()).readonly(),\n\t\t\t\"mode\": union([literal(\"queue\"), literal(\"steer\")]).readonly(),\n\t\t\t\"content\": array(union([\n\t\t\t\tobject({\n\t\t\t\t\t\"type\": literal(\"text\").readonly(),\n\t\t\t\t\t\"text\": string().readonly()\n\t\t\t\t}),\n\t\t\t\tobject({\n\t\t\t\t\t\"type\": literal(\"image\").readonly(),\n\t\t\t\t\t\"mediaType\": union([\n\t\t\t\t\t\tliteral(\"image/png\"),\n\t\t\t\t\t\tliteral(\"image/jpeg\"),\n\t\t\t\t\t\tliteral(\"image/webp\"),\n\t\t\t\t\t\tliteral(\"image/gif\")\n\t\t\t\t\t]).readonly(),\n\t\t\t\t\t\"data\": string().readonly(),\n\t\t\t\t\t\"name\": string().readonly().optional()\n\t\t\t\t}),\n\t\t\t\tobject({\n\t\t\t\t\t\"type\": literal(\"file\").readonly(),\n\t\t\t\t\t\"receiptId\": intersection(string(), unknown()).readonly()\n\t\t\t\t})\n\t\t\t])).readonly(),\n\t\t\t\"clientTimeZone\": string().readonly().optional()\n\t\t})",
+  "type": "object",
+  "properties": {
+    "requestId": {
+      "type": "string"
+    },
+    "sessionId": {
+      "type": "string"
+    },
+    "mode": {
+      "anyOf": [
+        {
+          "const": "queue"
+        },
+        {
+          "const": "steer"
+        }
+      ]
+    },
+    "content": {
+      "type": "array",
+      "items": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "text"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "text"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "image"
+              },
+              "mediaType": {
+                "anyOf": [
+                  {
+                    "const": "image/png"
+                  },
+                  {
+                    "const": "image/jpeg"
+                  },
+                  {
+                    "const": "image/webp"
+                  },
+                  {
+                    "const": "image/gif"
+                  }
+                ]
+              },
+              "data": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "mediaType",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "file"
+              },
+              "receiptId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "receiptId"
+            ]
+          }
+        ]
+      }
+    },
+    "clientTimeZone": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "requestId",
+    "sessionId",
+    "mode",
+    "content"
+  ]
+}

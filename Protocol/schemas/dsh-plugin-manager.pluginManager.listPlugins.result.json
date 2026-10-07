@@ -1,0 +1,286 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-plugin-manager.pluginManager.listPlugins.result",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-plugin-manager#pluginManager/listPlugins:result",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_plugin_manager_pluginManager_listPlugins_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_plugin_manager_pluginManager_listPlugins_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-plugin-manager#pluginManager/listPlugins :: result"
+  ],
+  "x-dsh-rawExpression": "array(union([intersection(object({\n\t\t\t\"entryId\": intersection(string(), unknown()).readonly(),\n\t\t\t\"moduleName\": string().readonly(),\n\t\t\t\"meta\": object({\n\t\t\t\t\"title\": union([string(), intersection(object({ \"en\": string().readonly() }), record(string(), string()).readonly())]).readonly().optional(),\n\t\t\t\t\"description\": union([string(), intersection(object({ \"en\": string().readonly() }), record(string(), string()).readonly())]).readonly().optional(),\n\t\t\t\t\"icon\": string().readonly().optional(),\n\t\t\t\t\"error\": string().readonly().optional()\n\t\t\t}).readonly().optional(),\n\t\t\t\"enabled\": boolean().readonly(),\n\t\t\t\"fiberPhase\": union([\n\t\t\t\tliteral(null),\n\t\t\t\tliteral(\"failed\"),\n\t\t\t\tliteral(\"pending\"),\n\t\t\t\tliteral(\"active\"),\n\t\t\t\tliteral(\"loading\"),\n\t\t\t\tliteral(\"unloading\")\n\t\t\t]).readonly()\n\t\t}), object({\n\t\t\t\"patchId\": string(),\n\t\t\t\"readOnlyReason\": never().optional()\n\t\t})), intersection(object({\n\t\t\t\"entryId\": intersection(string(), unknown()).readonly(),\n\t\t\t\"moduleName\": string().readonly(),\n\t\t\t\"meta\": object({\n\t\t\t\t\"title\": union([string(), intersection(object({ \"en\": string().readonly() }), record(string(), string()).readonly())]).readonly().optional(),\n\t\t\t\t\"description\": union([string(), intersection(object({ \"en\": string().readonly() }), record(string(), string()).readonly())]).readonly().optional(),\n\t\t\t\t\"icon\": string().readonly().optional(),\n\t\t\t\t\"error\": string().readonly().optional()\n\t\t\t}).readonly().optional(),\n\t\t\t\"enabled\": boolean().readonly(),\n\t\t\t\"fiberPhase\": union([\n\t\t\t\tliteral(null),\n\t\t\t\tliteral(\"failed\"),\n\t\t\t\tliteral(\"pending\"),\n\t\t\t\tliteral(\"active\"),\n\t\t\t\tliteral(\"loading\"),\n\t\t\t\tliteral(\"unloading\")\n\t\t\t]).readonly()\n\t\t}), object({\n\t\t\t\"patchId\": never().optional(),\n\t\t\t\"readOnlyReason\": union([literal(\"management-required\"), literal(\"unaddressable\")])\n\t\t}))]))",
+  "type": "array",
+  "items": {
+    "anyOf": [
+      {
+        "allOf": [
+          {
+            "type": "object",
+            "properties": {
+              "entryId": {
+                "type": "string"
+              },
+              "moduleName": {
+                "type": "string"
+              },
+              "meta": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "allOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "en": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "en"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "description": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "allOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "en": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "en"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "icon": {
+                    "type": "string"
+                  },
+                  "error": {
+                    "type": "string"
+                  }
+                },
+                "required": []
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "fiberPhase": {
+                "anyOf": [
+                  {
+                    "const": null
+                  },
+                  {
+                    "const": "failed"
+                  },
+                  {
+                    "const": "pending"
+                  },
+                  {
+                    "const": "active"
+                  },
+                  {
+                    "const": "loading"
+                  },
+                  {
+                    "const": "unloading"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "entryId",
+              "moduleName",
+              "enabled",
+              "fiberPhase"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "patchId": {
+                "type": "string"
+              },
+              "readOnlyReason": {
+                "not": {}
+              }
+            },
+            "required": [
+              "patchId"
+            ]
+          }
+        ]
+      },
+      {
+        "allOf": [
+          {
+            "type": "object",
+            "properties": {
+              "entryId": {
+                "type": "string"
+              },
+              "moduleName": {
+                "type": "string"
+              },
+              "meta": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "allOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "en": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "en"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "description": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "allOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "en": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "en"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "icon": {
+                    "type": "string"
+                  },
+                  "error": {
+                    "type": "string"
+                  }
+                },
+                "required": []
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "fiberPhase": {
+                "anyOf": [
+                  {
+                    "const": null
+                  },
+                  {
+                    "const": "failed"
+                  },
+                  {
+                    "const": "pending"
+                  },
+                  {
+                    "const": "active"
+                  },
+                  {
+                    "const": "loading"
+                  },
+                  {
+                    "const": "unloading"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "entryId",
+              "moduleName",
+              "enabled",
+              "fiberPhase"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "patchId": {
+                "not": {}
+              },
+              "readOnlyReason": {
+                "anyOf": [
+                  {
+                    "const": "management-required"
+                  },
+                  {
+                    "const": "unaddressable"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "readOnlyReason"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-goal.goals.get.result",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-goal#goals/get:result",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_goal_goals_get_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_goal_goals_get_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-goal#goals/get :: result"
+  ],
+  "x-dsh-rawExpression": "union([_undefined(), object({\n\t\t\t\"roundsStarted\": number().readonly(),\n\t\t\t\"createdAt\": number().readonly(),\n\t\t\t\"updatedAt\": number().readonly(),\n\t\t\t\"activation\": union([literal(\"armed\"), literal(\"disarmed\")]).readonly(),\n\t\t\t\"objective\": string().readonly(),\n\t\t\t\"phase\": union([\n\t\t\t\tliteral(\"active\"),\n\t\t\t\tliteral(\"paused\"),\n\t\t\t\tliteral(\"blocked\"),\n\t\t\t\tliteral(\"complete\")\n\t\t\t]).readonly(),\n\t\t\t\"blockedReason\": object({\n\t\t\t\t\"code\": string().readonly(),\n\t\t\t\t\"message\": string().readonly()\n\t\t\t}).readonly().optional(),\n\t\t\t\"maxGoalRounds\": number().readonly(),\n\t\t\t\"id\": intersection(string(), unknown()).readonly(),\n\t\t\t\"revision\": number().readonly()\n\t\t})])",
+  "x-dsh-mayBeAbsent": true,
+  "type": "object",
+  "properties": {
+    "roundsStarted": {
+      "type": "number"
+    },
+    "createdAt": {
+      "type": "number"
+    },
+    "updatedAt": {
+      "type": "number"
+    },
+    "activation": {
+      "anyOf": [
+        {
+          "const": "armed"
+        },
+        {
+          "const": "disarmed"
+        }
+      ]
+    },
+    "objective": {
+      "type": "string"
+    },
+    "phase": {
+      "anyOf": [
+        {
+          "const": "active"
+        },
+        {
+          "const": "paused"
+        },
+        {
+          "const": "blocked"
+        },
+        {
+          "const": "complete"
+        }
+      ]
+    },
+    "blockedReason": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ]
+    },
+    "maxGoalRounds": {
+      "type": "number"
+    },
+    "id": {
+      "type": "string"
+    },
+    "revision": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "roundsStarted",
+    "createdAt",
+    "updatedAt",
+    "activation",
+    "objective",
+    "phase",
+    "maxGoalRounds",
+    "id",
+    "revision"
+  ]
+}

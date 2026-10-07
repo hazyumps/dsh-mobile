@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-commands.commands.execute.submittedAttachments",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-commands#commands/execute:submittedAttachments",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_commands_commands_execute_parameter_2$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_commands_commands_execute_parameter_2$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-commands#commands/execute :: parameter:submittedAttachments"
+  ],
+  "x-dsh-rawExpression": "array(union([intersection(object({ \"type\": literal(\"image\").readonly() }), object({\n\t\t\t\"mediaType\": union([\n\t\t\t\tliteral(\"image/png\"),\n\t\t\t\tliteral(\"image/jpeg\"),\n\t\t\t\tliteral(\"image/webp\"),\n\t\t\t\tliteral(\"image/gif\")\n\t\t\t]),\n\t\t\t\"data\": string(),\n\t\t\t\"name\": string().optional()\n\t\t})), object({\n\t\t\t\"type\": literal(\"file\").readonly(),\n\t\t\t\"receiptId\": string().readonly()\n\t\t})]))",
+  "type": "array",
+  "items": {
+    "anyOf": [
+      {
+        "allOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "image"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "mediaType": {
+                "anyOf": [
+                  {
+                    "const": "image/png"
+                  },
+                  {
+                    "const": "image/jpeg"
+                  },
+                  {
+                    "const": "image/webp"
+                  },
+                  {
+                    "const": "image/gif"
+                  }
+                ]
+              },
+              "data": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "mediaType",
+              "data"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "type": {
+            "const": "file"
+          },
+          "receiptId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "receiptId"
+        ]
+      }
+    ]
+  }
+}

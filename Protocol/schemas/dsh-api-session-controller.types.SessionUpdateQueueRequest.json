@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-session-controller.types.SessionUpdateQueueRequest",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-session-controller/types#SessionUpdateQueueRequest",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_session_controller_session_updateQueue_parameter_0$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_session_controller_session_updateQueue_parameter_0$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-session-controller#session/updateQueue :: parameter:request"
+  ],
+  "x-dsh-rawExpression": "object({\n\t\t\t\"sessionId\": intersection(string(), unknown()).readonly(),\n\t\t\t\"itemId\": intersection(string(), unknown()).readonly(),\n\t\t\t\"action\": union([\n\t\t\t\tobject({\n\t\t\t\t\t\"kind\": literal(\"edit\").readonly(),\n\t\t\t\t\t\"content\": array(object({\n\t\t\t\t\t\t\"type\": literal(\"text\"),\n\t\t\t\t\t\t\"text\": string()\n\t\t\t\t\t})).readonly()\n\t\t\t\t}),\n\t\t\t\tobject({ \"kind\": literal(\"remove\").readonly() }),\n\t\t\t\tobject({ \"kind\": literal(\"steer\").readonly() })\n\t\t\t]).readonly()\n\t\t})",
+  "type": "object",
+  "properties": {
+    "sessionId": {
+      "type": "string"
+    },
+    "itemId": {
+      "type": "string"
+    },
+    "action": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "edit"
+            },
+            "content": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "const": "text"
+                  },
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "text"
+                ]
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "content"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "remove"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "steer"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        }
+      ]
+    }
+  },
+  "required": [
+    "sessionId",
+    "itemId",
+    "action"
+  ]
+}

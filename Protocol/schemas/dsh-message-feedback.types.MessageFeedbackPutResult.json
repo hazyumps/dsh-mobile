@@ -1,0 +1,255 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-message-feedback.types.MessageFeedbackPutResult",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-message-feedback/types#MessageFeedbackPutResult",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_message_feedback_messageFeedback_put_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_message_feedback_messageFeedback_put_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-message-feedback#messageFeedback/put :: result"
+  ],
+  "x-dsh-rawExpression": "union([object({\n\t\t\t\"ok\": literal(true).readonly(),\n\t\t\t\"value\": object({\n\t\t\t\t\"messageId\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\"rating\": union([literal(\"positive\"), literal(\"negative\")]).readonly(),\n\t\t\t\t\"note\": string().readonly().optional(),\n\t\t\t\t\"category\": union([\n\t\t\t\t\tliteral(\"other\"),\n\t\t\t\t\tliteral(\"task-result\"),\n\t\t\t\t\tliteral(\"instruction-following\"),\n\t\t\t\t\tliteral(\"product-interaction\"),\n\t\t\t\t\tliteral(\"service-stability\"),\n\t\t\t\t\tliteral(\"resource-cost\"),\n\t\t\t\t\tliteral(\"security-privacy-permission\")\n\t\t\t\t]).readonly().optional(),\n\t\t\t\t\"version\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\"createdAt\": number().readonly(),\n\t\t\t\t\"updatedAt\": number().readonly()\n\t\t\t}).readonly()\n\t\t}), object({\n\t\t\t\"ok\": literal(false).readonly(),\n\t\t\t\"error\": union([\n\t\t\t\tobject({\n\t\t\t\t\t\"code\": literal(\"session-not-found\").readonly(),\n\t\t\t\t\t\"sessionId\": intersection(string(), unknown()).readonly()\n\t\t\t\t}),\n\t\t\t\tobject({\n\t\t\t\t\t\"code\": literal(\"target-not-found\").readonly(),\n\t\t\t\t\t\"sessionId\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\t\"messageId\": intersection(string(), unknown()).readonly()\n\t\t\t\t}),\n\t\t\t\tobject({\n\t\t\t\t\t\"code\": literal(\"version-conflict\").readonly(),\n\t\t\t\t\t\"current\": union([literal(null), object({\n\t\t\t\t\t\t\"messageId\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\t\t\"rating\": union([literal(\"positive\"), literal(\"negative\")]).readonly(),\n\t\t\t\t\t\t\"note\": string().readonly().optional(),\n\t\t\t\t\t\t\"category\": union([\n\t\t\t\t\t\t\tliteral(\"other\"),\n\t\t\t\t\t\t\tliteral(\"task-result\"),\n\t\t\t\t\t\t\tliteral(\"instruction-following\"),\n\t\t\t\t\t\t\tliteral(\"product-interaction\"),\n\t\t\t\t\t\t\tliteral(\"service-stability\"),\n\t\t\t\t\t\t\tliteral(\"resource-cost\"),\n\t\t\t\t\t\t\tliteral(\"security-privacy-permission\")\n\t\t\t\t\t\t]).readonly().optional(),\n\t\t\t\t\t\t\"version\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\t\t\"createdAt\": number().readonly(),\n\t\t\t\t\t\t\"updatedAt\": number().readonly()\n\t\t\t\t\t})]).readonly()\n\t\t\t\t}),\n\t\t\t\tobject({ \"code\": literal(\"note-blank\").readonly() }),\n\t\t\t\tobject({\n\t\t\t\t\t\"code\": literal(\"note-too-large\").readonly(),\n\t\t\t\t\t\"maxBytes\": number().readonly(),\n\t\t\t\t\t\"actualBytes\": number().readonly()\n\t\t\t\t})\n\t\t\t]).readonly()\n\t\t})])",
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "value": {
+          "type": "object",
+          "properties": {
+            "messageId": {
+              "type": "string"
+            },
+            "rating": {
+              "anyOf": [
+                {
+                  "const": "positive"
+                },
+                {
+                  "const": "negative"
+                }
+              ]
+            },
+            "note": {
+              "type": "string"
+            },
+            "category": {
+              "anyOf": [
+                {
+                  "const": "other"
+                },
+                {
+                  "const": "task-result"
+                },
+                {
+                  "const": "instruction-following"
+                },
+                {
+                  "const": "product-interaction"
+                },
+                {
+                  "const": "service-stability"
+                },
+                {
+                  "const": "resource-cost"
+                },
+                {
+                  "const": "security-privacy-permission"
+                }
+              ]
+            },
+            "version": {
+              "type": "string"
+            },
+            "createdAt": {
+              "type": "number"
+            },
+            "updatedAt": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "messageId",
+            "rating",
+            "version",
+            "createdAt",
+            "updatedAt"
+          ]
+        }
+      },
+      "required": [
+        "ok",
+        "value"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "const": "session-not-found"
+                },
+                "sessionId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "code",
+                "sessionId"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "const": "target-not-found"
+                },
+                "sessionId": {
+                  "type": "string"
+                },
+                "messageId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "code",
+                "sessionId",
+                "messageId"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "const": "version-conflict"
+                },
+                "current": {
+                  "anyOf": [
+                    {
+                      "const": null
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "messageId": {
+                          "type": "string"
+                        },
+                        "rating": {
+                          "anyOf": [
+                            {
+                              "const": "positive"
+                            },
+                            {
+                              "const": "negative"
+                            }
+                          ]
+                        },
+                        "note": {
+                          "type": "string"
+                        },
+                        "category": {
+                          "anyOf": [
+                            {
+                              "const": "other"
+                            },
+                            {
+                              "const": "task-result"
+                            },
+                            {
+                              "const": "instruction-following"
+                            },
+                            {
+                              "const": "product-interaction"
+                            },
+                            {
+                              "const": "service-stability"
+                            },
+                            {
+                              "const": "resource-cost"
+                            },
+                            {
+                              "const": "security-privacy-permission"
+                            }
+                          ]
+                        },
+                        "version": {
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": "number"
+                        },
+                        "updatedAt": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "messageId",
+                        "rating",
+                        "version",
+                        "createdAt",
+                        "updatedAt"
+                      ]
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "code",
+                "current"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "const": "note-blank"
+                }
+              },
+              "required": [
+                "code"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "const": "note-too-large"
+                },
+                "maxBytes": {
+                  "type": "number"
+                },
+                "actualBytes": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "code",
+                "maxBytes",
+                "actualBytes"
+              ]
+            }
+          ]
+        }
+      },
+      "required": [
+        "ok",
+        "error"
+      ]
+    }
+  ]
+}

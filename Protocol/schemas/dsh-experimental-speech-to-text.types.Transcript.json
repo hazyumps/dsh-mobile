@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-experimental-speech-to-text.types.Transcript",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-experimental-speech-to-text/types#Transcript",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_experimental_api_speech_to_text_speech_transcribe_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-experimental-client-ui-voice-input/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_experimental_api_speech_to_text_speech_transcribe_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-experimental-api-speech-to-text#speech/transcribe :: result"
+  ],
+  "x-dsh-rawExpression": "object({\n\t\t\t\"text\": string().readonly(),\n\t\t\t\"audioSeconds\": number().readonly(),\n\t\t\t\"inferenceSeconds\": number().readonly()\n\t\t})",
+  "type": "object",
+  "properties": {
+    "text": {
+      "type": "string"
+    },
+    "audioSeconds": {
+      "type": "number"
+    },
+    "inferenceSeconds": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "text",
+    "audioSeconds",
+    "inferenceSeconds"
+  ]
+}

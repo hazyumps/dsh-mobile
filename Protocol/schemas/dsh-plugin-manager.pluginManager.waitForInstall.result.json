@@ -1,0 +1,288 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-plugin-manager.pluginManager.waitForInstall.result",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-plugin-manager#pluginManager/waitForInstall:result",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_plugin_manager_pluginManager_waitForInstall_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_plugin_manager_pluginManager_waitForInstall_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-plugin-manager#pluginManager/waitForInstall :: result"
+  ],
+  "x-dsh-rawExpression": "union([literal(null), object({\n\t\t\t\"changed\": boolean(),\n\t\t\t\"application\": union([\n\t\t\t\tliteral(\"cancelled\"),\n\t\t\t\tliteral(\"failed\"),\n\t\t\t\tliteral(\"applied\"),\n\t\t\t\tliteral(\"restart-required\"),\n\t\t\t\tliteral(\"overridden\")\n\t\t\t]),\n\t\t\t\"stage\": union([\n\t\t\t\tliteral(\"remove\"),\n\t\t\t\tliteral(\"install\"),\n\t\t\t\tliteral(\"enable\")\n\t\t\t]),\n\t\t\t\"target\": string(),\n\t\t\t\"enabled\": boolean().optional(),\n\t\t\t\"error\": object({\n\t\t\t\t\"code\": union([\n\t\t\t\t\tliteral(\"management-required\"),\n\t\t\t\t\tliteral(\"unaddressable\"),\n\t\t\t\t\tliteral(\"unknown-plugin\"),\n\t\t\t\t\tliteral(\"invalid-spec\"),\n\t\t\t\t\tliteral(\"ambiguous-install\"),\n\t\t\t\t\tliteral(\"not-bundle\"),\n\t\t\t\t\tliteral(\"not-removable\"),\n\t\t\t\t\tliteral(\"stop-profile\"),\n\t\t\t\t\tliteral(\"bundle-in-use\"),\n\t\t\t\t\tliteral(\"stale-approval\"),\n\t\t\t\t\tliteral(\"incompatible-version\"),\n\t\t\t\t\tliteral(\"operation-error\")\n\t\t\t\t]),\n\t\t\t\t\"diagnostic\": string().optional(),\n\t\t\t\t\"incompatible\": array(object({\n\t\t\t\t\t\"name\": string(),\n\t\t\t\t\t\"version\": string(),\n\t\t\t\t\t\"runtimeVersion\": string(),\n\t\t\t\t\t\"peers\": record(string(), string())\n\t\t\t\t})).optional()\n\t\t\t}).optional(),\n\t\t\t\"warnings\": array(string()).optional(),\n\t\t\t\"packageResult\": object({\n\t\t\t\t\"exitCode\": number(),\n\t\t\t\t\"output\": string(),\n\t\t\t\t\"truncated\": boolean(),\n\t\t\t\t\"logPath\": string(),\n\t\t\t\t\"kind\": union([\n\t\t\t\t\tliteral(\"network\"),\n\t\t\t\t\tliteral(\"unknown\"),\n\t\t\t\t\tliteral(\"timeout\"),\n\t\t\t\t\tliteral(\"integrity\"),\n\t\t\t\t\tliteral(\"pnpm-missing\"),\n\t\t\t\t\tliteral(\"not-found\"),\n\t\t\t\t\tliteral(\"no-matching-version\"),\n\t\t\t\t\tliteral(\"disk-full\"),\n\t\t\t\t\tliteral(\"permission\"),\n\t\t\t\t\tliteral(\"build-blocked\")\n\t\t\t\t]).optional(),\n\t\t\t\t\"timedOut\": boolean().optional(),\n\t\t\t\t\"incompatible\": array(object({\n\t\t\t\t\t\"name\": string(),\n\t\t\t\t\t\"version\": string(),\n\t\t\t\t\t\"runtimeVersion\": string(),\n\t\t\t\t\t\"peers\": record(string(), string())\n\t\t\t\t})).optional()\n\t\t\t}).optional(),\n\t\t\t\"bundle\": string().optional(),\n\t\t\t\"pendingBuilds\": array(string()).optional(),\n\t\t\t\"approvedBuilds\": array(string()).optional(),\n\t\t\t\"registries\": array(union([literal(null), string()])).optional(),\n\t\t\t\"failedAt\": union([literal(\"registry\"), literal(\"spec-host\")]).optional()\n\t\t})])",
+  "anyOf": [
+    {
+      "const": null
+    },
+    {
+      "type": "object",
+      "properties": {
+        "changed": {
+          "type": "boolean"
+        },
+        "application": {
+          "anyOf": [
+            {
+              "const": "cancelled"
+            },
+            {
+              "const": "failed"
+            },
+            {
+              "const": "applied"
+            },
+            {
+              "const": "restart-required"
+            },
+            {
+              "const": "overridden"
+            }
+          ]
+        },
+        "stage": {
+          "anyOf": [
+            {
+              "const": "remove"
+            },
+            {
+              "const": "install"
+            },
+            {
+              "const": "enable"
+            }
+          ]
+        },
+        "target": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "error": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "anyOf": [
+                {
+                  "const": "management-required"
+                },
+                {
+                  "const": "unaddressable"
+                },
+                {
+                  "const": "unknown-plugin"
+                },
+                {
+                  "const": "invalid-spec"
+                },
+                {
+                  "const": "ambiguous-install"
+                },
+                {
+                  "const": "not-bundle"
+                },
+                {
+                  "const": "not-removable"
+                },
+                {
+                  "const": "stop-profile"
+                },
+                {
+                  "const": "bundle-in-use"
+                },
+                {
+                  "const": "stale-approval"
+                },
+                {
+                  "const": "incompatible-version"
+                },
+                {
+                  "const": "operation-error"
+                }
+              ]
+            },
+            "diagnostic": {
+              "type": "string"
+            },
+            "incompatible": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "version": {
+                    "type": "string"
+                  },
+                  "runtimeVersion": {
+                    "type": "string"
+                  },
+                  "peers": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "name",
+                  "version",
+                  "runtimeVersion",
+                  "peers"
+                ]
+              }
+            }
+          },
+          "required": [
+            "code"
+          ]
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "packageResult": {
+          "type": "object",
+          "properties": {
+            "exitCode": {
+              "type": "number"
+            },
+            "output": {
+              "type": "string"
+            },
+            "truncated": {
+              "type": "boolean"
+            },
+            "logPath": {
+              "type": "string"
+            },
+            "kind": {
+              "anyOf": [
+                {
+                  "const": "network"
+                },
+                {
+                  "const": "unknown"
+                },
+                {
+                  "const": "timeout"
+                },
+                {
+                  "const": "integrity"
+                },
+                {
+                  "const": "pnpm-missing"
+                },
+                {
+                  "const": "not-found"
+                },
+                {
+                  "const": "no-matching-version"
+                },
+                {
+                  "const": "disk-full"
+                },
+                {
+                  "const": "permission"
+                },
+                {
+                  "const": "build-blocked"
+                }
+              ]
+            },
+            "timedOut": {
+              "type": "boolean"
+            },
+            "incompatible": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "version": {
+                    "type": "string"
+                  },
+                  "runtimeVersion": {
+                    "type": "string"
+                  },
+                  "peers": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "name",
+                  "version",
+                  "runtimeVersion",
+                  "peers"
+                ]
+              }
+            }
+          },
+          "required": [
+            "exitCode",
+            "output",
+            "truncated",
+            "logPath"
+          ]
+        },
+        "bundle": {
+          "type": "string"
+        },
+        "pendingBuilds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "approvedBuilds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "registries": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "const": null
+              },
+              {
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "failedAt": {
+          "anyOf": [
+            {
+              "const": "registry"
+            },
+            {
+              "const": "spec-host"
+            }
+          ]
+        }
+      },
+      "required": [
+        "changed",
+        "application",
+        "stage",
+        "target"
+      ]
+    }
+  ]
+}

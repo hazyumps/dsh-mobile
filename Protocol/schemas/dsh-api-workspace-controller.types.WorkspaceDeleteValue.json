@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-workspace-controller.types.WorkspaceDeleteValue",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-workspace-controller/types#WorkspaceDeleteValue",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_workspace_controller_workspace_delete_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_workspace_controller_workspace_delete_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-workspace-controller#workspace/delete :: result"
+  ],
+  "x-dsh-rawExpression": "object({ \"deleted\": literal(true).readonly() })",
+  "type": "object",
+  "properties": {
+    "deleted": {
+      "const": true
+    }
+  },
+  "required": [
+    "deleted"
+  ]
+}

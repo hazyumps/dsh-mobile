@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-session-controller.types.SessionSelectModelValue",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-session-controller/types#SessionSelectModelValue",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_session_controller_session_selectModel_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_session_controller_session_selectModel_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-session-controller#session/selectModel :: result"
+  ],
+  "x-dsh-rawExpression": "object({ \"selected\": object({\n\t\t\t\"provider\": string().readonly(),\n\t\t\t\"model\": string().readonly(),\n\t\t\t\"reasoningEffort\": string().readonly().optional()\n\t\t}).readonly() })",
+  "type": "object",
+  "properties": {
+    "selected": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "reasoningEffort": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "model"
+      ]
+    }
+  },
+  "required": [
+    "selected"
+  ]
+}

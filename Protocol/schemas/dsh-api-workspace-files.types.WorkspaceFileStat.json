@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-workspace-files.types.WorkspaceFileStat",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-workspace-files/types#WorkspaceFileStat",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_workspace_files_workspaceFiles_stat_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_workspace_files_workspaceFiles_stat_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-workspace-files#workspaceFiles/stat :: result"
+  ],
+  "x-dsh-rawExpression": "object({\n\t\t\t\"absolutePath\": string().readonly(),\n\t\t\t\"version\": string().readonly(),\n\t\t\t\"bytes\": number().readonly().optional()\n\t\t})",
+  "type": "object",
+  "properties": {
+    "absolutePath": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    },
+    "bytes": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "absolutePath",
+    "version"
+  ]
+}

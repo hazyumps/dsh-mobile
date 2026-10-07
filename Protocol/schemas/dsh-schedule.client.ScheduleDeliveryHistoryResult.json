@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-schedule.client.ScheduleDeliveryHistoryResult",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-schedule/client#ScheduleDeliveryHistoryResult",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_schedule_schedule_history_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_schedule_schedule_history_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-schedule#schedule/history :: result"
+  ],
+  "x-dsh-rawExpression": "union([object({\n\t\t\t\"id\": intersection(string(), unknown()).readonly(),\n\t\t\t\"records\": array(object({\n\t\t\t\t\"prompt\": string().readonly().optional(),\n\t\t\t\t\"scheduledAt\": string().readonly(),\n\t\t\t\t\"deliveredAt\": string().readonly(),\n\t\t\t\t\"messageId\": intersection(string(), unknown()).readonly()\n\t\t\t})).readonly(),\n\t\t\t\"earlierRecordsUnavailable\": boolean().readonly(),\n\t\t\t\"earlierRecordsPruned\": boolean().readonly(),\n\t\t\t\"retention\": object({\n\t\t\t\t\"days\": number().readonly(),\n\t\t\t\t\"records\": number().readonly()\n\t\t\t}).readonly(),\n\t\t\t\"nextBefore\": intersection(string(), unknown()).readonly().optional()\n\t\t}), object({\n\t\t\t\"id\": intersection(string(), unknown()).readonly(),\n\t\t\t\"code\": union([literal(\"schedule_not_found\"), literal(\"delivery_cursor_not_found\")]).readonly()\n\t\t})])",
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "records": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "prompt": {
+                "type": "string"
+              },
+              "scheduledAt": {
+                "type": "string"
+              },
+              "deliveredAt": {
+                "type": "string"
+              },
+              "messageId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "scheduledAt",
+              "deliveredAt",
+              "messageId"
+            ]
+          }
+        },
+        "earlierRecordsUnavailable": {
+          "type": "boolean"
+        },
+        "earlierRecordsPruned": {
+          "type": "boolean"
+        },
+        "retention": {
+          "type": "object",
+          "properties": {
+            "days": {
+              "type": "number"
+            },
+            "records": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "days",
+            "records"
+          ]
+        },
+        "nextBefore": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "records",
+        "earlierRecordsUnavailable",
+        "earlierRecordsPruned",
+        "retention"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "code": {
+          "anyOf": [
+            {
+              "const": "schedule_not_found"
+            },
+            {
+              "const": "delivery_cursor_not_found"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "code"
+      ]
+    }
+  ]
+}

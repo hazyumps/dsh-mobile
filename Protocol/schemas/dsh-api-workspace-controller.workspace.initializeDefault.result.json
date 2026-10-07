@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-workspace-controller.workspace.initializeDefault.result",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-workspace-controller#workspace/initializeDefault:result",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_workspace_controller_workspace_initializeDefault_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_workspace_controller_workspace_initializeDefault_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-workspace-controller#workspace/initializeDefault :: result"
+  ],
+  "x-dsh-rawExpression": "union([_undefined(), object({ \"workspace\": object({\n\t\t\t\"workspaceId\": intersection(string(), unknown()).readonly(),\n\t\t\t\"path\": string().readonly(),\n\t\t\t\"title\": string().readonly(),\n\t\t\t\"sessionIds\": array(intersection(string(), unknown())).readonly(),\n\t\t\t\"createdAt\": string().readonly(),\n\t\t\t\"updatedAt\": string().readonly()\n\t\t}).readonly() })])",
+  "x-dsh-mayBeAbsent": true,
+  "type": "object",
+  "properties": {
+    "workspace": {
+      "type": "object",
+      "properties": {
+        "workspaceId": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "sessionIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspaceId",
+        "path",
+        "title",
+        "sessionIds",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "required": [
+    "workspace"
+  ]
+}

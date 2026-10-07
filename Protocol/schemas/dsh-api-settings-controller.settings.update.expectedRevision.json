@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-settings-controller.settings.update.expectedRevision",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-settings-controller#settings/update:expectedRevision",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_settings_controller_settings_update_parameter_2$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_settings_controller_settings_update_parameter_2$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-settings-controller#settings/update :: parameter:expectedRevision"
+  ],
+  "x-dsh-rawExpression": "union([_undefined(), number()])",
+  "x-dsh-mayBeAbsent": true,
+  "type": "number"
+}

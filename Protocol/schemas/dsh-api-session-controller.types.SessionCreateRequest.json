@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-session-controller.types.SessionCreateRequest",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-session-controller/types#SessionCreateRequest",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_session_controller_session_create_parameter_0$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_session_controller_session_create_parameter_0$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-session-controller#session/create :: parameter:request"
+  ],
+  "x-dsh-rawExpression": "object({\n\t\t\t\"workspaceId\": intersection(string(), unknown()).readonly().optional(),\n\t\t\t\"cwd\": string().readonly().optional(),\n\t\t\t\"sessionId\": intersection(string(), unknown()).readonly().optional(),\n\t\t\t\"agentPreset\": string().readonly().optional()\n\t\t})",
+  "type": "object",
+  "properties": {
+    "workspaceId": {
+      "type": "string"
+    },
+    "cwd": {
+      "type": "string"
+    },
+    "sessionId": {
+      "type": "string"
+    },
+    "agentPreset": {
+      "type": "string"
+    }
+  },
+  "required": []
+}

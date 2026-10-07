@@ -1,0 +1,224 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-schedule.schedule.list.result",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-schedule#schedule/list:result",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_schedule_schedule_list_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_schedule_schedule_list_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-schedule#schedule/list :: result"
+  ],
+  "x-dsh-rawExpression": "array(union([\n\t\t\tobject({\n\t\t\t\t\"id\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\"kind\": literal(\"after\").readonly(),\n\t\t\t\t\"title\": string().readonly(),\n\t\t\t\t\"prompt\": string().readonly(),\n\t\t\t\t\"afterSeconds\": number().readonly(),\n\t\t\t\t\"scheduledAt\": string().readonly()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"id\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\"kind\": literal(\"at\").readonly(),\n\t\t\t\t\"title\": string().readonly(),\n\t\t\t\t\"prompt\": string().readonly(),\n\t\t\t\t\"scheduledAt\": string().readonly()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"id\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\"kind\": literal(\"every\").readonly(),\n\t\t\t\t\"title\": string().readonly(),\n\t\t\t\t\"prompt\": string().readonly(),\n\t\t\t\t\"everySeconds\": number().readonly(),\n\t\t\t\t\"scheduledAt\": string().readonly()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"id\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\"kind\": literal(\"daily\").readonly(),\n\t\t\t\t\"title\": string().readonly(),\n\t\t\t\t\"prompt\": string().readonly(),\n\t\t\t\t\"time\": string().readonly(),\n\t\t\t\t\"timeZone\": string().readonly(),\n\t\t\t\t\"scheduledAt\": string().readonly()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"id\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\"kind\": literal(\"weekly\").readonly(),\n\t\t\t\t\"title\": string().readonly(),\n\t\t\t\t\"prompt\": string().readonly(),\n\t\t\t\t\"time\": string().readonly(),\n\t\t\t\t\"timeZone\": string().readonly(),\n\t\t\t\t\"weekdays\": array(number()).readonly(),\n\t\t\t\t\"scheduledAt\": string().readonly()\n\t\t\t}),\n\t\t\tobject({\n\t\t\t\t\"id\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\"kind\": literal(\"cron\").readonly(),\n\t\t\t\t\"title\": string().readonly(),\n\t\t\t\t\"prompt\": string().readonly(),\n\t\t\t\t\"expression\": string().readonly(),\n\t\t\t\t\"timeZone\": string().readonly(),\n\t\t\t\t\"scheduledAt\": string().readonly()\n\t\t\t})\n\t\t]))",
+  "type": "array",
+  "items": {
+    "anyOf": [
+      {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "const": "after"
+          },
+          "title": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "afterSeconds": {
+            "type": "number"
+          },
+          "scheduledAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "prompt",
+          "afterSeconds",
+          "scheduledAt"
+        ]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "const": "at"
+          },
+          "title": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "scheduledAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "prompt",
+          "scheduledAt"
+        ]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "const": "every"
+          },
+          "title": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "everySeconds": {
+            "type": "number"
+          },
+          "scheduledAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "prompt",
+          "everySeconds",
+          "scheduledAt"
+        ]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "const": "daily"
+          },
+          "title": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "time": {
+            "type": "string"
+          },
+          "timeZone": {
+            "type": "string"
+          },
+          "scheduledAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "prompt",
+          "time",
+          "timeZone",
+          "scheduledAt"
+        ]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "const": "weekly"
+          },
+          "title": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "time": {
+            "type": "string"
+          },
+          "timeZone": {
+            "type": "string"
+          },
+          "weekdays": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "scheduledAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "prompt",
+          "time",
+          "timeZone",
+          "weekdays",
+          "scheduledAt"
+        ]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "const": "cron"
+          },
+          "title": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "expression": {
+            "type": "string"
+          },
+          "timeZone": {
+            "type": "string"
+          },
+          "scheduledAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "prompt",
+          "expression",
+          "timeZone",
+          "scheduledAt"
+        ]
+      }
+    ]
+  }
+}

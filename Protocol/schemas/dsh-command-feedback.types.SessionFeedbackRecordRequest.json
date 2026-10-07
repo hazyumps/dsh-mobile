@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-command-feedback.types.SessionFeedbackRecordRequest",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-command-feedback/types#SessionFeedbackRecordRequest",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_command_feedback_sessionFeedback_record_parameter_0$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_command_feedback_sessionFeedback_record_parameter_0$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-command-feedback#sessionFeedback/record :: parameter:request"
+  ],
+  "x-dsh-rawExpression": "object({\n\t\t\t\"sessionId\": intersection(string(), unknown()).readonly(),\n\t\t\t\"text\": string().readonly().optional(),\n\t\t\t\"category\": union([\n\t\t\t\tliteral(\"other\"),\n\t\t\t\tliteral(\"task-result\"),\n\t\t\t\tliteral(\"instruction-following\"),\n\t\t\t\tliteral(\"product-interaction\"),\n\t\t\t\tliteral(\"service-stability\"),\n\t\t\t\tliteral(\"resource-cost\"),\n\t\t\t\tliteral(\"security-privacy-permission\")\n\t\t\t]).readonly().optional()\n\t\t})",
+  "type": "object",
+  "properties": {
+    "sessionId": {
+      "type": "string"
+    },
+    "text": {
+      "type": "string"
+    },
+    "category": {
+      "anyOf": [
+        {
+          "const": "other"
+        },
+        {
+          "const": "task-result"
+        },
+        {
+          "const": "instruction-following"
+        },
+        {
+          "const": "product-interaction"
+        },
+        {
+          "const": "service-stability"
+        },
+        {
+          "const": "resource-cost"
+        },
+        {
+          "const": "security-privacy-permission"
+        }
+      ]
+    }
+  },
+  "required": [
+    "sessionId"
+  ]
+}

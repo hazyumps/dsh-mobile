@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-session-controller.types.SessionAttachmentValue",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-session-controller/types#SessionAttachmentValue",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_session_controller_session_attachment_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_session_controller_session_attachment_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-session-controller#session/attachment :: result"
+  ],
+  "x-dsh-rawExpression": "object({\n\t\t\t\"attachment\": object({\n\t\t\t\t\"attachmentId\": intersection(string(), unknown()),\n\t\t\t\t\"mediaType\": union([\n\t\t\t\t\tliteral(\"image/png\"),\n\t\t\t\t\tliteral(\"image/jpeg\"),\n\t\t\t\t\tliteral(\"image/webp\"),\n\t\t\t\t\tliteral(\"image/gif\")\n\t\t\t\t]),\n\t\t\t\t\"bytes\": number(),\n\t\t\t\t\"width\": number(),\n\t\t\t\t\"height\": number(),\n\t\t\t\t\"name\": string().optional(),\n\t\t\t\t\"originalDimensions\": object({\n\t\t\t\t\t\"width\": number(),\n\t\t\t\t\t\"height\": number()\n\t\t\t\t}).optional()\n\t\t\t}).readonly(),\n\t\t\t\"data\": string().readonly()\n\t\t})",
+  "type": "object",
+  "properties": {
+    "attachment": {
+      "type": "object",
+      "properties": {
+        "attachmentId": {
+          "type": "string"
+        },
+        "mediaType": {
+          "anyOf": [
+            {
+              "const": "image/png"
+            },
+            {
+              "const": "image/jpeg"
+            },
+            {
+              "const": "image/webp"
+            },
+            {
+              "const": "image/gif"
+            }
+          ]
+        },
+        "bytes": {
+          "type": "number"
+        },
+        "width": {
+          "type": "number"
+        },
+        "height": {
+          "type": "number"
+        },
+        "name": {
+          "type": "string"
+        },
+        "originalDimensions": {
+          "type": "object",
+          "properties": {
+            "width": {
+              "type": "number"
+            },
+            "height": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "width",
+            "height"
+          ]
+        }
+      },
+      "required": [
+        "attachmentId",
+        "mediaType",
+        "bytes",
+        "width",
+        "height"
+      ]
+    },
+    "data": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "attachment",
+    "data"
+  ]
+}

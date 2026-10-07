@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-session-controller.types.ModelCatalog",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-session-controller/types#ModelCatalog",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_session_controller_session_modelCatalog_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_session_controller_session_modelCatalog_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-session-controller#session/modelCatalog :: result"
+  ],
+  "x-dsh-rawExpression": "object({\n\t\t\t\"default\": object({\n\t\t\t\t\"provider\": string().readonly(),\n\t\t\t\t\"model\": string().readonly(),\n\t\t\t\t\"reasoningEffort\": string().readonly().optional()\n\t\t\t}).readonly(),\n\t\t\t\"routableProviders\": array(string()).readonly(),\n\t\t\t\"groups\": array(object({\n\t\t\t\t\"id\": string().readonly(),\n\t\t\t\t\"name\": string().readonly(),\n\t\t\t\t\"models\": array(object({\n\t\t\t\t\t\"id\": string().readonly(),\n\t\t\t\t\t\"name\": string().readonly(),\n\t\t\t\t\t\"description\": string().readonly().optional(),\n\t\t\t\t\t\"reasoning\": object({\n\t\t\t\t\t\t\"efforts\": array(object({\n\t\t\t\t\t\t\t\"id\": string().readonly(),\n\t\t\t\t\t\t\t\"name\": string().readonly(),\n\t\t\t\t\t\t\t\"description\": string().readonly().optional()\n\t\t\t\t\t\t})).readonly(),\n\t\t\t\t\t\t\"defaultEffort\": string().readonly().optional()\n\t\t\t\t\t}).readonly().optional()\n\t\t\t\t})).readonly()\n\t\t\t})).readonly(),\n\t\t\t\"failures\": array(object({\n\t\t\t\t\"id\": string().readonly(),\n\t\t\t\t\"name\": string().readonly(),\n\t\t\t\t\"message\": string().readonly()\n\t\t\t})).readonly()\n\t\t})",
+  "type": "object",
+  "properties": {
+    "default": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "reasoningEffort": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "model"
+      ]
+    },
+    "routableProviders": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "groups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "reasoning": {
+                  "type": "object",
+                  "properties": {
+                    "efforts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ]
+                      }
+                    },
+                    "defaultEffort": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "efforts"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "name"
+              ]
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "models"
+        ]
+      }
+    },
+    "failures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "message"
+        ]
+      }
+    }
+  },
+  "required": [
+    "default",
+    "routableProviders",
+    "groups",
+    "failures"
+  ]
+}

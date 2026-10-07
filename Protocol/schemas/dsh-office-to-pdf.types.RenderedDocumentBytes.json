@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-office-to-pdf.types.RenderedDocumentBytes",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-office-to-pdf/types#RenderedDocumentBytes",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_office_to_pdf_officeToPdf_render_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_office_to_pdf_officeToPdf_render_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-office-to-pdf#officeToPdf/render :: result"
+  ],
+  "x-dsh-rawExpression": "object({\n\t\t\t\"missingFonts\": array(string()).readonly(),\n\t\t\t\"generation\": intersection(string(), unknown()).readonly(),\n\t\t\t\"offset\": number().readonly(),\n\t\t\t\"data\": _instanceof(Uint8Array),\n\t\t\t\"eof\": boolean().readonly(),\n\t\t\t\"absolutePath\": string().readonly(),\n\t\t\t\"version\": string().readonly(),\n\t\t\t\"bytes\": number().readonly().optional()\n\t\t})",
+  "type": "object",
+  "properties": {
+    "missingFonts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "generation": {
+      "type": "string"
+    },
+    "offset": {
+      "type": "number"
+    },
+    "data": {
+      "type": "null"
+    },
+    "eof": {
+      "type": "boolean"
+    },
+    "absolutePath": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    },
+    "bytes": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "missingFonts",
+    "generation",
+    "offset",
+    "data",
+    "eof",
+    "absolutePath",
+    "version"
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-session-controller.types.SessionOpenWorkspacePathRequest",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-session-controller/types#SessionOpenWorkspacePathRequest",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_session_controller_session_openWorkspacePath_parameter_0$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_session_controller_session_openWorkspacePath_parameter_0$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-session-controller#session/openWorkspacePath :: parameter:request"
+  ],
+  "x-dsh-rawExpression": "object({\n\t\t\t\"action\": literal(\"reveal\").readonly().optional(),\n\t\t\t\"application\": string().readonly().optional(),\n\t\t\t\"path\": string().readonly()\n\t\t})",
+  "type": "object",
+  "properties": {
+    "action": {
+      "const": "reveal"
+    },
+    "application": {
+      "type": "string"
+    },
+    "path": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "path"
+  ]
+}

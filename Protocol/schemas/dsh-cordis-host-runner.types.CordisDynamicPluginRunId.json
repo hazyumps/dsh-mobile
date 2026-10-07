@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-cordis-host-runner.types.CordisDynamicPluginRunId",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-cordis-host-runner/types#CordisDynamicPluginRunId",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_cordis_host_runner_dynamicCordisRunner_getClientCode_parameter_2$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_cordis_host_runner_dynamicCordisRunner_getClientCode_parameter_2$schema",
+      "_deepseek_ai_dsh_cordis_host_runner_dynamicCordisRunner_invoke_parameter_1$schema",
+      "_deepseek_ai_dsh_cordis_host_runner_dynamicCordisRunner_reportClientGuardFailure_parameter_2$schema",
+      "_deepseek_ai_dsh_cordis_host_runner_dynamicCordisRunner_reportRenderFailure_parameter_2$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-cordis-host-runner#dynamicCordisRunner/getClientCode :: parameter:pluginRunId",
+    "@deepseek-ai/dsh-cordis-host-runner#dynamicCordisRunner/invoke :: parameter:pluginRunId",
+    "@deepseek-ai/dsh-cordis-host-runner#dynamicCordisRunner/reportClientGuardFailure :: parameter:pluginRunId",
+    "@deepseek-ai/dsh-cordis-host-runner#dynamicCordisRunner/reportRenderFailure :: parameter:pluginRunId"
+  ],
+  "x-dsh-rawExpression": "intersection(string(), unknown())",
+  "type": "string"
+}

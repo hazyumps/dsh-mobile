@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-llm.llm.discoverModels.result",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-llm#llm/discoverModels:result",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_llm_llm_discoverModels_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_llm_llm_discoverModels_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-llm#llm/discoverModels :: result"
+  ],
+  "x-dsh-rawExpression": "array(object({\n\t\t\t\"id\": string(),\n\t\t\t\"name\": string().optional(),\n\t\t\t\"contextWindow\": number().optional(),\n\t\t\t\"maxTokens\": number().optional(),\n\t\t\t\"inputModalities\": array(union([literal(\"text\"), literal(\"image\")])).optional()\n\t\t}))",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "name": {
+        "type": "string"
+      },
+      "contextWindow": {
+        "type": "number"
+      },
+      "maxTokens": {
+        "type": "number"
+      },
+      "inputModalities": {
+        "type": "array",
+        "items": {
+          "anyOf": [
+            {
+              "const": "text"
+            },
+            {
+              "const": "image"
+            }
+          ]
+        }
+      }
+    },
+    "required": [
+      "id"
+    ]
+  }
+}

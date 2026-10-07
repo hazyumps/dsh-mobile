@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-client-ui-plugin-manager.pluginRegistryProbe.fastest.result",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-client-ui-plugin-manager#pluginRegistryProbe/fastest:result",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_client_ui_plugin_manager_pluginRegistryProbe_fastest_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_client_ui_plugin_manager_pluginRegistryProbe_fastest_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-client-ui-plugin-manager#pluginRegistryProbe/fastest :: result"
+  ],
+  "x-dsh-rawExpression": "union([literal(null), string()])",
+  "anyOf": [
+    {
+      "const": null
+    },
+    {
+      "type": "string"
+    }
+  ]
+}

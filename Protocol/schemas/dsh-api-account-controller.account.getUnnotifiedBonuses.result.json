@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-account-controller.account.getUnnotifiedBonuses.result",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-account-controller#account/getUnnotifiedBonuses:result",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_account_controller_account_getUnnotifiedBonuses_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_account_controller_account_getUnnotifiedBonuses_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-account-controller#account/getUnnotifiedBonuses :: result"
+  ],
+  "x-dsh-rawExpression": "union([literal(null), object({\n\t\t\t\"accountId\": intersection(string(), unknown()).readonly(),\n\t\t\t\"bonuses\": array(object({\n\t\t\t\t\"orderId\": intersection(string(), unknown()).readonly(),\n\t\t\t\t\"campaign\": string().readonly(),\n\t\t\t\t\"amount\": string().readonly(),\n\t\t\t\t\"currency\": union([literal(\"CNY\"), literal(\"USD\")]).readonly(),\n\t\t\t\t\"grantedAt\": string().readonly(),\n\t\t\t\t\"expiresAt\": string().readonly(),\n\t\t\t\t\"message\": string().readonly()\n\t\t\t})).readonly()\n\t\t})])",
+  "anyOf": [
+    {
+      "const": null
+    },
+    {
+      "type": "object",
+      "properties": {
+        "accountId": {
+          "type": "string"
+        },
+        "bonuses": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "orderId": {
+                "type": "string"
+              },
+              "campaign": {
+                "type": "string"
+              },
+              "amount": {
+                "type": "string"
+              },
+              "currency": {
+                "anyOf": [
+                  {
+                    "const": "CNY"
+                  },
+                  {
+                    "const": "USD"
+                  }
+                ]
+              },
+              "grantedAt": {
+                "type": "string"
+              },
+              "expiresAt": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "orderId",
+              "campaign",
+              "amount",
+              "currency",
+              "grantedAt",
+              "expiresAt",
+              "message"
+            ]
+          }
+        }
+      },
+      "required": [
+        "accountId",
+        "bonuses"
+      ]
+    }
+  ]
+}

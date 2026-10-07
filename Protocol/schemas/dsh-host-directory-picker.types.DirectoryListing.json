@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-host-directory-picker.types.DirectoryListing",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-host-directory-picker/types#DirectoryListing",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_workspace_controller_directoryPicker_list_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_workspace_controller_directoryPicker_list_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-workspace-controller#directoryPicker/list :: result"
+  ],
+  "x-dsh-rawExpression": "object({\n\t\t\t\"path\": string(),\n\t\t\t\"home\": string(),\n\t\t\t\"crumbs\": array(object({\n\t\t\t\t\"name\": string(),\n\t\t\t\t\"path\": string(),\n\t\t\t\t\"hidden\": boolean()\n\t\t\t})),\n\t\t\t\"entries\": array(object({\n\t\t\t\t\"name\": string(),\n\t\t\t\t\"path\": string(),\n\t\t\t\t\"hidden\": boolean()\n\t\t\t})),\n\t\t\t\"truncated\": boolean()\n\t\t})",
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string"
+    },
+    "home": {
+      "type": "string"
+    },
+    "crumbs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "hidden": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "path",
+          "hidden"
+        ]
+      }
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "hidden": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "path",
+          "hidden"
+        ]
+      }
+    },
+    "truncated": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "path",
+    "home",
+    "crumbs",
+    "entries",
+    "truncated"
+  ]
+}

@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-api-account-controller.account.getProfile.result",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-api-account-controller#account/getProfile:result",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_account_controller_account_getProfile_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_account_controller_account_getProfile_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-account-controller#account/getProfile :: result"
+  ],
+  "x-dsh-rawExpression": "union([\n\t\t\tliteral(null),\n\t\t\tobject({\n\t\t\t\t\"status\": literal(\"ready\").readonly(),\n\t\t\t\t\"value\": object({\n\t\t\t\t\t\"id\": union([literal(null), intersection(string(), unknown())]).readonly(),\n\t\t\t\t\t\"name\": union([literal(null), string()]).readonly(),\n\t\t\t\t\t\"contact\": union([literal(null), string()]).readonly(),\n\t\t\t\t\t\"avatarUrl\": union([literal(null), string()]).readonly().optional()\n\t\t\t\t}).readonly()\n\t\t\t}),\n\t\t\tobject({ \"status\": literal(\"failed\").readonly() })\n\t\t])",
+  "anyOf": [
+    {
+      "const": null
+    },
+    {
+      "type": "object",
+      "properties": {
+        "status": {
+          "const": "ready"
+        },
+        "value": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "anyOf": [
+                {
+                  "const": null
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "name": {
+              "anyOf": [
+                {
+                  "const": null
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "contact": {
+              "anyOf": [
+                {
+                  "const": null
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "avatarUrl": {
+              "anyOf": [
+                {
+                  "const": null
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "contact"
+          ]
+        }
+      },
+      "required": [
+        "status",
+        "value"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "status": {
+          "const": "failed"
+        }
+      },
+      "required": [
+        "status"
+      ]
+    }
+  ]
+}

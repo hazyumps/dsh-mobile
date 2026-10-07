@@ -1,0 +1,281 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-cordis-host-runner.dynamicCordisRunner.inventory.result",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-cordis-host-runner#dynamicCordisRunner/inventory:result",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_cordis_host_runner_dynamicCordisRunner_inventory_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_cordis_host_runner_dynamicCordisRunner_inventory_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-cordis-host-runner#dynamicCordisRunner/inventory :: result"
+  ],
+  "x-dsh-rawExpression": "array(object({\n\t\t\t\"pluginId\": intersection(string(), unknown()),\n\t\t\t\"agentId\": intersection(string(), unknown()),\n\t\t\t\"packages\": array(object({\n\t\t\t\t\"packageId\": intersection(string(), unknown()),\n\t\t\t\t\"name\": string(),\n\t\t\t\t\"purpose\": string(),\n\t\t\t\t\"hasHostHalf\": boolean(),\n\t\t\t\t\"hasClientHalf\": boolean()\n\t\t\t})),\n\t\t\t\"currentPackageId\": intersection(string(), unknown()).optional(),\n\t\t\t\"nextPackageId\": intersection(string(), unknown()).optional(),\n\t\t\t\"activeRun\": object({\n\t\t\t\t\"pluginRunId\": intersection(string(), unknown()),\n\t\t\t\t\"packageId\": intersection(string(), unknown())\n\t\t\t}).optional(),\n\t\t\t\"latestRun\": object({\n\t\t\t\t\"pluginRunId\": intersection(string(), unknown()),\n\t\t\t\t\"packageId\": intersection(string(), unknown()),\n\t\t\t\t\"mode\": union([literal(\"run\"), literal(\"update\")]),\n\t\t\t\t\"status\": union([\n\t\t\t\t\tliteral(\"cancelled\"),\n\t\t\t\t\tliteral(\"failed\"),\n\t\t\t\t\tliteral(\"running\"),\n\t\t\t\t\tliteral(\"rejected\"),\n\t\t\t\t\tliteral(\"awaiting-approval\"),\n\t\t\t\t\tliteral(\"starting-host\"),\n\t\t\t\t\tliteral(\"client-pending\"),\n\t\t\t\t\tliteral(\"waiting\"),\n\t\t\t\t\tliteral(\"stopped\")\n\t\t\t\t]),\n\t\t\t\t\"approvalRequestId\": intersection(string(), unknown()).optional(),\n\t\t\t\t\"requiresApproval\": boolean().optional(),\n\t\t\t\t\"host\": object({\n\t\t\t\t\t\"status\": union([\n\t\t\t\t\t\tliteral(\"failed\"),\n\t\t\t\t\t\tliteral(\"running\"),\n\t\t\t\t\t\tliteral(\"pending\"),\n\t\t\t\t\t\tliteral(\"waiting\"),\n\t\t\t\t\t\tliteral(\"stopped\"),\n\t\t\t\t\t\tliteral(\"absent\")\n\t\t\t\t\t]),\n\t\t\t\t\t\"waitingFor\": array(string()),\n\t\t\t\t\t\"error\": string().optional()\n\t\t\t\t}),\n\t\t\t\t\"client\": object({\n\t\t\t\t\t\"status\": union([\n\t\t\t\t\t\tliteral(\"failed\"),\n\t\t\t\t\t\tliteral(\"running\"),\n\t\t\t\t\t\tliteral(\"pending\"),\n\t\t\t\t\t\tliteral(\"waiting\"),\n\t\t\t\t\t\tliteral(\"stopped\"),\n\t\t\t\t\t\tliteral(\"absent\")\n\t\t\t\t\t]),\n\t\t\t\t\t\"waitingFor\": array(string()),\n\t\t\t\t\t\"error\": string().optional()\n\t\t\t\t}),\n\t\t\t\t\"error\": object({\n\t\t\t\t\t\"phase\": union([\n\t\t\t\t\t\tliteral(\"approval\"),\n\t\t\t\t\t\tliteral(\"host-load\"),\n\t\t\t\t\t\tliteral(\"host-apply\"),\n\t\t\t\t\t\tliteral(\"client-load\"),\n\t\t\t\t\t\tliteral(\"client-apply\"),\n\t\t\t\t\t\tliteral(\"client-render\")\n\t\t\t\t\t]),\n\t\t\t\t\t\"message\": string(),\n\t\t\t\t\t\"stack\": string().optional(),\n\t\t\t\t\t\"pluginId\": intersection(string(), unknown()),\n\t\t\t\t\t\"packageId\": intersection(string(), unknown()),\n\t\t\t\t\t\"pluginRunId\": intersection(string(), unknown())\n\t\t\t\t}).optional()\n\t\t\t}).optional()\n\t\t}))",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "pluginId": {
+        "type": "string"
+      },
+      "agentId": {
+        "type": "string"
+      },
+      "packages": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "packageId": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "purpose": {
+              "type": "string"
+            },
+            "hasHostHalf": {
+              "type": "boolean"
+            },
+            "hasClientHalf": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "packageId",
+            "name",
+            "purpose",
+            "hasHostHalf",
+            "hasClientHalf"
+          ]
+        }
+      },
+      "currentPackageId": {
+        "type": "string"
+      },
+      "nextPackageId": {
+        "type": "string"
+      },
+      "activeRun": {
+        "type": "object",
+        "properties": {
+          "pluginRunId": {
+            "type": "string"
+          },
+          "packageId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "pluginRunId",
+          "packageId"
+        ]
+      },
+      "latestRun": {
+        "type": "object",
+        "properties": {
+          "pluginRunId": {
+            "type": "string"
+          },
+          "packageId": {
+            "type": "string"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "const": "run"
+              },
+              {
+                "const": "update"
+              }
+            ]
+          },
+          "status": {
+            "anyOf": [
+              {
+                "const": "cancelled"
+              },
+              {
+                "const": "failed"
+              },
+              {
+                "const": "running"
+              },
+              {
+                "const": "rejected"
+              },
+              {
+                "const": "awaiting-approval"
+              },
+              {
+                "const": "starting-host"
+              },
+              {
+                "const": "client-pending"
+              },
+              {
+                "const": "waiting"
+              },
+              {
+                "const": "stopped"
+              }
+            ]
+          },
+          "approvalRequestId": {
+            "type": "string"
+          },
+          "requiresApproval": {
+            "type": "boolean"
+          },
+          "host": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "anyOf": [
+                  {
+                    "const": "failed"
+                  },
+                  {
+                    "const": "running"
+                  },
+                  {
+                    "const": "pending"
+                  },
+                  {
+                    "const": "waiting"
+                  },
+                  {
+                    "const": "stopped"
+                  },
+                  {
+                    "const": "absent"
+                  }
+                ]
+              },
+              "waitingFor": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "error": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "status",
+              "waitingFor"
+            ]
+          },
+          "client": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "anyOf": [
+                  {
+                    "const": "failed"
+                  },
+                  {
+                    "const": "running"
+                  },
+                  {
+                    "const": "pending"
+                  },
+                  {
+                    "const": "waiting"
+                  },
+                  {
+                    "const": "stopped"
+                  },
+                  {
+                    "const": "absent"
+                  }
+                ]
+              },
+              "waitingFor": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "error": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "status",
+              "waitingFor"
+            ]
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "phase": {
+                "anyOf": [
+                  {
+                    "const": "approval"
+                  },
+                  {
+                    "const": "host-load"
+                  },
+                  {
+                    "const": "host-apply"
+                  },
+                  {
+                    "const": "client-load"
+                  },
+                  {
+                    "const": "client-apply"
+                  },
+                  {
+                    "const": "client-render"
+                  }
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "stack": {
+                "type": "string"
+              },
+              "pluginId": {
+                "type": "string"
+              },
+              "packageId": {
+                "type": "string"
+              },
+              "pluginRunId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "phase",
+              "message",
+              "pluginId",
+              "packageId",
+              "pluginRunId"
+            ]
+          }
+        },
+        "required": [
+          "pluginRunId",
+          "packageId",
+          "mode",
+          "status",
+          "host",
+          "client"
+        ]
+      }
+    },
+    "required": [
+      "pluginId",
+      "agentId",
+      "packages"
+    ]
+  }
+}

@@ -1,0 +1,448 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-settings.types.SettingsNamespaceView",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-settings/types#SettingsNamespaceView",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_api_settings_controller_settings_mutate_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_api_settings_controller_settings_mutate_result$schema",
+      "_deepseek_ai_dsh_api_settings_controller_settings_replace_result$schema",
+      "_deepseek_ai_dsh_api_settings_controller_settings_update_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-api-settings-controller#settings/mutate :: result",
+    "@deepseek-ai/dsh-api-settings-controller#settings/replace :: result",
+    "@deepseek-ai/dsh-api-settings-controller#settings/update :: result"
+  ],
+  "x-dsh-rawExpression": "object({\n\t\t\t\"autoGenerate\": boolean(),\n\t\t\t\"ns\": string(),\n\t\t\t\"schema\": union([\n\t\t\t\tliteral(null),\n\t\t\t\tstring(),\n\t\t\t\tnumber(),\n\t\t\t\tliteral(false),\n\t\t\t\tliteral(true),\n\t\t\t\tarray(lazy(() => JsonValueRemoteCodec$schema6())),\n\t\t\t\trecord(string(), lazy(() => JsonValueRemoteCodec$schema6()))\n\t\t\t]),\n\t\t\t\"value\": union([\n\t\t\t\tliteral(null),\n\t\t\t\tstring(),\n\t\t\t\tnumber(),\n\t\t\t\tliteral(false),\n\t\t\t\tliteral(true),\n\t\t\t\tarray(lazy(() => JsonValueRemoteCodec$schema6())),\n\t\t\t\trecord(string(), lazy(() => JsonValueRemoteCodec$schema6()))\n\t\t\t]),\n\t\t\t\"base\": union([\n\t\t\t\tliteral(null),\n\t\t\t\tstring(),\n\t\t\t\tnumber(),\n\t\t\t\tliteral(false),\n\t\t\t\tliteral(true),\n\t\t\t\tarray(lazy(() => JsonValueRemoteCodec$schema6())),\n\t\t\t\trecord(string(), lazy(() => JsonValueRemoteCodec$schema6()))\n\t\t\t]).optional(),\n\t\t\t\"user\": union([\n\t\t\t\tliteral(null),\n\t\t\t\tstring(),\n\t\t\t\tnumber(),\n\t\t\t\tliteral(false),\n\t\t\t\tliteral(true),\n\t\t\t\tarray(lazy(() => JsonValueRemoteCodec$schema6())),\n\t\t\t\trecord(string(), lazy(() => JsonValueRemoteCodec$schema6()))\n\t\t\t]).optional(),\n\t\t\t\"applies\": literal(\"live\"),\n\t\t\t\"secrets\": array(object({\n\t\t\t\t\"path\": array(string()),\n\t\t\t\t\"set\": boolean()\n\t\t\t})),\n\t\t\t\"revision\": number()\n\t\t})",
+  "type": "object",
+  "properties": {
+    "autoGenerate": {
+      "type": "boolean"
+    },
+    "ns": {
+      "type": "string"
+    },
+    "schema": {
+      "anyOf": [
+        {
+          "const": null
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "const": false
+        },
+        {
+          "const": true
+        },
+        {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "const": null
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "const": false
+              },
+              {
+                "const": true
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/JsonValueRemoteCodec$schema6"
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/$defs/JsonValueRemoteCodec$schema6"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "const": null
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "const": false
+              },
+              {
+                "const": true
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/JsonValueRemoteCodec$schema6"
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/$defs/JsonValueRemoteCodec$schema6"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "value": {
+      "anyOf": [
+        {
+          "const": null
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "const": false
+        },
+        {
+          "const": true
+        },
+        {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "const": null
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "const": false
+              },
+              {
+                "const": true
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/JsonValueRemoteCodec$schema6"
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/$defs/JsonValueRemoteCodec$schema6"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "const": null
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "const": false
+              },
+              {
+                "const": true
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/JsonValueRemoteCodec$schema6"
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/$defs/JsonValueRemoteCodec$schema6"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "base": {
+      "anyOf": [
+        {
+          "const": null
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "const": false
+        },
+        {
+          "const": true
+        },
+        {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "const": null
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "const": false
+              },
+              {
+                "const": true
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/JsonValueRemoteCodec$schema6"
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/$defs/JsonValueRemoteCodec$schema6"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "const": null
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "const": false
+              },
+              {
+                "const": true
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/JsonValueRemoteCodec$schema6"
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/$defs/JsonValueRemoteCodec$schema6"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "user": {
+      "anyOf": [
+        {
+          "const": null
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "const": false
+        },
+        {
+          "const": true
+        },
+        {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "const": null
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "const": false
+              },
+              {
+                "const": true
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/JsonValueRemoteCodec$schema6"
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/$defs/JsonValueRemoteCodec$schema6"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "const": null
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "const": false
+              },
+              {
+                "const": true
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/JsonValueRemoteCodec$schema6"
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/$defs/JsonValueRemoteCodec$schema6"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "applies": {
+      "const": "live"
+    },
+    "secrets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "set": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "path",
+          "set"
+        ]
+      }
+    },
+    "revision": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "autoGenerate",
+    "ns",
+    "schema",
+    "value",
+    "applies",
+    "secrets",
+    "revision"
+  ],
+  "$defs": {
+    "JsonValueRemoteCodec$schema6": {
+      "anyOf": [
+        {
+          "const": null
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "const": false
+        },
+        {
+          "const": true
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/JsonValueRemoteCodec$schema6"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValueRemoteCodec$schema6"
+          }
+        }
+      ]
+    }
+  }
+}

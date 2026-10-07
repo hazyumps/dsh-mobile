@@ -1,0 +1,307 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsh-plugin-manager.pluginManager.listBundles.result",
+  "x-dsh-typeSymbol": "@deepseek-ai/dsh-plugin-manager#pluginManager/listBundles:result",
+  "x-dsh-translatedFrom": "harness schema DSL (see Protocol/README.md)",
+  "x-dsh-definition": {
+    "symbol": "_deepseek_ai_dsh_plugin_manager_pluginManager_listBundles_result$schema",
+    "source": "/dsh/node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js",
+    "allSymbols": [
+      "_deepseek_ai_dsh_plugin_manager_pluginManager_listBundles_result$schema"
+    ],
+    "differingSymbols": []
+  },
+  "x-dsh-usedBy": [
+    "@deepseek-ai/dsh-plugin-manager#pluginManager/listBundles :: result"
+  ],
+  "x-dsh-rawExpression": "array(object({\n\t\t\t\"name\": string(),\n\t\t\t\"version\": string().optional(),\n\t\t\t\"meta\": object({\n\t\t\t\t\"title\": union([string(), intersection(object({ \"en\": string().readonly() }), record(string(), string()).readonly())]).readonly().optional(),\n\t\t\t\t\"description\": union([string(), intersection(object({ \"en\": string().readonly() }), record(string(), string()).readonly())]).readonly().optional(),\n\t\t\t\t\"icon\": string().readonly().optional(),\n\t\t\t\t\"error\": string().readonly().optional()\n\t\t\t}).optional(),\n\t\t\t\"description\": string().optional(),\n\t\t\t\"enabled\": boolean(),\n\t\t\t\"installed\": boolean(),\n\t\t\t\"optional\": boolean(),\n\t\t\t\"removable\": boolean(),\n\t\t\t\"readOnlyReason\": union([literal(\"management-required\"), literal(\"unaddressable\")]).optional(),\n\t\t\t\"error\": object({\n\t\t\t\t\"code\": union([\n\t\t\t\t\tliteral(\"management-required\"),\n\t\t\t\t\tliteral(\"unaddressable\"),\n\t\t\t\t\tliteral(\"unknown-plugin\"),\n\t\t\t\t\tliteral(\"invalid-spec\"),\n\t\t\t\t\tliteral(\"ambiguous-install\"),\n\t\t\t\t\tliteral(\"not-bundle\"),\n\t\t\t\t\tliteral(\"not-removable\"),\n\t\t\t\t\tliteral(\"stop-profile\"),\n\t\t\t\t\tliteral(\"bundle-in-use\"),\n\t\t\t\t\tliteral(\"stale-approval\"),\n\t\t\t\t\tliteral(\"incompatible-version\"),\n\t\t\t\t\tliteral(\"operation-error\")\n\t\t\t\t]),\n\t\t\t\t\"diagnostic\": string().optional(),\n\t\t\t\t\"incompatible\": array(object({\n\t\t\t\t\t\"name\": string(),\n\t\t\t\t\t\"version\": string(),\n\t\t\t\t\t\"runtimeVersion\": string(),\n\t\t\t\t\t\"peers\": record(string(), string())\n\t\t\t\t})).optional()\n\t\t\t}).optional(),\n\t\t\t\"rows\": array(object({\n\t\t\t\t\"rowId\": string(),\n\t\t\t\t\"moduleName\": string(),\n\t\t\t\t\"meta\": object({\n\t\t\t\t\t\"title\": union([string(), intersection(object({ \"en\": string().readonly() }), record(string(), string()).readonly())]).readonly().optional(),\n\t\t\t\t\t\"description\": union([string(), intersection(object({ \"en\": string().readonly() }), record(string(), string()).readonly())]).readonly().optional(),\n\t\t\t\t\t\"icon\": string().readonly().optional(),\n\t\t\t\t\t\"error\": string().readonly().optional()\n\t\t\t\t}).optional(),\n\t\t\t\t\"entryId\": intersection(string(), unknown()).optional()\n\t\t\t})),\n\t\t\t\"overrides\": array(string())\n\t\t}))",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string"
+      },
+      "version": {
+        "type": "string"
+      },
+      "meta": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "allOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "en": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "en"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "allOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "en": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "en"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "icon": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": []
+      },
+      "description": {
+        "type": "string"
+      },
+      "enabled": {
+        "type": "boolean"
+      },
+      "installed": {
+        "type": "boolean"
+      },
+      "optional": {
+        "type": "boolean"
+      },
+      "removable": {
+        "type": "boolean"
+      },
+      "readOnlyReason": {
+        "anyOf": [
+          {
+            "const": "management-required"
+          },
+          {
+            "const": "unaddressable"
+          }
+        ]
+      },
+      "error": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "const": "management-required"
+              },
+              {
+                "const": "unaddressable"
+              },
+              {
+                "const": "unknown-plugin"
+              },
+              {
+                "const": "invalid-spec"
+              },
+              {
+                "const": "ambiguous-install"
+              },
+              {
+                "const": "not-bundle"
+              },
+              {
+                "const": "not-removable"
+              },
+              {
+                "const": "stop-profile"
+              },
+              {
+                "const": "bundle-in-use"
+              },
+              {
+                "const": "stale-approval"
+              },
+              {
+                "const": "incompatible-version"
+              },
+              {
+                "const": "operation-error"
+              }
+            ]
+          },
+          "diagnostic": {
+            "type": "string"
+          },
+          "incompatible": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "version": {
+                  "type": "string"
+                },
+                "runtimeVersion": {
+                  "type": "string"
+                },
+                "peers": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "name",
+                "version",
+                "runtimeVersion",
+                "peers"
+              ]
+            }
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "rows": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "rowId": {
+              "type": "string"
+            },
+            "moduleName": {
+              "type": "string"
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "allOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "en": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "en"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "description": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "allOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "en": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "en"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "icon": {
+                  "type": "string"
+                },
+                "error": {
+                  "type": "string"
+                }
+              },
+              "required": []
+            },
+            "entryId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "rowId",
+            "moduleName"
+          ]
+        }
+      },
+      "overrides": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "required": [
+      "name",
+      "enabled",
+      "installed",
+      "optional",
+      "removable",
+      "rows",
+      "overrides"
+    ]
+  }
+}
