@@ -4,6 +4,7 @@ Status: proposed implementation contract; no application code exists yet.
 Date: 2026-10-07
 Working product name: DSH Remote
 Target: a personal-use native iPhone companion for DeepSeek Harness.
+Baseline: harness `0.2.0-rc.2` (installed). Relay target: `dsh-relay` v0.2.1 installed from source; not yet installed or paired as of 2026-10-07.
 
 ## 1. Outcome and scope
 
@@ -75,10 +76,10 @@ The first launch presents “Pair a harness” with Scan QR and Paste pairing da
 
 Pairing flow:
 
-1. Decode the QR/pasted JSON and require `kind = dsh-relay-pair`, supported `v = 1`, a valid HTTPS URL, an unexpired timestamp, and a nonempty code.
+1. Decode the QR/pasted JSON and require `kind = dsh-relay-pair`, supported `v = 1`, a valid HTTPS URL, an unexpired timestamp (epoch milliseconds), and a nonempty code. Ignore `plainUrl`; v1 requires the TLS origin.
 2. Display the destination hostname and optional local display name before claiming the pairing.
 3. If the payload supplies an SPKI fingerprint, use it as the trust anchor for the pairing connection and subsequent requests. Never learn a pin from an unverified network response.
-4. POST the claim to the payload URL's `/relay/pair`, without following redirects.
+4. POST the claim to the payload URL's `/relay/pair`, without following redirects. The code is single-use and expires after five minutes by default. A refusal is HTTP 403 carrying `{ "error": ..., "message": ... }`; show the message and offer a fresh code. Repeated failures lock the source address out, which is a rate limit rather than a wrong code, so do not present a lockout as a bad code.
 5. On success, store the credential in Keychain and nonsensitive host metadata locally. Do not persist the pairing code.
 6. Connect to the harness through the relay. Only mark the host connected after the stream readiness handshake completes.
 
@@ -211,9 +212,17 @@ Treat all host IDs as opaque strings. Decode unknown keys tolerantly. Preserve u
 
 ### 6.1 Authority and compatibility
 
-Initial target: harness `0.2.0-rc.1`, the Android project's documented baseline. Supporting Patrick's installed version is a release requirement. Record its exact version and verify schemas before implementing writes. Do not upgrade the host as part of app development without explicit approval.
+Initial target: harness `0.2.0-rc.2`, the version installed on Patrick's computer and the current npm `latest`. The Android project's documented baseline, `0.2.0-rc.1`, is one release candidate behind it and is not the target. Do not upgrade the host as part of app development without explicit approval.
 
-The Android documents are secondary references and contain some historical descriptions. Exact argument names and DTOs must be checked against the target harness source and real fixture captures. In particular, validate `session/prompt`, model selection, image submission, paging, and question schemas rather than inferring them from method names.
+Schema authority, in order:
+
+1. The installed harness's own source at `0.2.0-rc.2`. The checkout at `~/repo/deepseek-harness` is `0.1.0-rc.5` (2026-08-13) and predates the remote protocol: it contains `events.mux` and `events.host` and no `remote.mux`, so it cannot serve as the authority.
+2. Recorded fixture captures from that harness through the relay.
+3. The relay's documents and the Android project's documents, both secondary.
+
+The relay's [client integration contract](https://github.com/sorsama/deepseek-harness-relay/blob/v0.2.1/docs/CLIENT_INTEGRATION.md) is the closest authority for pairing, pinning, and authentication, and it confirms the payload, claim request, response fields, SPKI encoding, and 403-never-401 rule in §6.3. It is written against a pre-0.2 harness, so its stream and timeout sections are historical: it describes two concurrent upgrades on a shared 3000 ms budget where `0.2.0-rc.2` composes one `remote.mux` socket with logical streams. Verify both against the installed harness.
+
+Validate `remote.mux` open arguments, `session/prompt`, model selection, image submission, paging, and question schemas against the installed source rather than inferring them from method names.
 
 Implement one verified target version first. Hide optional features when capabilities are absent; do not promise compatibility with older harness versions until tested.
 
@@ -249,7 +258,7 @@ Pairing payload:
 }
 ```
 
-POST `/relay/pair` with `Content-Type: application/json` and `{ "code": "...", "name": "<device display name>" }`. The result supplies `deviceId`, `token`, `expiresAt`, and optional fingerprint. Verify the timestamp representation against the relay version before implementation.
+POST `/relay/pair` with `Content-Type: application/json` and `{ "code": "...", "name": "<device display name>" }`. The result supplies `deviceId`, `token`, `expiresAt`, and optional fingerprint; both timestamps are epoch milliseconds. Failure is HTTP 403 with `{ "error": "...", "message": "..." }`. The token does not expire on use and is the whole credential.
 
 The pin is SHA-256 over DER SubjectPublicKeyInfo, not a hash of the whole certificate or a platform-specific raw public key representation. Include known-vector tests and a real self-signed relay test on iPhone.
 
@@ -265,7 +274,7 @@ Cancel with `{ "type": "cancel", "streamId": "1" }`. Server frames are `item`, `
 
 The `$events` ready frame supplies the server `clientId`. The socket opening alone is not readiness. After ready, establish workspace/control baselines and follow the selected session.
 
-Connection time budgets: 10 seconds for initial socket establishment, then 10 seconds for ready. Reconnect with jittered exponential backoff starting at 0.5 seconds and capped at 10 seconds while foregrounded. Honor relay rate limiting. Stop retries for credential or pin failures and offer the relevant user action.
+Connection time budgets: 10 seconds for initial socket establishment, then 10 seconds for ready. The relay's contract describes a 3000 ms budget for two concurrent upgrades against a pre-0.2 harness; record the installed harness's actual budget in Stage 0 and correct this line to match observed behaviour. Reconnect with jittered exponential backoff starting at 0.5 seconds and capped at 10 seconds while foregrounded. Honor relay rate limiting. Stop retries for credential or pin failures and offer the relevant user action.
 
 The host heartbeat is protocol-level WebSocket ping/pong. Verify URLSession responds correctly against the target host; do not invent an application heartbeat to mask failure.
 
@@ -378,11 +387,11 @@ Use small sanitized fixtures derived from the upstream mock/capture tooling or t
 
 ## 9. Build sequence and estimates
 
-Estimates are cumulative elapsed working time for one experienced developer using AI assistance. They assume access to a working harness, relay, physical iPhone, and signing credentials. They exclude waiting for account setup and external review.
+Estimates are cumulative elapsed working time for one experienced developer using AI assistance. They assume access to the working harness and to a physical iPhone with signing credentials; Stage 0 stands up the relay. They exclude waiting for account setup and external review.
 
 | Stage | Deliverable | Estimate from start |
 |---|---|---|
-| 0 | Record actual host/relay versions; verify schemas and pinning; capture sanitized fixtures; create signed app shell | 1–2 days |
+| 0 | Stand up the relay; record the harness, relay, and device baseline; resolve schemas and pinning against the installed harness; capture sanitized fixtures; create the signed app shell | 2–3 days |
 | 1 | Pair, list sessions, open one conversation, send and stream a basic prompt | 2–4 days |
 | 2 | Approvals/questions, reconnect recovery, command routing, draft persistence, model picker | 5–8 days |
 | 3 | Photos/files, read-only details, accessibility pass, physical-device acceptance checks | 1–2 weeks, with 3 weeks reserved if protocol/lifecycle issues emerge |
@@ -391,20 +400,22 @@ Estimates are cumulative elapsed working time for one experienced developer usin
 
 ### Ordered implementation tasks
 
-1. Verify Xcode/signing/device access and record the actual harness and relay versions.
-2. Resolve the exact wire schemas against those versions and commit sanitized fixtures.
-3. Create the SwiftUI project, core models, Keychain wrapper, and draft persistence.
-4. Implement relay pairing and TLS validation; prove a self-signed pinned relay works on-device.
-5. Implement RPC envelopes, typed errors, multiplexed streams, and connection generation ownership.
-6. Build Hosts and Sessions screens with live baseline recovery.
-7. Implement durable history folding, paging, assistant streaming, and Chat rendering.
-8. Add prompt submission and uncertain-delivery reconciliation.
-9. Add approvals and questions, including two-client and reconnect races.
-10. Add command catalog routing and model selection.
-11. Add protected attachment staging, upload progress, limits, and session ownership.
-12. Add read-only session details and redacted diagnostics.
-13. Complete lifecycle, accessibility, and performance verification on the physical iPhone.
-14. Record supported versions, known limitations, and signing/install instructions; produce a signed build.
+1. Confirm the harness baseline: record the installed version and verify `remote.mux`, `session/follow`, and `uploadFileBinary` in the source for that version. The checkout at `~/repo/deepseek-harness` is superseded and cannot serve this. Deliverable: a written baseline naming the version and the source path inspected.
+2. Stand up the relay. It is a harness plugin, not a separate service, and it is a second listener rather than a relocation: the harness keeps its loopback bind and the relay fronts it on 3443. Install it into a profile — `desktop` preferred, so the phone sees the harness actually in use, with `web` as the fallback — from source rather than the registry. If that profile binds its webserver to `0.0.0.0` (the DSH Mobile LAN patch), remove that row first; the relay refuses to load in front of an already-open server. Deliverable: a relay listening on 3443, a password set, one paired device, and the harness still on loopback. See §12.
+3. Verify Xcode, signing, and physical-device access.
+4. Resolve the exact wire schemas against the installed harness, reconcile the connection budget, and commit sanitized fixtures.
+5. Create the SwiftUI project, core models, Keychain wrapper, and draft persistence.
+6. Implement relay pairing and TLS validation; prove a self-signed pinned relay works on-device.
+7. Implement RPC envelopes, typed errors, multiplexed streams, and connection generation ownership.
+8. Build Hosts and Sessions screens with live baseline recovery.
+9. Implement durable history folding, paging, assistant streaming, and Chat rendering.
+10. Add prompt submission and uncertain-delivery reconciliation.
+11. Add approvals and questions, including two-client and reconnect races.
+12. Add command catalog routing and model selection.
+13. Add protected attachment staging, upload progress, limits, and session ownership.
+14. Add read-only session details and redacted diagnostics.
+15. Complete lifecycle, accessibility, and performance verification on the physical iPhone.
+16. Record supported versions, known limitations, and signing/install instructions; produce a signed build.
 
 Each stage ends with a working app. Add focused tests around protocol/state boundaries and meaningful user behavior, not tests that mirror view implementation details.
 
@@ -453,16 +464,23 @@ Before calling the app usable, Patrick must be able to start work on the compute
 
 ## 12. References and evidence
 
-Inspected on 2026-10-07:
+Inspected on 2026-10-07 on Patrick's computer:
 
+- Installed harness `0.2.0-rc.2`, also npm `latest`. Its bundle contains `remote.mux`, `session/follow`, `uploadFileBinary`, `waterfall`, and `throughSeq`.
+- Local checkout `~/repo/deepseek-harness` at `0.1.0-rc.5` (2026-08-13): contains `events.mux` and `events.host`, no `remote.mux`. Superseded as an authority.
+- Relay not installed: no `dsh-relay` in `~/.dsh/profiles/desktop/package.json` or `~/.dsh/profiles/web/package.json`, no `~/.dsh/relay/`, no `dsh` on `PATH`.
+- Registry `dsh-relay@0.2.1`: `lib/index.js` is 121,168 bytes with no `client-connection` or `browser-session` strings. The 0.2.0 changelog states that code mints the harness browser session and that without it every proxied request is answered 401; the `v0.2.1` tag ships `src/harness-session.ts`, and no later version is published. Install from the tag, then confirm `client-connection` appears in the installed `lib/index.js`. Reproduced as sorsama/deepseek-harness-mobile#40.
+
+Reference documents:
+
+- Relay client integration contract: https://github.com/sorsama/deepseek-harness-relay/blob/v0.2.1/docs/CLIENT_INTEGRATION.md
+- Relay getting started: https://github.com/sorsama/deepseek-harness-relay/blob/main/docs/GETTING_STARTED.md
 - Android reference project: https://github.com/sorsama/deepseek-harness-mobile
 - Architecture: https://github.com/sorsama/deepseek-harness-mobile/blob/main/docs/ARCHITECTURE.md
 - Protocol: https://github.com/sorsama/deepseek-harness-mobile/blob/main/docs/PROTOCOL.md
-
-Implementation authorities to inspect during Stage 0:
-
 - Harness: https://github.com/deepseek-ai/deepseek-harness
 - Relay: https://github.com/sorsama/deepseek-harness-relay
-- Target harness API type definitions, gateway stream protocol, assistant stream types, and file-upload client.
 
-Evidence boundary: this specification is based on the reference project's published README, architecture, and protocol documentation. No connection to Patrick's actual harness, relay, or iPhone has been tested. Platform and scope choices above are proposed decisions for this implementation, not observed properties of an existing iOS app.
+Implementation authorities to inspect during Stage 0: the installed harness's API type definitions, gateway stream protocol, assistant stream types, and file-upload client at the pinned version.
+
+Evidence boundary: this specification is based on the reference projects' published documentation plus the version, bundle, and packaging observations recorded above. No connection to Patrick's harness, a relay, or an iPhone has been tested. Platform and scope choices remain proposed decisions for this implementation, not observed properties of an existing iOS app.
