@@ -4,7 +4,7 @@ Status: proposed implementation contract; no application code exists yet.
 Date: 2026-10-07
 Working product name: DSH Remote
 Target: a personal-use native iPhone companion for DeepSeek Harness.
-Baseline: harness `0.2.0-rc.2` (installed). Relay target: `dsh-relay` v0.2.1 installed from source; not yet installed or paired as of 2026-10-07.
+Baseline: harness `0.2.0-rc.2` (installed). Relay: `dsh-relay` v0.2.1 installed from source into the `desktop` profile on 2026-10-07; not yet restarted, credentialed, or paired.
 
 ## 1. Outcome and scope
 
@@ -398,10 +398,12 @@ Estimates are cumulative elapsed working time for one experienced developer usin
 | 4 | Push notification bridge, broader controls, polished TestFlight beta | 4–6 weeks |
 | 5 | Broad Android parity including terminal/previews and richer session management | 6–10+ weeks |
 
+Stage 0 status, 2026-10-07: the harness baseline is recorded. `dsh-relay` v0.2.1 is installed into the `desktop` profile from the `v0.2.1` tag and the installed build is verified (§12). Still open in Stage 0: restart the profile so the layer loads, set the relay password, and pair the first device — which needs a client, so it is the first thing Stage 1 depends on.
+
 ### Ordered implementation tasks
 
 1. Confirm the harness baseline: record the installed version and verify `remote.mux`, `session/follow`, and `uploadFileBinary` in the source for that version. The checkout at `~/repo/deepseek-harness` is superseded and cannot serve this. Deliverable: a written baseline naming the version and the source path inspected.
-2. Stand up the relay. It is a harness plugin, not a separate service, and it is a second listener rather than a relocation: the harness keeps its loopback bind and the relay fronts it on 3443. Install it into a profile — `desktop` preferred, so the phone sees the harness actually in use, with `web` as the fallback — from source rather than the registry. If that profile binds its webserver to `0.0.0.0` (the DSH Mobile LAN patch), remove that row first; the relay refuses to load in front of an already-open server. Deliverable: a relay listening on 3443, a password set, one paired device, and the harness still on loopback. See §12.
+2. Stand up the relay. It is a harness plugin, not a separate service, and it is a second listener rather than a relocation: the harness keeps its loopback bind and the relay fronts it on 3443. Install it into a profile — `desktop` preferred, so the phone sees the harness actually in use, with `web` as the fallback — from source rather than the registry. A git-hosted plugin's `prepare` build is refused until pnpm's exact spec is listed under `allowBuilds` in the profile's `pnpm-workspace.yaml`; back up that file, the profile manifest, and the lockfile first. If the profile binds its webserver to `0.0.0.0` (the DSH Mobile LAN patch), remove that row first; the relay refuses to load in front of an already-open server. Deliverable: a relay listening on 3443, a password set, one paired device, and the harness still on loopback. See §12.
 3. Verify Xcode, signing, and physical-device access.
 4. Resolve the exact wire schemas against the installed harness, reconcile the connection budget, and commit sanitized fixtures.
 5. Create the SwiftUI project, core models, Keychain wrapper, and draft persistence.
@@ -468,7 +470,8 @@ Inspected on 2026-10-07 on Patrick's computer:
 
 - Installed harness `0.2.0-rc.2`, also npm `latest`. Its bundle contains `remote.mux`, `session/follow`, `uploadFileBinary`, `waterfall`, and `throughSeq`.
 - Local checkout `~/repo/deepseek-harness` at `0.1.0-rc.5` (2026-08-13): contains `events.mux` and `events.host`, no `remote.mux`. Superseded as an authority.
-- Relay not installed: no `dsh-relay` in `~/.dsh/profiles/desktop/package.json` or `~/.dsh/profiles/web/package.json`, no `~/.dsh/relay/`, no `dsh` on `PATH`.
+- Relay installed 2026-10-07 into the `desktop` profile, from source rather than the registry: dependency `dsh-relay: github:sorsama/deepseek-harness-relay#v0.2.1` plus `dsh-relay` appended to that profile's bundles. The installed `lib/index.js` is 127,555 bytes containing `client-connection` and `browser-session` — the tag's build, which the registry tarball lacks. pnpm refused the git-hosted `prepare` build until the exact spec was listed under `allowBuilds` in `~/.dsh/profiles/desktop/pnpm-workspace.yaml`.
+- `dsh` is not on `PATH`; the app ships one at `/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh`, reporting `0.2.0-rc.2`, which is the version to use for profile operations.
 - Registry `dsh-relay@0.2.1`: `lib/index.js` is 121,168 bytes with no `client-connection` or `browser-session` strings. The 0.2.0 changelog states that code mints the harness browser session and that without it every proxied request is answered 401; the `v0.2.1` tag ships `src/harness-session.ts`, and no later version is published. Install from the tag, then confirm `client-connection` appears in the installed `lib/index.js`. Reproduced as sorsama/deepseek-harness-mobile#40.
 
 Reference documents:
