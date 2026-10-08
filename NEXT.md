@@ -1,5 +1,77 @@
 # What is left for v1
 
+## State: v1 works on the device (2026-10-08)
+
+**Patrick installed it on his iPhone and confirmed it works.** That is the
+objective met: pair, connect with TLS pinning and a bearer credential, browse
+sessions grouped by workspace, open a conversation, read it, send prompts, and
+answer questions.
+
+What that took, for the next person who has to do it again:
+
+```sh
+# in Apps/DSHRemote -- the team id lives in project.yml so a regenerate keeps it
+xcodegen generate
+xcodebuild -project DSHRemote.xcodeproj -scheme DSHRemote \
+  -destination "platform=iOS,name=Patrick's iPhone" -allowProvisioningUpdates build
+xcrun devicectl device install app --device 00008140-000C54512E46801C \
+  ~/Library/Developer/Xcode/DerivedData/DSHRemote-*/Build/Products/Debug-iphoneos/DSHRemote.app
+```
+
+Two manual steps that no command replaces: **Developer Mode** on the phone
+(Settings → Privacy & Security), and **trusting the developer profile**
+(Settings → General → VPN & Device Management → Apple Development: ph@dontbuck.com).
+`DEVELOPMENT_TEAM: "U6LC736TBG"` is committed; a stray line in `project.yml` once
+made XcodeGen fold it into a bogus value that read like an Apple ID fault.
+
+## Tomorrow: polish, and parity with the desktop app
+
+Patrick's words: *"we have a lot of polish to do… basically we want it to look as
+clean and function in parity to the dsh app for mac or something like the codex
+ios app but for this harness."*
+
+So the direction is a **clean, native-feeling iOS client at parity with the macOS
+app**, not a minimal remote. The §1 table lower down lists what is missing; the
+short version, in the order that seems to matter for parity:
+
+1. **Tool calls and results as expandable cards** — the desktop app shows what the
+   agent is doing; the phone currently does not. `tool/call` is already parsed for
+   questions, and `tool/result` is in the same stream.
+2. **Permission requests.** Needs the app to attach as the answerer: open
+   `userQuestions/attachWait` with `{agentId, callId}` — the same pair
+   `userQuestions/answer` already takes.
+3. **Model shown and selectable** — `session/modelCatalog`, `session/selectModel`.
+4. **History paging** — `session/page`.
+5. **Goal / plan / todo summaries** — `session/control` needs no arguments and
+   streams them (plus token and context usage, which is nearly free polish).
+6. **Attachments** — `session/attachment`.
+7. **Slash commands** — `commands/*`.
+8. **Drafts per host/session**, surviving navigation and relaunch.
+9. **VoiceOver**, and a pass over Dynamic Type at the largest sizes.
+
+## How to verify anything here
+
+The simulator loop is what found every real bug in this project, and it is quick:
+
+```sh
+xcrun simctl ui <udid> appearance dark          # dark mode too
+SIMCTL_CHILD_DSH_OPEN_HOST=1 SIMCTL_CHILD_DSH_OPEN_SESSION=1 \
+SIMCTL_CHILD_DSH_SESSION_ID=<session-id> SIMCTL_CHILD_DSH_SEND_MESSAGE="hi" \
+  xcrun simctl launch --terminate-running-process <udid> net.fernlabs.dshremote
+xcrun simctl io <udid> screenshot /tmp/shot.png   # then actually look at it
+```
+
+Those `DSH_*` variables are DEBUG-only affordances added because Xcode 27 ships
+no Simulator GUI and `simctl` cannot tap. They run the ordinary code paths.
+
+For anything whose wire shape is unknown, **capture it from the live harness
+first** — `/tmp/capture-question.cjs` follows a session and prints every event
+type, and needs only a session id and a device token (`ws` is installed in
+`/tmp`). Probing with deliberately wrong arguments is faster still: the gateway's
+rejections name every missing field, which is how `attachWait`'s arguments were
+learned in one call.
+
+
 ## SPEC §1 conformance, assessed 2026-10-08 (round 93)
 Checked against the scope list itself, with what each claim rests on:
 
