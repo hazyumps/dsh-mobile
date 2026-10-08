@@ -33,6 +33,34 @@ claiming "v1 complete" before those is overstating it.
 
 ### The next discovery task: capture an approval request
 
+**Round 97 probed the attach call and the gateway named its arguments.** Three
+arg shapes were sent to `userQuestions/attachWait`; the rejections are precise:
+
+```
+missing "agentId", "callId"; unexpected "request"      (sent the follow-shaped args)
+missing "callId"                                       (sent agentId only)
+missing "agentId", "callId"; unexpected "sessionId"    (sent sessionId)
+```
+
+So `attachWait` takes **`{agentId, callId}`** — the *same pair* `userQuestions/answer`
+takes. It is not a session-level registration and not a broadcast subscription; it
+attaches to one specific tool call. The flow is therefore:
+
+1. a `tool/call` event arrives (a question, and presumably an approval too);
+2. the app attaches by opening `userQuestions/attachWait` with
+   `{agentId: sessionId, callId: thatCallId}` — holding the stream is the
+   attachment, and `remainingMs` is how long the hold lasts;
+3. the app answers with the same pair, which `answer(...)` already sends.
+
+That closes the loop on why "without an available answerer the request fails
+closed": the answerer is whoever holds that stream for that call. Nothing about
+this needs a new identifier or a session-level registration.
+
+Worth noting for whoever builds it: the three probes were cheap and the gateway's
+error messages named every missing field, which is a faster way to learn an
+argument shape than reading generated code. The probe script is
+`/tmp/attachwait.cjs`, and the device was revoked afterwards.
+
 **Round 96 mapped the gap to endpoints, and the answerer question is answered.**
 Listing the generated endpoints (`grep '^// MARK: - ' Generated/Endpoints.swift`)
 shows there is **no separate answerer-registration call**. The only candidate is
