@@ -243,7 +243,33 @@ and with a revoked token. Both are client-side; the relay behaves correctly.
    its receive loop in a `Task`, then `try await task.send(…)` — with the same
    refused challenge. If that parks, the cause is the actor/reentrancy
    interaction and not URLSession at all, and the fix will be in how `MuxClient`
-   sequences its first send against its receive loop. Start by finding which await is actually parked: instrument
+   sequences its first send against its receive loop.
+
+   **Round 45: that is refuted as well, and the probe route is exhausted.** The
+   last untested ordering — send issued *while* a receive is still outstanding,
+   with the challenge refused after both are in flight — also throws `-999`, in
+   0.02 s (`/tmp/ws-probe6.swift`, case A; case B confirms the settled ordering
+   too). Six probes have now covered every ordering and every construction:
+
+   | probe | shape | result |
+   |---|---|---|
+   | 1 | pending `receive` | `-999` in 0.02 s |
+   | 2 | `send` alone | `-999` immediately |
+   | 3 | `send`/`receive` after the failure | `-999` at call time |
+   | 4 | pending receive → send | `-999` in 0.21 s |
+   | 5 | `URLRequest` + auth header, ± pending receive | `-999` immediately |
+   | 6 | send in flight during the refusal, receive outstanding | `-999` in 0.02 s |
+
+   **Stop probing raw URLSession: it cannot reproduce this.** Every probe is a
+   faithful re-creation and none of them parks, so continuing down this road
+   tests the reproduction rather than the code. The reproduction that matters is
+   the app's own smoke run, which does park — so the next instrumentation goes
+   one level further *inside* it and nowhere else: print in `MuxStreamError`'s
+   construction and in `open`'s `catch` (the one that never printed), and
+   specifically check whether a `CancellationError` from the budget's *sleeper*
+   child is what unwinds the group — because a group whose body already returned
+   still awaits its cancelled children, and if that path throws instead of
+   returning, the error is not the one anybody is looking for. Start by finding which await is actually parked: instrument
    `ConnectionCoordinator.connect()` with a print at each await boundary and run
    the wrong-pin reproduction below — that will name the parked wait in one run
    instead of another round of inference. Suspects, in order: a task joined on
