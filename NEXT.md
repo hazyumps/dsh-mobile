@@ -31,6 +31,36 @@ plainly missing — tool cards, permissions, attachments, slash commands, model
 selection — plus history paging, draft persistence, and the summaries. Anything
 claiming "v1 complete" before those is overstating it.
 
+### `session/control` is the projections stream (round 98)
+
+Probed it with deliberately empty args and it opened straight away — no arguments
+required — delivering two kinds of item:
+
+- **`baseline`**: `{projections: {<sessionId>: {asOfSeq, values: {…}}}}`, and the
+  values carry **`title`** and **`goal`**. The goal shape seen live:
+
+  ```json
+  {"goal": {"id": "goal-c9a53751-…", "revision": 1,
+            "objective": "get a usable v1 iphone app", "phase": "active",
+            "maxGoalRounds": …}}
+  ```
+
+  That is the §1 "read-only goal, plan, and todo summaries" item, available
+  directly — no paging, no per-session call.
+
+- **`projection`** items streamed continuously, one per session and key:
+  `tokenUsage {uncachedInputTokens, outputTokens, cacheReadTokens, cacheWriteTokens}`,
+  `contextPressure {pressureTokens, projectedTokens, contextWindow}`,
+  `contextBreakdown {systemTokens, toolsTokens, messageTokens}`, and
+  `sessionStats {turns, steps, llmMs, toolMs, ttftMs, ttftSteps, decodeMs, decodeTokens}`.
+
+Two things worth knowing: the stream **covers every session**, not just one, so a
+session id is not required and the app can show goals and usage across the board;
+and it is a *stream*, so these values arrive live rather than needing polling.
+
+That makes the summaries item buildable from a known shape, and hands the app a
+usage/context readout for free.
+
 ### The next discovery task: capture an approval request
 
 **Round 97 probed the attach call and the gateway named its arguments.** Three
