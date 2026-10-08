@@ -74,6 +74,36 @@ Also worth keeping: **loopback proves nothing about authentication.** From
 against the LAN address in the certificate's SANs (`https://10.1.0.138:3443`),
 which is where the revoke → `403 {"error":"forbidden"}` was actually observed.
 
+**The API a `ChatSession` implementer needs, written down so nobody has to go
+looking again** (read from `State/ConnectionCoordinator.swift`, which is why
+four delegations stalled — each spent its budget rediscovering this):
+
+```swift
+public actor ConnectionCoordinator {
+    public func connect() async throws -> Connection        // :347
+    public func sessions() async throws -> [SessionSummary] // :443
+    public func activeStream() -> StreamHandle?             // :477  the $events stream
+    public func shutdown() async                            // :534
+    public func reportReconnecting()                        // :565
+    public private(set) var status: ConnectionStatus
+    public private(set) var connection: Connection?         // non-nil iff connected
+    public private(set) var lastError: ConnectError?
+
+    public struct StreamHandle: Sendable {                  // :273
+        public let client: MuxClient
+        public let generation: Generation
+        public let eventsStreamId: String
+    }
+}
+```
+
+`MuxClient` is the thing that opens a second logical stream (`session/follow`)
+on the same socket; read its `open`/subscription surface in
+`Network/MuxClient.swift`. `Connection` carries `generation`, `clientId` and
+`host`. The `session/follow` args take a named `request` whose required
+`address` is `{kind: "session", sessionId}`; `session/prompt` takes a named
+`request` with `requestId`, `sessionId`, `mode: "queue"` and `content`.
+
 ## Then the chat screen
 
 **Reducers: settled.** `State/ConversationBuilder.swift` stands. The rebuilt
