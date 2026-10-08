@@ -26,6 +26,18 @@ asks a question, and capture the follow-stream frames into
 Then the question model is written from a capture rather than from a guess, which
 is exactly what `Protocol/README.md` records as the rule for this repo.
 
+**Round 84 got halfway, and hit an obstacle worth knowing.** The asking session
+was created and its prompt accepted (`session-11be456b-…`, prompt invited
+`ask_user_question`), and the old capture harness is still in `/tmp`:
+`mux-follow.mjs` takes a session id and prints frame shapes, and
+`mux-edge-frames.json` holds 575 KB of previously captured frames. But
+`mux-follow.mjs` now fails with `socket error`, because it connects to
+`wss://127.0.0.1:3443` with no credential — and **loopback no longer bypasses
+authentication for the mux upgrade**, a direct consequence of turning address
+grants off earlier in this project. The capture needs a bearer credential in the
+upgrade, either by giving the script a header (Node's global `WebSocket` cannot)
+or by capturing against the LAN address with the device token.
+
 Everything else is ready: `ConnectionCoordinator.answer(...)` is built and takes
 the `agentId`, `callId` and answer the capture will supply.
 
