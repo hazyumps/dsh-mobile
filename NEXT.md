@@ -33,6 +33,35 @@ claiming "v1 complete" before those is overstating it.
 
 ### The next discovery task: capture an approval request
 
+**Round 96 mapped the gap to endpoints, and the answerer question is answered.**
+Listing the generated endpoints (`grep '^// MARK: - ' Generated/Endpoints.swift`)
+shows there is **no separate answerer-registration call**. The only candidate is
+`userQuestions/attachWait`, which is a **stream**: holding it open *is* the
+attachment, and its `{remainingMs}` result is how long the hold lasts. That fits
+everything — a stream that registers a holder, and while it is held, approvals and
+questions are delivered to it. `session/control` is the other stream worth
+checking if that turns out to be wrong.
+
+The same listing gives every remaining §1 gap a concrete call rather than a
+research task:
+
+| §1 gap | endpoint |
+|---|---|
+| paging older history | `session/page` |
+| attachments | `session/attachment` |
+| model shown, model selection | `session/modelCatalog`, `session/selectModel` |
+| goal / plan / todo summaries | `session/projections` |
+| permissions and approvals | hold `userQuestions/attachWait` open as the answerer |
+| slash commands | `commands/*` (`CommandsExecuteLine`, `CommandsListResult` are already generated) |
+| permission presets | `permissionPresets/catalog` |
+
+So the sequence that was missing is clear: **attach by opening
+`userQuestions/attachWait`, keep it open, and only then does an approval request
+have anywhere to go.** Until the app does that, a session that needs approval
+fails closed and the phone cannot help it.
+
+Everything below is the earlier attempt and what it ruled out.
+
 **Round 95 tried it and learned why nothing came back.** A session was created and
 prompted to run `sudo -n true`, and no `approval/*` request event appeared at all.
 The reason is in the session's own runtime context, which the follow stream carries
