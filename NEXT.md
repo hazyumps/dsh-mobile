@@ -6,6 +6,35 @@ XCTest. Read `SPEC.md` for the contract; this file is only the work list.
 
 ## Start here
 
+### The composer verification, ready to run (round 77)
+
+A scratch session exists for exactly this:
+
+```
+session-429af9e1-6e19-4872-bae2-c4e2d5aa94e5
+```
+
+created on the live harness with `cwd /Users/patrick/repo/dsh-mobile`, empty, and
+safe to send into. The device that created it was revoked immediately; the app's
+own paired device (`dsh-verify`, in the simulator's keychain) is what reads it.
+
+Three small DEBUG-only edits, then rebuild and look — the same pattern as
+`DSH_OPEN_HOST`:
+
+1. `AppModel`: `launchSessionId` (env `DSH_SESSION_ID`) and `launchMessage` (env
+   `DSH_SEND_MESSAGE`), both `#if DEBUG`, reading `ProcessInfo` **in AppModel**
+   because that file already imports Foundation — a view with only `import
+   SwiftUI` may not see `ProcessInfo`, and that guess costs a build cycle.
+2. `SessionsView`'s existing `.task`: prefer `model.launchSessionId` over the
+   first session in the list.
+3. `ChatView`'s `.task`: after `start()` succeeds, if `model.launchMessage` is
+   set, put it in `draft` and `await send()`.
+
+Then `simctl launch` with `DSH_OPEN_HOST=1`, `DSH_SESSION_ID=<id>`,
+`DSH_SEND_MESSAGE="hello from the app"`, and screenshot: the turn should stream
+back into the bubble list, which is the one thing about sending that unit tests
+cannot show.
+
 **`ChatSession.swift` exists as of round 56** (`d5de6ff`) and compiles: it opens
 the follow stream with the captured args shape, folds frames into a
 `ConversationBuilder`, and exposes `messages`, `hasGap`, `isStreaming`,
