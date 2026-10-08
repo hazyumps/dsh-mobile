@@ -33,6 +33,35 @@ claiming "v1 complete" before those is overstating it.
 
 ### The next discovery task: capture an approval request
 
+**Round 95 tried it and learned why nothing came back.** A session was created and
+prompted to run `sudo -n true`, and no `approval/*` request event appeared at all.
+The reason is in the session's own runtime context, which the follow stream carries
+verbatim:
+
+> Current DSH file policy: workspace-write… **Approval policy: ask. Operations that
+> require approval may ask through the configured answerers; without an available
+> answerer, the request fails closed.**
+
+So requests are not broadcast to whoever happens to be watching — **they are
+delivered to a registered answerer, and with none attached the request fails
+closed**. That reframes the work completely: the app must first *attach as an
+answerer*, and only then will an approval request ever reach it. No amount of
+watching the follow stream would have shown one.
+
+It also makes sense of `userQuestions/attachWait`, whose result is only
+`{remainingMs}` and which looked useless when questions turned out to arrive as
+`tool/call` events: it may be the *attach* half of exactly this mechanism —
+registering a holder and being told how long the hold lasts — rather than a
+question carrier.
+
+**Next step, changed accordingly:** find the answerer-registration call in
+`Protocol/endpoints.json` (look beside `userQuestions/attachWait` and
+`userQuestions/answer`, and for anything named attach/register/holder/wait),
+attach as one, and *then* trigger an approval with a command that needs it. Only
+after attaching should a request event be expected at all.
+
+The device used for the attempt was revoked immediately afterwards.
+
 Permission requests are the gap that most affects usability, because a session
 that needs approval **stops** — and unlike a question, the phone currently cannot
 answer it at all.
