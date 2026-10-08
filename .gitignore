@@ -1,6 +1,14 @@
 .DS_Store
 build/
 .build/
+.build-mine/
+.build-codegen/
+.build-network/
 DerivedData/
 xcuserdata/
 *.xcuserstate
+
+# The app project is generated from project.yml by XcodeGen.
+Apps/DSHRemote/DSHRemote.xcodeproj/
+Apps/DSHRemote/.build-app/
+Apps/DSHRemote/.cache/

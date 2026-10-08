@@ -1,0 +1,58 @@
+name: DSHRemote
+options:
+  bundleIdPrefix: net.fernlabs
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    CODE_SIGN_STYLE: Automatic
+    # Set DEVELOPMENT_TEAM (or pick a team in Xcode) before installing on a
+    # device. Simulator builds need no identity at all.
+    DEVELOPMENT_TEAM: ""
+
+packages:
+  DSHRemoteKit:
+    path: ../..
+
+targets:
+  DSHRemote:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+    dependencies:
+      - package: DSHRemoteKit
+        product: DSHRemoteKit
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: DSH Remote
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        ITSAppUsesNonExemptEncryption: false
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        NSLocalNetworkUsageDescription: DSH Remote reaches your DeepSeek Harness on the local network.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: net.fernlabs.dshremote
+        TARGETED_DEVICE_FAMILY: "1"
+        SUPPORTS_MACCATALYST: NO
+        GENERATE_INFOPLIST_FILE: NO
+
+schemes:
+  DSHRemote:
+    build:
+      targets:
+        DSHRemote: all
+    run:
+      config: Debug
