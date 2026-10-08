@@ -615,13 +615,41 @@ public actor ConnectionCoordinator {
     /// Maps anything thrown anywhere in this file onto the one error type the app
     /// switches on. Kept exhaustive so a new throw site cannot introduce a third error
     /// domain by accident.
+    ///
+    /// ``DshRPCError`` has **two** shapes and they map differently, which is the one
+    /// non-obvious rule here. The cases that carry a well-formed answer from the relay or
+    /// the host — a refusal body, a status, a typed business error — stay wrapped in
+    /// ``ConnectError/rpc(_:)`` so the app keeps access to
+    /// ``DshRPCError/guidance``/``DshRPCError/isPairingLockout``/``DshRPCError/rpcError``.
+    /// The two that are really connection facts — the transport going away, and a pin
+    /// mismatch — are lifted out into ``ConnectError/transportInterruption(detail:)`` and
+    /// ``ConnectError/certificateChanged(detail:)``.
+    ///
+    /// That lift is not cosmetic. Without it, "the socket dropped during a unary call"
+    /// would be `.rpc(.transportInterruption)` on the call path and
+    /// `.transportInterruption` on the connect path — two spellings of one condition, which
+    /// is exactly how an app ends up with a retry rule that holds in one place and not the
+    /// other.
     static func failure(from error: any Error) -> ConnectError {
         if let error = error as? ConnectError { return error }
-        if let error = error as? DshRPCError { return .rpc(error) }
+        if let error = error as? DshRPCError {
+            switch error {
+            case .transportInterruption(let detail):
+                return .transportInterruption(detail: detail)
+            case .certificateChanged(let detail):
+                return .certificateChanged(detail: detail)
+            case .cancelled:
+                return .cancelled
+            case .credentialRejected, .relayedAuthenticationFailure, .rateLimited,
+                 .harnessUnavailable, .capabilityUnavailable, .protocolIncompatible,
+                 .unexpectedStatus, .business:
+                return .rpc(error)
+            }
+        }
         if let error = error as? MuxStreamError {
             switch error {
             case .socketFailed(let detail):
-                return .transportInterruption(detail: detail)
+                return socketFailure(detail: detail)
             case .protocolIncompatible(let reason):
                 return .protocolIncompatible(reason: reason)
             case .clientClosed:
@@ -641,6 +669,42 @@ public actor ConnectionCoordinator {
             return .cancelled
         }
     }
+
+    /// Classifies ``MuxStreamError/socketFailed(detail:)``, which reaches this layer as a
+    /// string and nothing more.
+    ///
+    /// This exists because of a real hazard, not for tidiness: `MuxClient` establishes its
+    /// socket with `transport.openSocket`, which is where a **pin mismatch** actually
+    /// happens — the TLS challenge is answered during the WebSocket upgrade. A real
+    /// `URLSessionRelayTransport` turns that into ``RelayTransportError/tlsPinMismatch(_:)``
+    /// *inside* `openSocket`, `MuxClient.classify` then reports it as
+    /// `.socketFailed(detail: "TLS pin mismatch: …")`, and the distinction between "the
+    /// certificate changed, stop and re-pair" and "the network dropped, retry" is gone
+    /// unless it is recovered here.
+    ///
+    /// So the kind is recovered from the one thing that survives — the prefix of
+    /// ``RelayTransportError/safeDescription``, which is stable and is the *only* prefix
+    /// construction in the codebase. Losing it would mean a pin mismatch counted as
+    /// retryable, which SPEC §6.4 and SPEC §6.9 both forbid.
+    ///
+    /// The honest limitation: a genuinely unknown `transport failure:` detail is reported
+    /// as ``ConnectError/transportInterruption(detail:)``, and a `cancelled` detail as
+    /// ``ConnectError/cancelled``. ``ConnectError/certificateChanged(detail:)`` is claimed
+    /// only on a `TLS pin mismatch: ` prefix. Matching one prefix in isolation is a long
+    /// way from matching on prose, but the durable fix is to carry the case through
+    /// `MuxStreamError` instead of a string; see this slice's report.
+    static func socketFailure(detail: String) -> ConnectError {
+        if detail.hasPrefix(pinMismatchPrefix) {
+            return .certificateChanged(detail: detail)
+        }
+        if detail == "transport cancelled" {
+            return .cancelled
+        }
+        return .transportInterruption(detail: detail)
+    }
+
+    /// The prefix ``RelayTransportError/safeDescription`` puts on a pin mismatch.
+    static let pinMismatchPrefix = "TLS pin mismatch"
 
     // MARK: - The ready frame (SPEC §6.4)
 
