@@ -1,0 +1,1539 @@
+import Foundation
+
+// The reducer behind the chat screen (SPEC §3.4) and the contract in SPEC §6.5.
+//
+// It folds three things into one ordered conversation:
+//
+//   1. the `session/follow` snapshot — durable `records[]` plus the opening `cursor`;
+//   2. live `event` frames, appended by `seq`;
+//   3. `assistant-stream` frames, keyed by `attemptId` and sequenced by `revision`.
+//
+// and it folds older history in later through `session/page`.
+//
+// ## Why a value type
+//
+// A `struct`. Nothing here touches the network or the clock, so SPEC §4's "network and reducer
+// work must not block the main actor" is satisfied by the fold being cheap and pure rather than
+// by an actor hop: the owner can hold this on whatever actor it likes and copy it for tests.
+// Reduction is deterministic in the frames it was given, which is what makes the §6.5 recovery
+// rules testable at all.
+//
+// ## The three rules this file exists to enforce (SPEC §6.5)
+//
+// - **Durable history is separate from transient chunks.** ``durable`` holds only what the host
+//   committed; a provisional preview lives in ``activeAttempts`` and is never merged into
+//   ``durable``. SPEC §6.5: "Maintain durable history separately from transient assistant
+//   chunks."
+// - **Settlement retires exactly one of the two.** On `end` with `outcome.kind == "committed"`,
+//   the provisional is retired in favour of the durable record — "show the durable result
+//   exactly once" — and both possible orderings of `assistant/message` and
+//   `assistant-stream/end` settle, so neither frame arriving early can produce both or neither.
+// - **A gap is recorded, not papered over.** A hole in `seq` becomes a ``ConversationGap``; a
+//   hole in the live `revision` chain invalidates the preview. Neither is silently renumbered
+//   or filled.
+
+// MARK: - Keys
+
+/// Identity of an assistant attempt: the pair the host retries independently (SPEC §6.5, "Use
+/// attempt identity, revision, and chunk index to detect stale, duplicate, or gapped live
+/// frames").
+///
+/// `attemptId` is optional on the wire — ``AssistantStreamFrame`` keeps every field but `type`
+/// optional so an unclassified frame kind still decodes — so an attempt without one is keyed by
+/// its `turn`/`step` alone. Two live attempts for one step then collide and the later one
+/// supersedes the earlier, which is the correct failure direction: a preview is cheaper to lose
+/// than to duplicate.
+public struct AttemptKey: Hashable, Sendable, Comparable {
+    /// Attempt identity from the frame. `nil` when the host sent none.
+    public var attemptId: String?
+    /// Set on `start` and `end` in the capture; `nil` when a frame omitted it.
+    public var turn: Int64?
+    public var step: Int64?
+
+    public init(attemptId: String? = nil, turn: Int64? = nil, step: Int64? = nil) {
+        self.attemptId = attemptId
+        self.turn = turn
+        self.step = step
+    }
+
+    /// STAGE-0-CHOICE: the live frames carry `turn`/`step` on `start` and `end` but not on
+    /// `chunk`, so all three frames of one attempt must key alike. The identity is therefore
+    /// `(attemptId, turn, step)` exactly as sent, and no frame's partial set is filled in from
+    /// its siblings — guessing that a chunk belongs to the turn its `start` named is the kind of
+    /// inference SPEC §6.1 forbids from a method name rather than from a capture.
+    public static func < (lhs: AttemptKey, rhs: AttemptKey) -> Bool {
+        if let l = lhs.turn, let r = rhs.turn, l != r { return l < r }
+        if lhs.turn == nil, rhs.turn != nil { return true }
+        if lhs.turn != nil, rhs.turn == nil { return false }
+        if let l = lhs.step, let r = rhs.step, l != r { return l < r }
+        if lhs.step == nil, rhs.step != nil { return true }
+        if lhs.step != nil, rhs.step == nil { return false }
+        return (lhs.attemptId ?? "") < (rhs.attemptId ?? "")
+    }
+}
+
+// MARK: - Durable records
+
+/// One durable event this conversation holds, keyed by `seq`.
+///
+/// `data` stays ``JSONValue``: SPEC §6.5 lists the keys observed per type, so most of it is
+/// decoded leniently into the rendered shape while the original stays whole. Nothing the host
+/// sent is thrown away, which is what lets a `type` this build does not model render as a
+/// generic card instead of vanishing (SPEC §3.4, SPEC §5).
+public struct ConversationRecord: Hashable, Sendable {
+    /// The event type, verbatim — an open-ended namespaced string (SPEC §6.5).
+    public var type: String
+    /// The ordering authority for durable state (SPEC §6.5). Unique within a conversation.
+    public var seq: Int64
+    /// Epoch milliseconds, when the host supplied one.
+    public var time: Int64?
+    /// The event payload, lossless and untrusted in shape.
+    public var data: JSONValue
+    /// Present on `user/message` and `assistant/message` in the capture (unverified elsewhere —
+    /// see ``DurableEventEnvelope``).
+    public var surfaceOp: String?
+    /// Where this record came from. Kept because SPEC §6.5 makes the paths behave differently:
+    /// a paged record may fill a hole and may correct a `seq`, a live frame may not.
+    public var origin: Origin
+
+    public enum Origin: String, Hashable, Sendable {
+        /// A `records[]` entry of the `session/follow` snapshot.
+        case snapshot
+        /// A live `event` item frame.
+        case live
+        /// A `session/page` result.
+        case page
+    }
+
+    public init(
+        type: String,
+        seq: Int64,
+        time: Int64? = nil,
+        data: JSONValue = .null,
+        surfaceOp: String? = nil,
+        origin: Origin = .live
+    ) {
+        self.type = type
+        self.seq = seq
+        self.time = time
+        self.data = data
+        self.surfaceOp = surfaceOp
+        self.origin = origin
+    }
+
+    /// The `turn` this event's `data` names, when it names one. SPEC §6.5: `turn/start` →
+    /// `{turn}`; `step/start`, `step/end`, `assistant/message` → `{turn, step}`.
+    public var turn: Int64? { data["turn"]?.intValue }
+    /// The `step` this event's `data` names, when it names one.
+    public var step: Int64? { data["step"]?.intValue }
+}
+
+/// A durable event type this build knows, because SPEC §6.5 names its `data` keys.
+///
+/// STAGE-0-CHOICE: this enum is used **only** to select a rendering, never to filter. Any `type`
+/// outside it is still stored in ``ConversationRecord`` and still rendered as a generic card, so
+/// it is not the closed set SPEC §3.7 warns against for projections, and not a closed set for
+/// events either.
+public enum DurableEventKind: String, Sendable, Hashable, CaseIterable {
+    case permissionPreset = "permission/preset"
+    case sandboxMode = "sandbox/mode"
+    case inboxSpliced = "agent/inbox/spliced"
+    case turnStart = "turn/start"
+    case turnEnd = "turn/end"
+    case stepStart = "step/start"
+    case stepEnd = "step/end"
+    case userMessage = "user/message"
+    case assistantMessage = "assistant/message"
+    case deliveryAccepted = "session-log-deepseek/delivery-accepted"
+
+    /// Open registry: an unrecognised name returns `nil` rather than a sentinel, and the caller
+    /// keeps the raw string.
+    public init?(type: String) {
+        self.init(rawValue: type)
+    }
+}
+
+// MARK: - Gaps
+
+/// A hole in durable history that the client can see but not fill.
+///
+/// SPEC §6.5: "On a gap, drop the invalid preview and recover from a fresh follow snapshot or
+/// valid durable settlement." The gap is *recorded* — never hidden by renumbering — so a caller
+/// can decide whether a refollow or a page will close it.
+public struct ConversationGap: Hashable, Sendable {
+    /// Inclusive range of `seq` values known to be absent.
+    public var missing: ClosedRange<Int64>
+    /// Why the hole exists.
+    public var source: Source
+    /// Attempt identity, for ``Source/liveRevision`` gaps.
+    public var attemptId: String?
+
+    public enum Source: String, Hashable, Sendable {
+        /// A jump between two durable records this client holds. Paging may still fill it.
+        case durableSeq
+        /// A live `assistant-stream` `revision` jump. The preview cannot be trusted.
+        case liveRevision
+        /// The host's own watermark named a `seq` the client has not loaded.
+        case watermark
+    }
+
+    public init(missing: ClosedRange<Int64>, source: Source, attemptId: String? = nil) {
+        self.missing = missing
+        self.source = source
+        self.attemptId = attemptId
+    }
+
+    /// How many events are missing.
+    public var count: Int64 { missing.upperBound - missing.lowerBound + 1 }
+}
+
+// MARK: - Live attempts
+
+/// One in-flight `assistant-stream`, as far as this client has seen it.
+///
+/// Kept apart from durable history on purpose (SPEC §6.5). Nothing here is ever merged into
+/// ``ConversationBuilder/durable``: an attempt either renders as a provisional step, or it is
+/// retired in favour of the durable record that states the same thing, once.
+public struct LiveAttempt: Hashable, Sendable {
+    public var key: AttemptKey
+    /// The `revision` of the opening `start`.
+    public var startedAtRevision: Int64?
+    /// The highest `revision` seen. ``AssistantStreamFrame/revision`` is "monotonic within an
+    /// attempt", which makes it the only ordering authority inside the live stream.
+    public var revision: Int64?
+    /// The durable `seq` the `start` frame said the stream began after.
+    public var startedAfterSeq: Int64?
+    public var turn: Int64?
+    public var step: Int64?
+    /// Content blocks as the chunk frames described them, in arrival order.
+    public var blocks: [RenderedBlock]
+    /// The highest chunk index seen, when the frames carried one.
+    public var lastIndex: Int64?
+    /// `true` once an `end` frame arrived, whatever its outcome.
+    public var isEnded: Bool
+    /// Set when this preview must not be rendered — a stale start, a `revision` gap, or a start
+    /// that resumed from beyond the durable watermark (SPEC §6.5, "drop the invalid preview").
+    public var invalidation: Invalidation?
+    /// The durable `assistant/message` seq this attempt settled into, once an `end` frame named
+    /// one.
+    public var settledSeq: Int64?
+
+    /// Why a preview was dropped.
+    public enum Invalidation: String, Hashable, Sendable {
+        /// A newer attempt opened for the same `turn`/`step`, so this one will never settle.
+        case superseded
+        /// A `revision` jump: chunks were lost, so the assembled text is not the message.
+        case revisionGap
+        /// `startedAfterSeq` was beyond everything loaded, so the preview resumes from a place
+        /// this client has never seen and would look continuous while being incomplete.
+        case behindDurableWatermark
+    }
+
+    public init(
+        key: AttemptKey,
+        startedAtRevision: Int64? = nil,
+        revision: Int64? = nil,
+        startedAfterSeq: Int64? = nil,
+        turn: Int64? = nil,
+        step: Int64? = nil,
+        blocks: [RenderedBlock] = [],
+        lastIndex: Int64? = nil,
+        isEnded: Bool = false,
+        invalidation: Invalidation? = nil,
+        settledSeq: Int64? = nil
+    ) {
+        self.key = key
+        self.startedAtRevision = startedAtRevision
+        self.revision = revision
+        self.startedAfterSeq = startedAfterSeq
+        self.turn = turn
+        self.step = step
+        self.blocks = blocks
+        self.lastIndex = lastIndex
+        self.isEnded = isEnded
+        self.invalidation = invalidation
+        self.settledSeq = settledSeq
+    }
+
+    /// Whether this attempt should reach the screen. SPEC §6.5: a stale or gapped attempt is
+    /// dropped rather than rendered beside its replacement.
+    public var isRenderable: Bool { invalidation == nil }
+}
+
+// MARK: - Rendered shape
+
+/// One content block or assistant stream chunk, in wire order.
+///
+/// `kind` is the wire `type` verbatim, so a block type this build has no case for — a tool call,
+/// an image, whatever a future harness adds — still arrives with whatever text it carried and
+/// its raw payload intact. SPEC §5: "Preserve unknown event types for a readable fallback
+/// instead of crashing."
+public struct RenderedBlock: Hashable, Sendable {
+    /// The wire `type` string, verbatim (`reasoning`, `text`, `block-start`, …).
+    public var kind: String
+    /// The block's text, when it carried one. A stream `block-start` does not.
+    public var text: String?
+    /// The `index` inside the message, when the host supplied one.
+    public var index: Int64?
+    /// The whole block or chunk body, lossless — SPEC §3.4 needs the underlying event for
+    /// expansion, and nothing may be truncated on the reducer's side.
+    public var raw: JSONValue
+
+    public init(kind: String, text: String? = nil, index: Int64? = nil, raw: JSONValue = .null) {
+        self.kind = kind
+        self.text = text
+        self.index = index
+        self.raw = raw
+    }
+
+    /// The wire vocabulary SPEC §3.4 splits the screen on. A comparison, not a closed set:
+    /// anything else keeps `kind` and renders generically.
+    public var isReasoning: Bool { kind == Self.reasoningKind }
+    /// SPEC §3.4's answer text, as opposed to collapsed reasoning.
+    public var isText: Bool { kind == Self.textKind }
+
+    public static let reasoningKind = "reasoning"
+    public static let textKind = "text"
+}
+
+/// One durable assistant message, as SPEC §6.5 describes `assistant/message`:
+/// `{turn, step, message, usage, stream}`.
+public struct RenderedMessage: Hashable, Sendable {
+    /// The host's message id, when it sent one. Opaque (SPEC §5).
+    public var id: String?
+    /// `assistant` in the capture. Not assumed: it is whatever the host sent.
+    public var role: String?
+    /// Every content block, in order — the lossless spine of the message.
+    public var content: [RenderedBlock]
+    /// The `usage` object, kept whole. SPEC §3.7 shows numeric usage only once units and shape
+    /// are verified, so nothing is unpacked here.
+    public var usage: JSONValue?
+    /// The `stream` array of the durable message: the same chunk vocabulary the live frames use,
+    /// one step later. Kept so a settled preview can be compared against what actually
+    /// committed.
+    public var stream: [RenderedBlock]
+    /// Sequence of the `assistant/message` record this came from.
+    public var seq: Int64
+
+    public init(
+        id: String? = nil,
+        role: String? = nil,
+        content: [RenderedBlock] = [],
+        usage: JSONValue? = nil,
+        stream: [RenderedBlock] = [],
+        seq: Int64
+    ) {
+        self.id = id
+        self.role = role
+        self.content = content
+        self.usage = usage
+        self.stream = stream
+        self.seq = seq
+    }
+
+    /// SPEC §3.4 keeps reasoning collapsed by default; this is the folded text it hides.
+    public var reasoning: String {
+        content.filter(\.isReasoning).compactMap(\.text).joined()
+    }
+
+    /// The answer text, reasoning excluded.
+    public var text: String {
+        content.filter(\.isText).compactMap(\.text).joined()
+    }
+}
+
+/// One human message (SPEC §3.4: "Display human and assistant messages chronologically").
+public struct RenderedUserMessage: Hashable, Sendable {
+    public var id: String?
+    public var role: String?
+    public var content: [RenderedBlock]
+    /// The `source` object, kept whole — it carries the `rpcId` a submission is reconciled
+    /// against (SPEC §3.4, SPEC §6.6).
+    public var source: JSONValue?
+    public var seq: Int64
+
+    public init(
+        id: String? = nil,
+        role: String? = nil,
+        content: [RenderedBlock] = [],
+        source: JSONValue? = nil,
+        seq: Int64
+    ) {
+        self.id = id
+        self.role = role
+        self.content = content
+        self.source = source
+        self.seq = seq
+    }
+
+    /// The message text, blocks concatenated.
+    public var text: String { content.compactMap(\.text).joined() }
+}
+
+/// One tool call the durable record carried.
+///
+/// STAGE-0-CHOICE: no capture shows a tool call, so this is deliberately thin and every field is
+/// something the decoder could actually read. SPEC §3.4 wants "tool name, state, and a short
+/// summary"; `state` is derived only from whether a matching result block was present, and
+/// SPEC §3.4's "unknown tool types use a generic card" is served by `name` being optional with
+/// the raw payloads kept whole.
+public struct RenderedToolCall: Hashable, Sendable {
+    /// The tool name, from whichever of `name`/`toolName` the host used.
+    public var name: String?
+    /// The call id, used to pair a result with its call.
+    public var id: String?
+    public var arguments: JSONValue?
+    public var result: JSONValue?
+    public var state: State
+    /// The wire block `type` this came from.
+    public var blockKind: String
+
+    public enum State: String, Hashable, Sendable {
+        /// A call with a result block found for the same id.
+        case completed
+        /// A call with no result this client has seen. Not `failed`: absence of a result is not
+        /// evidence of failure.
+        case started
+        /// A result block that carried an error marker.
+        case failed
+        /// A result block whose call is not in this conversation's records.
+        case resultWithoutCall
+    }
+
+    public init(
+        name: String? = nil,
+        id: String? = nil,
+        arguments: JSONValue? = nil,
+        result: JSONValue? = nil,
+        state: State = .started,
+        blockKind: String = ""
+    ) {
+        self.name = name
+        self.id = id
+        self.arguments = arguments
+        self.result = result
+        self.state = state
+        self.blockKind = blockKind
+    }
+}
+
+/// One step of an assistant turn: SPEC §6.5's `step/start` … `step/end` span, with whatever
+/// committed inside it.
+///
+/// `step` is optional because the host can commit an `assistant/message` this client never saw a
+/// `step/start` for — the durable stream and the live frames are independent — and inventing a
+/// number would be a guess. The step is then keyed by its turn alone.
+public struct RenderedStep: Hashable, Sendable {
+    public var turn: Int64
+    public var step: Int64?
+    /// Human messages delivered inside this step, in `seq` order.
+    public var userMessages: [RenderedUserMessage]
+    /// Durable assistant messages, in `seq` order.
+    public var messages: [RenderedMessage]
+    /// The live preview, when one is in flight for this step and still valid. `nil` when the
+    /// attempt settled, was dropped, or never existed (SPEC §6.5).
+    public var preview: LiveAttempt?
+    /// Every durable record that placed itself in this step, in `seq` order — including the
+    /// `step/start` and `step/end` that bound it, and any `type` no case of this build models.
+    /// Nothing that reached the reducer is absent from here (SPEC §3.4: "never truncate the
+    /// underlying event used by the state reducer").
+    public var events: [ConversationRecord]
+
+    public init(
+        turn: Int64,
+        step: Int64? = nil,
+        userMessages: [RenderedUserMessage] = [],
+        messages: [RenderedMessage] = [],
+        preview: LiveAttempt? = nil,
+        events: [ConversationRecord] = []
+    ) {
+        self.turn = turn
+        self.step = step
+        self.userMessages = userMessages
+        self.messages = messages
+        self.preview = preview
+        self.events = events
+    }
+
+    /// The preview's answer text, for the one provisional response SPEC §3.4 renders while
+    /// streaming.
+    public var previewText: String {
+        preview?.blocks.filter(\.isText).compactMap(\.text).joined() ?? ""
+    }
+
+    /// Tool calls across this step's durable messages.
+    public var toolCalls: [RenderedToolCall] {
+        ConversationBuilder.toolCalls(in: messages.flatMap(\.content))
+    }
+}
+
+/// One turn: what the human said and what the agent did about it.
+///
+/// `turn` is optional for the same reason ``RenderedStep/step`` is — a record may arrive with no
+/// turn of its own — and the records are kept in ``events`` either way. `turn == nil` is the
+/// pre-turn bucket: SPEC §6.5's capture opens with `permission/preset` and `sandbox/mode` at seq
+/// 0 and 1, before any turn exists, and they must still be renderable.
+public struct RenderedTurn: Hashable, Sendable {
+    public var turn: Int64?
+    /// The `reason.kind` from `turn/end`, when the turn ended. Newest wins if it ended twice.
+    public var endReason: String?
+    public var userMessages: [RenderedUserMessage]
+    public var steps: [RenderedStep]
+    /// Every durable record in this turn that is not inside a step: `turn/start`, `turn/end`,
+    /// `agent/inbox/spliced`, and anything unmodelled.
+    public var events: [ConversationRecord]
+
+    public init(
+        turn: Int64? = nil,
+        endReason: String? = nil,
+        userMessages: [RenderedUserMessage] = [],
+        steps: [RenderedStep] = [],
+        events: [ConversationRecord] = []
+    ) {
+        self.turn = turn
+        self.endReason = endReason
+        self.userMessages = userMessages
+        self.steps = steps
+        self.events = events
+    }
+
+    /// Every record this turn holds, steps included, in `seq` order.
+    public var allEvents: [ConversationRecord] {
+        (events + steps.flatMap(\.events)).sorted { $0.seq < $1.seq }
+    }
+
+    /// Tool calls across the turn's steps.
+    public var toolCalls: [RenderedToolCall] { steps.flatMap(\.toolCalls) }
+
+    /// SPEC §5's "Preserve unknown event types for a readable fallback": everything here whose
+    /// `type` no ``DurableEventKind`` covers, in `seq` order.
+    public var unmodelledEvents: [ConversationRecord] {
+        allEvents.filter { DurableEventKind(type: $0.type) == nil }
+    }
+
+    /// The live preview in this turn's last step, when one is in flight.
+    public var preview: LiveAttempt? {
+        steps.reversed().first { $0.preview != nil }?.preview
+    }
+}
+
+/// What the chat screen renders, folded from everything above.
+public struct RenderedConversation: Hashable, Sendable {
+    public var turns: [RenderedTurn]
+    /// Durable records that belong to no turn — the session-scoped events at the head of a
+    /// session, and anything that could not be placed. In `seq` order.
+    public var orphanRecords: [ConversationRecord]
+    /// Live attempts not attached to a rendered step, because no durable record has named their
+    /// turn yet. Rendered as a provisional tail.
+    public var unattachedPreviews: [LiveAttempt]
+    /// Visible holes in durable history, ascending (SPEC §6.5).
+    public var gaps: [ConversationGap]
+
+    public init(
+        turns: [RenderedTurn] = [],
+        orphanRecords: [ConversationRecord] = [],
+        unattachedPreviews: [LiveAttempt] = [],
+        gaps: [ConversationGap] = []
+    ) {
+        self.turns = turns
+        self.orphanRecords = orphanRecords
+        self.unattachedPreviews = unattachedPreviews
+        self.gaps = gaps
+    }
+
+    /// SPEC §3.4: nothing renders, and specifically no placeholder, when there is nothing.
+    public var isEmpty: Bool {
+        turns.isEmpty && orphanRecords.isEmpty && unattachedPreviews.isEmpty
+    }
+
+    /// Every live preview, in turn order with the unattached tail last.
+    public var previews: [LiveAttempt] {
+        turns.flatMap { $0.steps.compactMap(\.preview) } + unattachedPreviews
+    }
+
+    /// Every human message, in conversation order.
+    public var userMessages: [RenderedUserMessage] {
+        turns.flatMap { $0.userMessages + $0.steps.flatMap(\.userMessages) }
+    }
+
+    /// Every durable assistant message, in conversation order.
+    public var messages: [RenderedMessage] {
+        turns.flatMap { $0.steps.flatMap(\.messages) }
+    }
+
+    /// Every durable record, in `seq` order.
+    public var allRecords: [ConversationRecord] {
+        (orphanRecords + turns.flatMap(\.allEvents)).sorted { $0.seq < $1.seq }
+    }
+
+    /// SPEC §5's readable fallback, across the whole conversation.
+    public var unmodelledEvents: [ConversationRecord] {
+        allRecords.filter { DurableEventKind(type: $0.type) == nil }
+    }
+
+    public var toolCalls: [RenderedToolCall] { turns.flatMap(\.toolCalls) }
+}
+
+/// What a stream produced, for the screen's empty states.
+///
+/// SPEC §3.4's "an empty or snapshot-only stream renders nothing rather than crashing" is the
+/// ``empty``/``snapshotOnly`` pair.
+public enum ConversationRender: String, Hashable, Sendable {
+    /// No frames at all.
+    case empty
+    /// A baseline arrived and held nothing renderable — no records, no preview.
+    case snapshotOnly
+    /// At least one turn, preview, or record to show.
+    case content
+}
+
+// MARK: - Builder
+
+/// Folds mux frames into ``RenderedConversation``, enforcing SPEC §6.5's recovery rules.
+///
+/// One builder belongs to one conversation generation (SPEC §6.5: "Reconnect creates a new
+/// generation and replaces baselines; there is no assumed `afterSeq` continuation"). Starting a
+/// new generation means a new builder, not a reset of this one — that way a frame from the
+/// abandoned follow stream cannot mutate the new conversation state, because there is no code
+/// path from the old builder to the new one.
+public struct ConversationBuilder: Sendable {
+    // MARK: Durable history
+
+    /// Every durable record, sorted by `seq`, deduplicated. The single source of truth for
+    /// durable history; the rendered shape is a projection of it.
+    public private(set) var durable: [ConversationRecord] = []
+    /// The `session/follow` opening cursor, stored for paging. SPEC §6.5: "`session/page` must use
+    /// that generation's `throughSeq`; never combine a page from an old generation with a new
+    /// baseline."
+    public private(set) var cursor: Int64?
+    /// Whether the host said more durable history exists behind ``cursor``.
+    public private(set) var hasMore: Bool?
+    /// The newest `throughSeq` watermark any durable record named — the value
+    /// `session-log-deepseek/delivery-accepted` carries (SPEC §6.5).
+    public private(set) var watermark: Int64?
+    /// The snapshot header, kept whole for SPEC §3.7's session details.
+    public private(set) var header: MuxSnapshotHeader?
+    /// The baseline's projections, kept whole. ``SessionProjections`` is a typed struct whose
+    /// `values` map is an open registry — the capture carries `plan`, which the descriptor never
+    /// lists — so nothing here switches on a closed set of keys.
+    public private(set) var projections: SessionProjections?
+
+    // MARK: Live assistant state
+
+    /// In-flight attempts by identity, including dropped ones: a dropped attempt is kept so a
+    /// late chunk for it is recognised as stale rather than mistaken for a new attempt.
+    public private(set) var activeAttempts: [AttemptKey: LiveAttempt] = [:]
+    /// The baseline's `assistantStream.revision` — the revision the first live frame continues
+    /// from (SPEC §6.5's "optional live assistant baseline").
+    public private(set) var baselineRevision: Int64?
+
+    // MARK: Diagnostics the screen and its tests read
+
+    /// Frames whose `seq` was already held. Ignored, never merged.
+    public private(set) var ignoredDuplicateSeqs: [Int64] = []
+    /// Frames that arrived already superseded: a late chunk, a lower revision, a lower chunk
+    /// index, a chunk for an attempt that ended.
+    public private(set) var ignoredStaleFrames = 0
+    /// Attempts dropped because a newer one replaced them or because their revision chain gapped
+    /// (SPEC §6.5: "drop the invalid preview").
+    public private(set) var droppedAttempts: Set<AttemptKey> = []
+    /// Attempts that settled into a durable record, with the `seq` they settled into.
+    public private(set) var settledAtSeq: [AttemptKey: Int64] = [:]
+    /// Attempts whose preview was retired in favour of the durable record. Kept as a set so a
+    /// frame that arrives *after* retirement is still recognised as stale rather than looking
+    /// like an attempt this client never opened.
+    public private(set) var retiredAttempts: Set<AttemptKey> = []
+    /// Visible holes, ascending.
+    public private(set) var gaps: [ConversationGap] = []
+    /// Attempts this builder refused to render, with the reason.
+    public private(set) var invalidatedAttempts: [AttemptKey: LiveAttempt.Invalidation] = [:]
+    /// Durable `seq` values not inserted because a record for that `seq` was already held and
+    /// the newcomer was not a page — i.e. a snapshot or live frame re-stating history.
+    public private(set) var ignoredRedundantRecords = 0
+    /// Records that replaced an existing record with the same `seq` but different content,
+    /// during a page: the host's own history read again. Never from the live stream, which
+    /// cannot revise what it already committed.
+    public private(set) var replacedRecords: [Int64] = []
+
+    /// The stream this builder follows. `nil` adopts the first stream that speaks; a frame from
+    /// another stream is ignored, which is SPEC §4's "changing conversations … prevents late
+    /// frames from mutating the new conversation" enforced a second time at the reducer.
+    public private(set) var streamId: String?
+
+    public init(streamId: String? = nil) {
+        self.streamId = streamId
+    }
+
+    // MARK: - Frames
+
+    /// Applies one server frame.
+    ///
+    /// Returns `true` when the frame changed state. A frame that did not — a duplicate, a stale
+    /// attempt, another stream's traffic — leaves the builder identical, so a caller can skip a
+    /// UI invalidation.
+    @discardableResult
+    public mutating func apply(_ frame: MuxFrame) -> Bool {
+        // `error` and `end` frames are the connection's business, not the conversation's
+        // (SPEC §6.4): an error is presented by SPEC §6.9, and an `end` means the follow stream
+        // stopped. Neither carries durable state.
+        guard case .item = frame.type, let value = frame.value else { return false }
+        guard adopts(streamId: frame.streamId) else { return false }
+
+        switch value {
+        case .snapshot(let snapshot):
+            return apply(snapshot)
+        case .event(let envelope):
+            return apply(durableEvent: envelope, origin: .live)
+        case .assistantStream(let liveFrame):
+            return apply(liveFrame: liveFrame)
+        case .unknown:
+            // A `value.type` this build does not model — SPEC §6.4's `ready` frame, or anything
+            // the host adds. Kept out of the conversation: it is stream plumbing, not durable
+            // state, and inventing a record for it would put fiction in history.
+            return false
+        }
+    }
+
+    /// Applies a decoded `session/follow` baseline (SPEC §6.5 rule 1).
+    ///
+    /// A snapshot arrives once per follow, so this **replaces** durable history rather than
+    /// merging it: the host's `records[]` plus `cursor` is a complete baseline for this
+    /// generation, and merging a fresh baseline into an older one is exactly the "combine a page
+    /// from an old generation with a new baseline" SPEC §6.5 forbids. Live attempts are cleared
+    /// for the same reason, together with their dropped/settled bookkeeping.
+    @discardableResult
+    public mutating func apply(_ snapshot: MuxSnapshot) -> Bool {
+        durable = []
+        cursor = snapshot.cursor
+        hasMore = snapshot.hasMore
+        watermark = nil
+        header = snapshot.header
+        projections = snapshot.projections
+        activeAttempts = [:]
+        baselineRevision = snapshot.assistantStream?.revision
+        droppedAttempts = []
+        settledAtSeq = [:]
+        retiredAttempts = []
+        ignoredDuplicateSeqs = []
+        ignoredStaleFrames = 0
+        ignoredRedundantRecords = 0
+        replacedRecords = []
+        invalidatedAttempts = [:]
+        gaps = []
+
+        for record in snapshot.records {
+            // A record kind this build does not know has no `event` to insert, and its `type` is a
+            // snapshot wrapper rather than durable history, so there is nothing to keep it as.
+            guard case .event = record.type, let event = record.event else { continue }
+            insert(ConversationRecord(
+                type: event.type,
+                seq: event.seq,
+                time: event.time,
+                data: event.data,
+                surfaceOp: event.surfaceOp,
+                origin: .snapshot
+            ))
+        }
+
+        refreshGaps()
+        return true
+    }
+
+    /// Applies one live `event` item frame (SPEC §6.5 rule 2).
+    ///
+    /// A duplicate `seq` is ignored; a gap between `seq` values is recorded; an out-of-order
+    /// frame is inserted at its `seq` position rather than appended, so arrival order cannot
+    /// corrupt the order.
+    @discardableResult
+    public mutating func apply(
+        durableEvent event: DurableEventEnvelope,
+        origin: ConversationRecord.Origin = .live
+    ) -> Bool {
+        let record = ConversationRecord(
+            type: event.type,
+            seq: event.seq,
+            time: event.time,
+            data: event.data,
+            surfaceOp: event.surfaceOp,
+            origin: origin
+        )
+        let changed = insert(record)
+        if changed {
+            // The durable side of the settlement handshake: an attempt that already saw its
+            // committed `end` retires the moment the record it pointed at arrives. Doing it here
+            // rather than in the caller keeps both orderings on one code path.
+            retireIfSettled(seq: record.seq)
+        } else if origin == .live {
+            // Ignored either way — a re-statement of a `seq` the stream already committed — and
+            // reported as a duplicate so the caller can see that the stream repeated itself.
+            ignoredDuplicateSeqs.append(record.seq)
+        }
+        return changed
+    }
+
+    /// Applies one `assistant-stream` frame (SPEC §6.5 rules 3 and 4).
+    @discardableResult
+    public mutating func apply(liveFrame frame: AssistantStreamFrame) -> Bool {
+        switch frame.type {
+        case .start: return start(frame)
+        case .chunk: return chunk(frame)
+        case .end: return end(frame)
+        case .unknown: return false
+        }
+    }
+
+    /// Merges a `session/page` result into durable history (SPEC §6.5's paging rule).
+    ///
+    /// `throughSeq` is the watermark the page was requested against, remembered so a later page
+    /// has the generation's watermark to compare with. Records merge by `seq`: a `seq` already
+    /// held is ignored, or replaced in place when the host's newer word on it differs, and the
+    /// array is re-sorted, so "no duplication and no reordering" holds by construction rather
+    /// than by the host sending pages in a convenient order.
+    @discardableResult
+    public mutating func apply(page: SessionPage, throughSeq: Int64? = nil) -> Bool {
+        var changed = false
+        for item in page.records {
+            guard item.type == MuxSnapshotRecordType.eventRawValue else { continue }
+            let event = item.event
+            let inserted = insert(ConversationRecord(
+                type: event.type,
+                seq: event.seq,
+                time: event.time,
+                data: event.data,
+                surfaceOp: event.surfaceOp?.stringValue,
+                origin: .page
+            ))
+            changed = inserted || changed
+        }
+        if let throughSeq { watermark = max(watermark ?? throughSeq, throughSeq) }
+        // `hasMore` is the host's own answer for whether still more history exists behind this
+        // page, so it is taken rather than derived from how full the page looked.
+        hasMore = page.hasMore
+        refreshGaps()
+        return changed
+    }
+
+    /// What a stream produced, for the screen's empty states.
+    public var render: ConversationRender {
+        let rendered = rendered
+        if !rendered.isEmpty { return .content }
+        return durable.isEmpty && cursor == nil ? .empty : .snapshotOnly
+    }
+
+    // MARK: - Rendering
+
+    /// The rendered conversation (SPEC §3.4).
+    public var rendered: RenderedConversation {
+        var builder = RenderPass(durable: durable)
+        builder.run()
+        var result = builder.result
+        attachPreviews(to: &result)
+        return result
+    }
+
+    /// Attaches valid previews to their steps, creating a step when the durable `step/start` has
+    /// not arrived yet.
+    ///
+    /// A dropped attempt reaches no step, so a stale or gapped attempt cannot render beside its
+    /// replacement (SPEC §6.5). An attempt whose turn is unknown becomes an unattached tail
+    /// preview rather than being discarded — the frames are real, and dropping them would make
+    /// the screen blank while the host is mid-turn.
+    private func attachPreviews(to conversation: inout RenderedConversation) {
+        var turnIndex: [Int64: Int] = [:]
+        for (index, turn) in conversation.turns.enumerated() {
+            if let turn = turn.turn { turnIndex[turn] = index }
+        }
+
+        for attempt in activeAttempts.values.sorted(by: { $0.key < $1.key }) {
+            guard attempt.isRenderable, !attempt.isEnded else { continue }
+            guard let turn = attempt.turn, let index = turnIndex[turn] else {
+                conversation.unattachedPreviews.append(attempt)
+                continue
+            }
+            if let stepIndex = conversation.turns[index].steps.firstIndex(where: { $0.step == attempt.step }) {
+                conversation.turns[index].steps[stepIndex].preview = attempt
+            } else {
+                conversation.turns[index].steps.append(
+                    RenderedStep(turn: turn, step: attempt.step, preview: attempt)
+                )
+            }
+        }
+    }
+
+    // MARK: - Insertion
+
+    /// Inserts one durable record by `seq`, keeping the array sorted and unique.
+    ///
+    /// The three cases SPEC §6.5 cares about all land here:
+    /// - a `seq` already held is ignored (or, for a page, replaced in place when the host's
+    ///   newer word differs), so a duplicate can never appear twice;
+    /// - an out-of-order `seq` is spliced into position, so arrival order cannot corrupt order;
+    /// - a refusal is never silent — the caller and ``gaps`` both see it.
+    @discardableResult
+    private mutating func insert(_ record: ConversationRecord) -> Bool {
+        let index = insertionPoint(for: record.seq)
+        if index < durable.count, durable[index].seq == record.seq {
+            let existing = durable[index]
+            guard existing.origin == .page || record.origin == .page else {
+                // Two statements about one `seq` from the snapshot or the live stream. The first
+                // stands: the live stream cannot revise committed history, and the snapshot is
+                // the baseline.
+                ignoredRedundantRecords += 1
+                return false
+            }
+            guard existing != record else {
+                ignoredRedundantRecords += 1
+                return false
+            }
+            // A page may re-state a `seq` differently — it is the host's own history, read again.
+            // The newer read wins, but only in place, so ordering is untouched.
+            durable[index] = record
+            replacedRecords.append(record.seq)
+            liftWatermark(record)
+            return true
+        }
+        durable.insert(record, at: index)
+        liftWatermark(record)
+        return true
+    }
+
+    /// Reads the `throughSeq` watermark out of `session-log-deepseek/delivery-accepted`
+    /// (SPEC §6.5: "The `throughSeq` here is the watermark the paging rule above refers to").
+    private mutating func liftWatermark(_ record: ConversationRecord) {
+        guard DurableEventKind(type: record.type) == .deliveryAccepted,
+              let throughSeq = record.data["throughSeq"]?.intValue
+        else { return }
+        watermark = max(watermark ?? throughSeq, throughSeq)
+    }
+
+    /// Where a `seq` belongs in the sorted ``durable`` array: the index of the first record whose
+    /// `seq` is not less than the one being placed.
+    ///
+    /// A binary search rather than `firstIndex(where:)` or a linear scan, because this is the hot
+    /// path — one call per durable frame, on a conversation whose history grows by paging — and
+    /// because an insertion sort that is accidentally quadratic is the kind of thing nobody
+    /// notices until a long session is slow. `durable` is sorted by construction: every insert
+    /// goes through here and nothing reorders it.
+    private func insertionPoint(for seq: Int64) -> Int {
+        var low = 0
+        var high = durable.count
+        while low < high {
+            let mid = low + (high - low) / 2
+            if durable[mid].seq < seq {
+                low = mid + 1
+            } else {
+                high = mid
+            }
+        }
+        return low
+    }
+
+    // MARK: - Live frames
+
+    private mutating func start(_ frame: AssistantStreamFrame) -> Bool {
+        let key = AttemptKey(attemptId: frame.attemptId, turn: frame.turn, step: frame.step)
+
+        // A re-delivered `start` for an attempt already open: the revision may only move forward,
+        // and nothing else changes. Nothing is lost by ignoring it.
+        if var existing = activeAttempts[key] {
+            if let revision = frame.revision, let known = existing.revision, revision <= known {
+                ignoredStaleFrames += 1
+                return false
+            }
+            existing.revision = frame.revision ?? existing.revision
+            existing.startedAtRevision = existing.startedAtRevision ?? frame.revision
+            existing.startedAfterSeq = frame.startedAfterSeq ?? existing.startedAfterSeq
+            activeAttempts[key] = existing
+            return true
+        }
+
+        // A `start` for a *different* attempt at the same turn/step supersedes the earlier one
+        // (SPEC §6.5: a stale attempt is "dropped rather than rendered beside its replacement").
+        // The earlier attempt is kept as dropped, never deleted, so a late chunk for it can still
+        // be recognised as stale.
+        for (other, _) in activeAttempts where other != key && supersedes(other, key) {
+            drop(other, reason: .superseded)
+        }
+
+        // A `start` at or below a revision this identity has already reached is a replay of a
+        // stream whose state has moved on.
+        if let revision = frame.revision, let known = highestRevision(for: key), revision < known {
+            ignoredStaleFrames += 1
+            return false
+        }
+
+        var attempt = LiveAttempt(
+            key: key,
+            startedAtRevision: frame.revision,
+            revision: frame.revision,
+            startedAfterSeq: frame.startedAfterSeq,
+            turn: frame.turn,
+            step: frame.step
+        )
+
+        // `startedAfterSeq` beyond everything this client holds means the preview resumes from a
+        // place that was never loaded: it would look continuous while being incomplete. SPEC §6.5
+        // says "drop the invalid preview" and recover from the durable stream.
+        if let after = frame.startedAfterSeq, let highest = durable.last?.seq, after > highest {
+            attempt.invalidation = .behindDurableWatermark
+            recordGap(ConversationGap(
+                missing: (highest + 1)...after,
+                source: .watermark,
+                attemptId: frame.attemptId
+            ))
+        }
+        // A revision chain for this identity that continues from further back than the frame's
+        // revision, with frames between: the opening frames were missed.
+        if let revision = frame.revision, let known = highestRevision(for: key), revision > known + 1 {
+            attempt.invalidation = attempt.invalidation ?? .revisionGap
+            recordGap(ConversationGap(
+                missing: (known + 1)...(revision - 1),
+                source: .liveRevision,
+                attemptId: frame.attemptId
+            ))
+        }
+        // The baseline ahead of this frame's revision: the snapshot said the stream was already
+        // past here, so this `start` describes a state the client has moved beyond.
+        if let baseline = baselineRevision, let revision = frame.revision, revision < baseline {
+            attempt.invalidation = attempt.invalidation ?? .behindDurableWatermark
+        }
+
+        activeAttempts[key] = attempt
+        if let invalidation = attempt.invalidation {
+            invalidatedAttempts[key] = invalidation
+            droppedAttempts.insert(key)
+        }
+        return true
+    }
+
+    private mutating func chunk(_ frame: AssistantStreamFrame) -> Bool {
+        let key = AttemptKey(attemptId: frame.attemptId, turn: frame.turn, step: frame.step)
+        guard var attempt = activeAttempts[key] else {
+            // A chunk for an attempt this client never opened, or one whose preview was already
+            // dropped (superseded, gapped, or retired by settlement). All are stale by definition:
+            // rendering any of them would put orphan text under a step whose preview belongs to
+            // someone else.
+            ignoredStaleFrames += 1
+            return false
+        }
+        if attempt.invalidation != nil {
+            ignoredStaleFrames += 1
+            return false
+        }
+
+        // `revision` is monotonic within an attempt, so it is the ordering authority for live
+        // frames — not arrival order.
+        if let revision = frame.revision {
+            if let known = attempt.revision {
+                if revision < known || revision == known {
+                    // Behind, or the same revision twice: either way the chunk is already applied
+                    // or belongs to a state the stream has left.
+                    ignoredStaleFrames += 1
+                    return false
+                }
+                if revision > known + 1 {
+                    // A hole in the live stream. The assembled text is not the message, so the
+                    // preview is dropped rather than shown beside the durable result that will
+                    // replace it. The gap is recorded; the durable stream recovers it.
+                    attempt.invalidation = .revisionGap
+                    attempt.isEnded = true
+                    activeAttempts[key] = attempt
+                    droppedAttempts.insert(key)
+                    invalidatedAttempts[key] = .revisionGap
+                    recordGap(ConversationGap(
+                        missing: (known + 1)...(revision - 1),
+                        source: .liveRevision,
+                        attemptId: frame.attemptId
+                    ))
+                    return true
+                }
+            }
+            attempt.revision = revision
+        }
+
+        // Chunk index: `0` on the captured `chunk`, `8` on the captured `end`, so on a chunk it is
+        // the ordinal of that chunk. A drop below the last one is a stale replay.
+        if let index = frame.index {
+            if let last = attempt.lastIndex, index < last {
+                ignoredStaleFrames += 1
+                return false
+            }
+            attempt.lastIndex = index
+        }
+
+        if let body = frame.chunk {
+            attempt.blocks.append(RenderedBlock(
+                kind: body.type.rawValue,
+                text: body.block?["text"]?.stringValue,
+                index: body.index,
+                raw: Self.jsonValue(body)
+            ))
+        }
+        activeAttempts[key] = attempt
+        return true
+    }
+
+    private mutating func end(_ frame: AssistantStreamFrame) -> Bool {
+        let key = AttemptKey(attemptId: frame.attemptId, turn: frame.turn, step: frame.step)
+        guard var attempt = activeAttempts[key] else {
+            // A duplicate `end` for an attempt whose preview was already retired in favour of its
+            // durable record, or one this client never opened. Both are no-ops: the settlement
+            // happened exactly once and must not happen again.
+            ignoredStaleFrames += 1
+            return false
+        }
+
+        // A duplicate `end` for an attempt still held: the settlement already happened, so this
+        // frame adds nothing and must not settle again.
+        if attempt.isEnded, attempt.settledSeq != nil { return false }
+
+        if let revision = frame.revision {
+            if let known = attempt.revision, revision < known {
+                // An `end` from behind the stream's own progress says nothing about what the
+                // preview now holds.
+                ignoredStaleFrames += 1
+                return false
+            }
+            attempt.revision = revision
+        }
+        attempt.isEnded = true
+        if let index = frame.index { attempt.lastIndex = max(attempt.lastIndex ?? index, index) }
+
+        // Settlement is *only* this shape: `committed` **and** both an event type and a seq to
+        // point at (SPEC §6.5: "On settlement, retire the matching provisional response and show
+        // the durable result exactly once"). A committed outcome missing either pointer cannot be
+        // matched to a durable record, so nothing is retired here; the durable record settles it
+        // instead if it ever arrives.
+        let outcome = frame.outcome
+        let isSettlement = outcome?.kind == .committed && outcome?.seq != nil && outcome?.eventType != nil
+
+        if isSettlement, let seq = outcome?.seq {
+            attempt.settledSeq = seq
+            settledAtSeq[key] = seq
+            // Order independence: if the durable record is already in hand — because it arrived
+            // first, or because the snapshot carried it — retire now. Otherwise the record
+            // completes the settlement when it lands, in `retireIfSettled`. Exactly one of the two
+            // paths retires, which is what makes "never both, never neither" structural rather
+            // than careful.
+            if durable.contains(where: { $0.seq == seq }) {
+                retire(key)
+            } else {
+                activeAttempts[key] = attempt
+            }
+            return true
+        }
+
+        // A non-committing end — an abort, a supersede, or a shape this build does not model. The
+        // provisional stops previewing; history is whatever the durable stream says. The attempt is
+        // kept so a later duplicate `end` is a no-op.
+        activeAttempts[key] = attempt
+        return true
+    }
+
+    /// Removes an attempt's preview because its durable record is now in hand.
+    ///
+    /// The second half of the "never both, never neither" guarantee: called from the `end` handler
+    /// when the record is already present, and from the insert path when the record arrives after
+    /// the `end`. It is a no-op the second time for any one attempt, and it is the only place a
+    /// settled attempt leaves ``activeAttempts``.
+    private mutating func retireIfSettled(seq: Int64) {
+        for (key, attempt) in activeAttempts where attempt.settledSeq == seq {
+            retire(key)
+        }
+    }
+
+    private mutating func retire(_ key: AttemptKey) {
+        guard activeAttempts.removeValue(forKey: key) != nil else { return }
+        retiredAttempts.insert(key)
+        droppedAttempts.insert(key)
+        invalidatedAttempts[key] = .superseded
+    }
+
+    /// Whether `other` is the attempt that `key` replaces.
+    ///
+    /// Timestamped evidence: the capture gives `start` and `end` a `turn`/`step` and gives `chunk`
+    /// neither, so a replacing start arrives with the same `turn`/`step` as the attempt it
+    /// replaces. Matching is therefore on the pair when it exists, on the turn alone when only the
+    /// turn is known, and on `attemptId` when no turn was sent at all.
+    private func supersedes(_ other: AttemptKey, _ key: AttemptKey) -> Bool {
+        if other.turn == nil { return other.attemptId != nil && other.attemptId == key.attemptId }
+        guard other.turn == key.turn else { return false }
+        if let step = other.step { return step == key.step }
+        // No step on the older attempt: it stood for the whole turn, so any start in that turn
+        // replaces it.
+        return true
+    }
+
+    /// Marks an attempt unrenderable while keeping it, so late frames for it are still recognised
+    /// as stale.
+    private mutating func drop(_ key: AttemptKey, reason: LiveAttempt.Invalidation) {
+        guard var attempt = activeAttempts[key] else { return }
+        attempt.invalidation = reason
+        activeAttempts[key] = attempt
+        droppedAttempts.insert(key)
+        invalidatedAttempts[key] = reason
+    }
+
+    /// The highest revision this client has seen for an attempt identity, including dropped
+    /// attempts that shared it — which is what makes a replay detectable.
+    private func highestRevision(for key: AttemptKey) -> Int64? {
+        var highest: Int64?
+        for (other, attempt) in activeAttempts where other == key || other.attemptId == key.attemptId {
+            if let revision = attempt.revision { highest = max(highest ?? revision, revision) }
+        }
+        return highest
+    }
+
+    private mutating func recordGap(_ gap: ConversationGap) {
+        gaps.append(gap)
+        refreshGaps()
+    }
+
+    /// Recomputes the visible holes in durable history from the records actually held.
+    ///
+    /// A gap is a jump between two records this client holds. Two deliberate exclusions:
+    /// - nothing is reported *below* the oldest record, because until paging has run that range is
+    ///   simply "not fetched yet", and reporting it as a hole would be a lie the UI cannot clear.
+    ///   ``hasMore`` carries that fact instead;
+    /// - the live-revision and watermark gaps recorded at the moment of discovery are kept as they
+    ///   were found, because a `revision` hole is not derivable from `seq` at all.
+    private mutating func refreshGaps() {
+        var derived: [ConversationGap] = []
+        var previous: Int64?
+        for record in durable {
+            if let previous, record.seq > previous + 1 {
+                derived.append(ConversationGap(missing: (previous + 1)...(record.seq - 1), source: .durableSeq))
+            }
+            previous = max(previous ?? record.seq, record.seq)
+        }
+        gaps = (gaps.filter { $0.source != .durableSeq } + derived).sorted {
+            if $0.missing.lowerBound != $1.missing.lowerBound {
+                return $0.missing.lowerBound < $1.missing.lowerBound
+            }
+            return $0.source.rawValue < $1.source.rawValue
+        }
+    }
+
+    // MARK: - Decoding helpers
+
+    /// A content array — `[{type, text}, …]`, as `user/message` and `assistant/message` carry it.
+    ///
+    /// A bare string is accepted as one text block, because a message whose `content` is a string
+    /// is the other shape the wire generally uses; treating it as unrenderable would lose the text
+    /// over a shape difference.
+    static func blocks(from value: JSONValue?) -> [RenderedBlock] {
+        switch value {
+        case .array(let items):
+            return items.map { item in
+                RenderedBlock(
+                    kind: item["type"]?.stringValue ?? "",
+                    text: item["text"]?.stringValue,
+                    index: item["index"]?.intValue,
+                    raw: item
+                )
+            }
+        case .string(let text):
+            return [RenderedBlock(kind: RenderedBlock.textKind, text: text, raw: value ?? .null)]
+        default:
+            return []
+        }
+    }
+
+    /// The durable `assistant/message`'s `stream` array — `[{type: "chunk", time, chunk}, …]`, the
+    /// same chunk vocabulary the live frames use one step later.
+    static func streamChunks(from value: JSONValue?) -> [RenderedBlock] {
+        (value?.arrayValue ?? []).compactMap { entry in
+            guard let chunk = entry["chunk"] else { return nil }
+            return RenderedBlock(
+                kind: chunk["type"]?.stringValue ?? "",
+                text: chunk["block"]?["text"]?.stringValue,
+                index: chunk["index"]?.intValue,
+                raw: chunk
+            )
+        }
+    }
+
+    /// SPEC §6.5's table, turned into a rendering type. Every field is optional and the whole
+    /// `data` object stays in the record, so a shape the harness changes costs a rendering detail
+    /// rather than the event.
+    static func userMessage(from record: ConversationRecord) -> RenderedUserMessage {
+        RenderedUserMessage(
+            id: record.data["id"]?.stringValue,
+            role: record.data["role"]?.stringValue,
+            content: blocks(from: record.data["content"]),
+            source: record.data["source"],
+            seq: record.seq
+        )
+    }
+
+    static func assistantMessage(from record: ConversationRecord) -> RenderedMessage {
+        let message = record.data["message"]
+        return RenderedMessage(
+            id: message?["id"]?.stringValue,
+            role: message?["role"]?.stringValue,
+            content: blocks(from: message?["content"]),
+            usage: record.data["usage"],
+            stream: streamChunks(from: record.data["stream"]),
+            seq: record.seq
+        )
+    }
+
+    /// Tool calls or results inside a block list.
+    ///
+    /// STAGE-0-CHOICE: no capture contains one, so the field names (`name`/`toolName`,
+    /// `arguments`/`input`/`args`, `result`/`output`/`content`, `id`/`toolUseId`/`toolCallId`) are
+    /// read as alternatives rather than assumed. A block the reader cannot classify still appears
+    /// as a generic card, because the block itself is in ``RenderedBlock/raw``.
+    static func toolCalls(in blocks: [RenderedBlock]) -> [RenderedToolCall] {
+        var calls: [RenderedToolCall] = []
+        var results: [(id: String?, kind: String, payload: JSONValue)] = []
+
+        for block in blocks {
+            let payload = block.raw
+            let name = payload["name"]?.stringValue ?? payload["toolName"]?.stringValue
+            let id = payload["id"]?.stringValue
+                ?? payload["toolUseId"]?.stringValue
+                ?? payload["toolCallId"]?.stringValue
+                ?? payload["tool_use_id"]?.stringValue
+            if isResultBlock(block) {
+                results.append((id, block.kind, payload))
+                continue
+            }
+            guard isCallBlock(block) else { continue }
+            calls.append(RenderedToolCall(
+                name: name,
+                id: id,
+                arguments: payload["arguments"] ?? payload["input"] ?? payload["args"],
+                state: .started,
+                blockKind: block.kind
+            ))
+        }
+
+        for result in results {
+            let failed = result.payload["is_error"]?.boolValue == true
+                || result.payload["isError"]?.boolValue == true
+                || result.payload["error"] != nil
+            let payload = result.payload["result"]
+                ?? result.payload["output"]
+                ?? result.payload["content"]
+                ?? result.payload
+            if let id = result.id, let index = calls.firstIndex(where: { $0.id == id }) {
+                calls[index].result = payload
+                calls[index].state = failed ? .failed : .completed
+            } else {
+                calls.append(RenderedToolCall(
+                    name: result.payload["name"]?.stringValue,
+                    id: result.id,
+                    result: payload,
+                    state: .resultWithoutCall,
+                    blockKind: result.kind
+                ))
+            }
+        }
+        return calls
+    }
+
+    /// Whether a block reads as a tool call. A comparison, not a closed set: a name that is not
+    /// recognised simply does not classify, and its raw payload still reaches the screen.
+    static func isCallBlock(_ block: RenderedBlock) -> Bool {
+        switch block.kind {
+        case "tool-call", "tool_use", "toolUse", "tool_call": return true
+        case "tool": return block.raw["result"] == nil && block.raw["output"] == nil
+        default: return false
+        }
+    }
+
+    static func isResultBlock(_ block: RenderedBlock) -> Bool {
+        switch block.kind {
+        case "tool-result", "tool_result", "toolResult": return true
+        case "tool": return block.raw["result"] != nil || block.raw["output"] != nil
+        default: return false
+        }
+    }
+
+    /// Encodes a modelled frame back to ``JSONValue`` for the lossless `raw` fields.
+    ///
+    /// Only the fields the model holds survive; a key the host added that no type here covers is
+    /// dropped. That is a diagnostic-fidelity cost, not a state cost: durable records and live
+    /// frames are decoded from the wire bytes, and neither is rebuilt from this value. Nothing in
+    /// the app writes item frames (see ``MuxFrameValue``'s encode note), so this exists for
+    /// rendering and tests.
+    static func jsonValue(_ value: some Encodable) -> JSONValue {
+        (try? JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(value))) ?? .null
+    }
+
+    // MARK: - Stream identity
+
+    private mutating func adopts(streamId incoming: String?) -> Bool {
+        if let streamId { return streamId == incoming || incoming == nil }
+        streamId = incoming
+        return true
+    }
+}
+
+// MARK: - The render pass
+
+/// Turns the durable record list into turns and steps.
+///
+/// A separate `struct` rather than one long method, and mutable rather than functional, because
+/// the pass needs accumulators (the turn index, the pre-turn bucket) that would otherwise be
+/// four `inout` parameters threaded through a helper. It holds no state the builder does not
+/// already have, and it is discarded with the call.
+private struct RenderPass {
+    let durable: [ConversationRecord]
+    var turns: [RenderedTurn] = []
+    var orphanRecords: [ConversationRecord] = []
+    private var turnIndex: [Int64: Int] = [:]
+
+    init(durable: [ConversationRecord]) {
+        self.durable = durable
+    }
+
+    var result: RenderedConversation {
+        RenderedConversation(
+            turns: turns,
+            // The pre-turn records are a *bucket*, so they stay in `seq` order here rather than
+            // being folded into a turn they do not belong to.
+            orphanRecords: orphanRecords.sorted { $0.seq < $1.seq }
+        )
+    }
+
+    mutating func run() {
+        for record in durable {
+            place(record)
+        }
+    }
+
+    private mutating func place(_ record: ConversationRecord) {
+        guard let kind = DurableEventKind(type: record.type) else {
+            // Unmodelled type: place it where its own `turn` says, else in the newest turn, else
+            // in the pre-turn bucket. Never dropped (SPEC §5).
+            if let turn = record.turn, let index = ensureTurn(turn) {
+                insert(record, into: index)
+            } else if let index = turns.indices.last {
+                insert(record, into: index)
+            } else {
+                orphanRecords.append(record)
+            }
+            return
+        }
+
+        switch kind {
+        case .turnStart:
+            guard let turn = record.turn, let index = ensureTurn(turn) else {
+                orphanRecords.append(record)
+                return
+            }
+            turns[index].events.append(record)
+
+        case .turnEnd:
+            guard let turn = record.turn, let index = ensureTurn(turn) else {
+                orphanRecords.append(record)
+                return
+            }
+            turns[index].events.append(record)
+            if let reason = record.data["reason"]?["kind"]?.stringValue {
+                turns[index].endReason = reason
+            }
+
+        case .stepStart, .stepEnd:
+            guard let turn = record.turn, let index = ensureTurn(turn) else {
+                orphanRecords.append(record)
+                return
+            }
+            insert(record, into: index)
+
+        case .userMessage:
+            guard let turn = record.turn, let index = ensureTurn(turn) else {
+                // A user message with no turn of its own: it still happened, and the durable
+                // record is the proof. Bucket it with the pre-turn records rather than inventing
+                // a turn number.
+                orphanRecords.append(record)
+                return
+            }
+            let message = ConversationBuilder.userMessage(from: record)
+            if record.step == nil {
+                turns[index].userMessages.append(message)
+                turns[index].events.append(record)
+            } else {
+                insert(record, into: index, userMessage: message)
+            }
+
+        case .assistantMessage:
+            guard let turn = record.turn, let index = ensureTurn(turn) else {
+                orphanRecords.append(record)
+                return
+            }
+            insert(record, into: index, message: ConversationBuilder.assistantMessage(from: record))
+
+        case .inboxSpliced:
+            // `{target, start, inserted}`: the inserted entries are messages the host spliced into
+            // the transcript. They are rendered as user-shaped content so the screen shows them in
+            // place, and the record itself is kept too, so nothing depends on that reading.
+            guard let index = turns.indices.last else {
+                orphanRecords.append(record)
+                return
+            }
+            turns[index].events.append(record)
+            for inserted in record.data["inserted"]?.arrayValue ?? [] {
+                turns[index].userMessages.append(RenderedUserMessage(
+                    id: inserted["id"]?.stringValue,
+                    role: inserted["role"]?.stringValue,
+                    content: ConversationBuilder.blocks(from: inserted["content"]),
+                    source: inserted["source"],
+                    seq: record.seq
+                ))
+            }
+
+        case .deliveryAccepted:
+            // Carries the `throughSeq` watermark (SPEC §6.5): paging authority, not content. Kept
+            // where it arrived so nothing is lost; the watermark itself is lifted on insert.
+            if let index = turns.indices.last {
+                turns[index].events.append(record)
+            } else {
+                orphanRecords.append(record)
+            }
+
+        case .permissionPreset, .sandboxMode:
+            // Session-scoped, before any turn: the pair SPEC §6.5's capture opens with at seq 0
+            // and 1. They belong to no turn, and inventing one would misdate them.
+            orphanRecords.append(record)
+        }
+    }
+
+    /// Puts a record inside a turn, in the step its own `step` names — creating that step when it
+    /// does not exist yet.
+    ///
+    /// The insertion is by `step` number rather than by arrival, because `assistant/message` and
+    /// `step/start` are independent frames of the same stream and either can come first. That is
+    /// also why a step can hold an assistant message with no `step/start` record and still be
+    /// stable, and why paging a `step/start` in later does not move the message.
+    private mutating func insert(
+        _ record: ConversationRecord,
+        into index: Int,
+        message: RenderedMessage? = nil,
+        userMessage: RenderedUserMessage? = nil
+    ) {
+        guard let step = record.step else {
+            turns[index].events.append(record)
+            return
+        }
+        let stepIndex: Int
+        if let existing = turns[index].steps.firstIndex(where: { $0.step == step }) {
+            stepIndex = existing
+        } else {
+            turns[index].steps.append(RenderedStep(turn: turns[index].turn ?? record.turn ?? 0, step: step))
+            stepIndex = turns[index].steps.count - 1
+        }
+        turns[index].steps[stepIndex].events.append(record)
+        if let message { turns[index].steps[stepIndex].messages.append(message) }
+        if let userMessage { turns[index].steps[stepIndex].userMessages.append(userMessage) }
+    }
+
+    private mutating func ensureTurn(_ turn: Int64) -> Int? {
+        if let existing = turnIndex[turn] { return existing }
+        turns.append(RenderedTurn(turn: turn))
+        turnIndex[turn] = turns.count - 1
+        return turns.count - 1
+    }
+}

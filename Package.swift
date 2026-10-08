@@ -16,6 +16,13 @@ let package = Package(
             exclude: ["README.md"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
+        .executableTarget(
+            name: "dsh-smoke",
+            dependencies: ["DSHRemoteKit"],
+            path: "Smoke",
+            exclude: ["README.md"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
         .testTarget(
             name: "DSHRemoteKitTests",
             dependencies: ["DSHRemoteKit"],
