@@ -465,6 +465,45 @@ public actor ConnectionCoordinator {
         }
     }
 
+    // MARK: - Prompts
+
+    /// Sends a prompt to a session and returns once the host has accepted it.
+    ///
+    /// Sent with retries **disabled**, deliberately: SPEC §3.4 forbids resending a
+    /// prompt whose outcome is unknown, because a duplicate turn costs real work
+    /// and the user cannot tell it happened. An uncertain send is reported, never
+    /// repeated — the user decides.
+    ///
+    /// Acceptance is not completion: the turn itself arrives over the session's
+    /// follow stream, which is ``ChatSession``'s job to fold.
+    public func prompt(sessionId: String, text: String) async throws {
+        let client = DshRpcClient(
+            baseURL: origin.baseURL,
+            authorization: origin.authorization,
+            transport: makeTransport(origin)
+        )
+        let request = SessionPromptRequest(
+            requestId: UUID().uuidString,
+            sessionId: sessionId,
+            mode: .queue,
+            content: [.text(SessionPromptRequestContentItemText(type: "text", text: text))],
+            clientTimeZone: TimeZone.current.identifier
+        )
+        do {
+            _ = try await client.call(
+                Self.sessionPromptMethod,
+                args: SessionPromptArguments(request: request),
+                returning: SessionPromptValue.self,
+                retryPolicy: .none
+            )
+        } catch {
+            let failure = Self.failure(from: error)
+            lastError = failure
+            applyCallFailure(failure)
+            throw failure
+        }
+    }
+
     // MARK: - Streams
 
     /// The live mux and its generation, for the next slices (`session/follow`,
@@ -710,6 +749,7 @@ public actor ConnectionCoordinator {
     public static let eventsEndpoint = "$events"
     /// The unary endpoint SPEC §3.3's session list comes from.
     public static let sessionListMethod = "session/list"
+    public static let sessionPromptMethod = "session/prompt"
 
     /// A stream ID for `$events`, unique per generation.
     ///
