@@ -260,16 +260,41 @@ and with a revoked token. Both are client-side; the relay behaves correctly.
    | 5 | `URLRequest` + auth header, ± pending receive | `-999` immediately |
    | 6 | send in flight during the refusal, receive outstanding | `-999` in 0.02 s |
 
-   **Stop probing raw URLSession: it cannot reproduce this.** Every probe is a
-   faithful re-creation and none of them parks, so continuing down this road
-   tests the reproduction rather than the code. The reproduction that matters is
-   the app's own smoke run, which does park — so the next instrumentation goes
-   one level further *inside* it and nowhere else: print in `MuxStreamError`'s
-   construction and in `open`'s `catch` (the one that never printed), and
-   specifically check whether a `CancellationError` from the budget's *sleeper*
-   child is what unwinds the group — because a group whose body already returned
-   still awaits its cancelled children, and if that path throws instead of
-   returning, the error is not the one anybody is looking for. Start by finding which await is actually parked: instrument
+   **Round 46: the budget is now measured, not read — and it is the reason
+   nothing reports.** `/tmp/budget-probe.swift` recreates `withBudget` exactly
+   and drives it two ways, with no URLSession anywhere:
+
+   ```
+   [  0.00] A threw expired                                     <- op throws: prompt, correct
+   [ 11.02] B PARKED past 10s even though the 2s budget fired   <- op parked: never returns
+   ```
+
+   Case B parks the operation on a continuation that is never resumed — which
+   is what a stuck socket call looks like from the budget's side. **The sleeper
+   fires at two seconds and `withBudget` still never returns.** That is the
+   documented Swift behaviour biting: `withThrowingTaskGroup` cannot leave its
+   scope while a child is parked, so the expiry is computed, thrown at the
+   group, and then discarded by the scope exit. It does not matter which error
+   was meant to surface; nothing surfaces.
+
+   **So this is why the app hangs for forty seconds instead of failing at ten.**
+   I cleared `withBudget` twice by reading it; measured, it fails exactly the way
+   SPEC §6.9 forbids.
+
+   **The containment fix is independent of the root cause** and should be done
+   first, because it turns an unbounded hang into a reportable failure: do not
+   let the timeout depend on the group's scope exiting. Run the operation in a
+   detached task and race it against the sleep, resuming a continuation from
+   whichever finishes first, so the expiry is delivered even when the operation
+   never finishes. The parked operation is then abandoned (or cancelled) rather
+   than joined. With that in place, a wrong pin becomes
+   `establishmentTimedOut` → `hostUnavailable` → "offer re-pairing", which is
+   what §6.9 asks for.
+
+   Why the app's `send` parks at all is **still unexplained** — six probes
+   cannot reproduce it — but it no longer has to be solved first, and the
+   containment fix is worth doing on its own merits: a budget that cannot fire
+   is worse than the bug it was meant to catch. Start by finding which await is actually parked: instrument
    `ConnectionCoordinator.connect()` with a print at each await boundary and run
    the wrong-pin reproduction below — that will name the parked wait in one run
    instead of another round of inference. Suspects, in order: a task joined on
