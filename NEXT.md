@@ -1,7 +1,6 @@
 # What is left for v1
 
 ## SPEC §1 conformance, assessed 2026-10-08 (round 93)
-
 Checked against the scope list itself, with what each claim rests on:
 
 | §1 item | state |
@@ -31,6 +30,27 @@ questions against the live harness. It is usable for that. Five §1 items are
 plainly missing — tool cards, permissions, attachments, slash commands, model
 selection — plus history paging, draft persistence, and the summaries. Anything
 claiming "v1 complete" before those is overstating it.
+
+### The next discovery task: capture an approval request
+
+Permission requests are the gap that most affects usability, because a session
+that needs approval **stops** — and unlike a question, the phone currently cannot
+answer it at all.
+
+Do not guess this one. The question path only became buildable after a capture,
+and the same applies here: `approval/policy` has been seen (`{"policy":"ask"}`),
+but **no approval *request* event has ever been captured**, so neither its shape
+nor the call that answers it is known.
+
+Capture it the way questions were captured (round 85): create a session, prompt it
+to do something that needs approval — something outside the workspace sandbox, so
+the `ask` policy actually fires — and follow it with
+`/tmp/capture-question.cjs`, which prints each event type and needs only a session
+id and a device token. Then read the request's shape out of the capture and find
+the answering call in `Protocol/endpoints.json` beside `userQuestions/answer`.
+
+Everything else on this list is ordinary UI work on shapes that are already known.
+This one is not, which is why it is called out separately.
 
 State as of 2026-10-08, round 53 of the goal "get a usable v1 iphone app".
 Everything here is committed; the suite is green at 163 Swift Testing + 14
