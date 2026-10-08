@@ -36,6 +36,27 @@ Xcode writes the team into the project when you pick it, but since the project
 is generated, put it in `project.yml` instead (`DEVELOPMENT_TEAM`) so a
 regenerate does not lose it.
 
+Once you are signed in (Xcode → Settings → Accounts), the whole remaining step is
+two commands:
+
+```sh
+# the team id appears beside your Apple ID in Xcode → Settings → Accounts,
+# or as IDEProvisioningTeamByIdentifier in the Xcode defaults
+perl -pi -e 's/^(\s*DEVELOPMENT_TEAM:).*$/$1 "YOURTEAMID"/' project.yml
+xcodegen generate
+
+# build and install straight to a connected phone; -allowProvisioningUpdates
+# lets Xcode create the development certificate and profile for you
+xcodebuild -project DSHRemote.xcodeproj -scheme DSHRemote \
+  -destination 'platform=iOS,name=YOUR_IPHONE' \
+  -allowProvisioningUpdates build
+```
+
+`xcodebuild -showdestinations -project DSHRemote.xcodeproj -scheme DSHRemote`
+lists the exact device names to pass to `-destination` if you would rather not
+type one from memory. Without `-allowProvisioningUpdates` the first device build
+fails on the missing profile, which reads like a code error and is not one.
+
 Verified on 2026-10-08: `xcodebuild -destination 'generic/platform=iOS'
 CODE_SIGNING_ALLOWED=NO build` **succeeds**, so the app compiles for a device
 architecture and signing is the only thing standing between it and the phone —
