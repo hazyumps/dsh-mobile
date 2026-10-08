@@ -140,7 +140,30 @@ and with a revoked token. Both are client-side; the relay behaves correctly.
    executable that builds `URLSessionRelayTransport` with a wrong pin, calls
    `openSocket`, and prints around each step. That isolates our wrapper from the
    framework, and it is the one experiment nobody has run — every probe so far
-   re-implemented the delegate path instead of using the code under suspicion. Start by finding which await is actually parked: instrument
+   re-implemented the delegate path instead of using the code under suspicion.
+
+   **FOUND, by instrumenting the real path (round 41).** Three prints around the
+   establishment budget in `performConnect`, then the wrong-pin reproduction:
+
+   ```
+   [probe] before establishment budget
+   [probe] inside budget, calling client.open
+   … and nothing else, past fifteen seconds
+   ```
+
+   Neither print after `client.open` fires — not the `defer` inside the closure,
+   not the one after `withBudget`. Two facts follow. **The park is inside
+   `MuxClient.open`**, because the closure that wraps it never returns *or*
+   throws. And the closure is parked such that **cancellation cannot unwind
+   it**, because `defer` does not run either — which is why the budget can never
+   report: `withThrowingTaskGroup` may not exit its scope while a child is
+   parked, so the expiry is computed and then thrown away.
+
+   So the remaining search is one level down: instrument `MuxClient.open`
+   (`Network/MuxClient.swift:159`) — `ensureSocket`, then
+   `try await liveSocket.send(…)` — and the receive loop it starts, and the
+   wrong-pin run will name the parked await in one go. Everything above
+   `client.open` is now proven innocent by measurement rather than by reading. Start by finding which await is actually parked: instrument
    `ConnectionCoordinator.connect()` with a print at each await boundary and run
    the wrong-pin reproduction below — that will name the parked wait in one run
    instead of another round of inference. Suspects, in order: a task joined on
