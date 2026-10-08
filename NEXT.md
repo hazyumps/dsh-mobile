@@ -51,23 +51,26 @@ builder probably treats as unmodelled today — check `unmodelledEvents`), rende
 card above the composer for `name == "ask_user_question"`, and wire its buttons to
 `answer(...)`, which is already built and waiting.
 
-**Round 89: the card renders, and the answer RPC is accepted — with one caveat
-worth knowing.** The question card now appears for a question that arrived inside
-the follow *snapshot*, which is the fix from round 88 working.
+**Round 89: the card renders, and the answer RPC works — with a correction in
+round 91 that supersedes the guess below.**
 
-Answering the same question through the live relay returned:
+Answering a question through the live relay returns:
 
 ```json
 {"ok":true,"value":false}
 ```
 
-So `UserQuestionsAnswerResult` is a plain `Bool`, and `ok: true` with `value:
-false` is **not** a transport failure — the call was accepted. The likely reading
-of `false` is that there was no longer a pending question to answer: that scratch
-question had been waiting about twenty-five minutes, and the tool call had
-presumably been abandoned. Do not treat `false` as "the answer failed to send";
-treat it as "the host did not apply it", and surface that distinction rather than
-claiming success.
+`UserQuestionsAnswerResult` is a plain `Bool`. Round 89 guessed `false` meant "the
+host did not apply it"; **round 91 disproved that.** A fresh session was asked a
+question, answered through the same call, and it worked end to end — `tool/result`
+arrived, the agent produced a second message, the turn ended — **and the response
+was still `false`**. So the value is not a reliable signal of whether the answer
+landed.
+
+The app therefore clears the card on any accepted call and does not surface the
+value at all; using it made a working answer look like a failure. The `Bool` stays
+on `ConnectionCoordinator.answer` because that is the honest shape of the
+response — it is the *interpretation* that was wrong, not the type.
 
 What is still not demonstrated end to end is the agent *receiving* an answer,
 because the only question available had gone stale. A fresh scratch session asking
