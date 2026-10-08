@@ -24,6 +24,33 @@ Two manual steps that no command replaces: **Developer Mode** on the phone
 `DEVELOPMENT_TEAM: "U6LC736TBG"` is committed; a stray line in `project.yml` once
 made XcodeGen fold it into a bogus value that read like an Apple ID fault.
 
+## Remote access: today, and the end state (recorded 2026-10-08)
+
+**Today it is LAN-only.** The pairing payload points at `10.1.0.138`, so off the
+home network the phone has nothing to dial. WireGuard closes that gap with **no
+app change at all** — pair with the tunnel address instead of the LAN one. The
+relay already binds every interface and the app pins the certificate's *key*, not
+the hostname, so the same fingerprint keeps working from a new address.
+
+**The end state Patrick described is the Codex/OpenAI shape: a secure remote path
+between the phone and the PC with no VPN the user maintains.** That is two
+problems, and only one of them is the tunnel:
+
+1. **Reachability** — solved by a tunnel now (WireGuard), by a reverse tunnel with
+   a real hostname later (the pin just becomes the new certificate's fingerprint),
+   or by a hosted broker.
+2. **Background delivery** — the part a tunnel does **not** solve. iOS suspends
+   the app, so nothing arrives while it is closed; a Codex-like experience needs
+   **APNs push plus something on the Mac to send it**, and a reconnect that
+   resumes from a `cursor` when the app comes back. SPEC §1 puts push out of scope
+   for v1 and it stays out for now, but it is what separates "works on my phone"
+   from "works the way Codex does".
+
+Worth keeping in view because it is cheap here: the app's whole connection
+contract is *a URL, a pinned key, and a bearer token, all from the pairing
+payload*. Every option above is a change to what the payload says, not a rewrite
+of the client. Design the broker around that and the app does not move.
+
 ## Tomorrow: polish, and parity with the desktop app
 
 Patrick's words: *"we have a lot of polish to do… basically we want it to look as
