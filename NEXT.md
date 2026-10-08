@@ -309,7 +309,11 @@ and with a revoked token. Both are client-side; the relay behaves correctly.
    ```
 
    which is the bounded, actionable failure SPEC §6.9 asks for. The suite stayed
-   green at 163 through the change.
+   green at 163 through the change, and the **success path was re-verified live
+   afterwards**: a fresh device token against the LAN address still gives
+   `connect: OK`, `status: connected`, a `clientId`, **47 sessions read through
+   the generated models**, and a clean shutdown — `SMOKE OK`. So both directions
+   are confirmed after the budget rewrite, not just the one that was broken.
 
    **The residual, settled as far as it can be (round 48).** Instrumenting
    `URLSessionRelaySocket.send` itself — the two-line passthrough — prints
