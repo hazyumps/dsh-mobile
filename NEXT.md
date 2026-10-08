@@ -1,5 +1,37 @@
 # What is left for v1
 
+## SPEC §1 conformance, assessed 2026-10-08 (round 93)
+
+Checked against the scope list itself, with what each claim rests on:
+
+| §1 item | state |
+|---|---|
+| Pair via QR or pasted JSON | **paste verified live**; QR not exercised |
+| Remember hosts, select active | host list works; multi-host store is unit-tested, never tried with two |
+| Browse sessions by workspace | **verified live** (both workspaces rendered) |
+| Open a session, **page through** it | opens and renders; **paging older history is not built** (`session/page` scoped, never written) |
+| Send prompts, stream responses | **verified live** |
+| Reasoning in collapsed disclosures | reasoning renders inline, not collapsible |
+| Tool calls and results as expandable cards | **missing** — though the capture now has `tool/call`, and `tool/result` was seen this round |
+| Answer questions | **verified end to end** (round 91) |
+| Answer permission requests | **missing** — `approval/policy` events arrive, nothing acts on them |
+| Attach photos and files | **missing** |
+| Execute slash commands | **missing**; unrecognized slash text does reach the host as prompt text, so skills work by that route |
+| Model shown and selectable | **missing** |
+| Drafts per host/session, restore after suspension | conversation restores via follow; **drafts are view state only** and are lost on navigation |
+| Goal/plan/todo summaries | **missing** |
+| Light/dark, Dynamic Type, VoiceOver | system appearance and type scale come free; **VoiceOver never tested** |
+
+Out of scope for v1, so not gaps: session/workspace creation, push notifications,
+goal editing, terminal and file browsing, LAN scanning, offline queues,
+localization, iPad/watch, App Store release.
+
+**The honest summary:** the app reads conversations, sends prompts, and answers
+questions against the live harness. It is usable for that. Five §1 items are
+plainly missing — tool cards, permissions, attachments, slash commands, model
+selection — plus history paging, draft persistence, and the summaries. Anything
+claiming "v1 complete" before those is overstating it.
+
 State as of 2026-10-08, round 53 of the goal "get a usable v1 iphone app".
 Everything here is committed; the suite is green at 163 Swift Testing + 14
 XCTest. Read `SPEC.md` for the contract; this file is only the work list.
