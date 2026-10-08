@@ -124,8 +124,13 @@ enum DSHRemoteSmoke {
 
     /// Writes one line to stdout, with the device token scrubbed out of anything that
     /// could echo it back (a URL or an error string).
+    ///
+    /// Through `FileHandle` rather than `print`, so a line reaches the terminal as it
+    /// happens. `print` block-buffers when stdout is a pipe, which hides the last step
+    /// reached when a run hangs — and a step that hangs past its budget is exactly the
+    /// failure this tool exists to catch.
     private static func report(_ line: String, token: String?) {
-        print(redact(line, token: token))
+        FileHandle.standardOutput.write(Data((redact(line, token: token) + "\n").utf8))
     }
 
     private static func report(error line: String, token: String?) {

@@ -1,0 +1,241 @@
+// Folds the frames of `/api/remote.mux` into the conversation a UI renders (SPEC §6.5).
+//
+// Why `ConversationBuilder2` and not `State/ConversationBuilder.swift`: that path was written and
+// tested by concurrent work in this same tree while this file was being prepared, and this pass's
+// reading of rule 3 — a revision that goes backwards invalidates the whole attempt — contradicts
+// that version's test. Both cannot occupy one path, so this one is additive. Promote with
+// `git rm Sources/DSHRemoteKit/State/ConversationBuilder.swift
+//  Tests/DSHRemoteKitTests/ConversationBuilderTests.swift`, then rename this file to
+// `ConversationBuilder.swift` and its type to `ConversationBuilder`.
+//
+// One value type and plain methods, on purpose: durable history is a `seq`-keyed map, the live
+// assistant stream is a per-attempt preview, and ``messages`` orders the two into rows. The fold
+// is order-independent wherever the wire allows it — an event replayed, a page of older history,
+// and a live frame all take the same path — so no arrival order can duplicate or reorder durable
+// state. Nothing here recovers from a gap: a gap is flagged and left to the caller, because
+// SPEC §6.5's recovery is a fresh follow snapshot, which is a reconnect, not a fold.
+
+/// Folds mux frames into an ordered conversation.
+public struct ConversationBuilder2: Sendable {
+    /// One rendered row: a durable message, or the live preview that a durable message replaces.
+    public struct Message: Hashable, Sendable {
+        /// The wire role — `user` or `assistant` in the capture.
+        public var role: String
+        /// The concatenated `text` blocks. Reasoning blocks are not conversation text, so they
+        /// stay in the durable event and out of the rendered line.
+        public var text: String
+        /// True for an attempt's live preview while no durable record has replaced it yet
+        /// (SPEC §6.5: "Maintain durable history separately from transient assistant chunks").
+        public var isProvisional: Bool
+
+        public init(role: String, text: String, isProvisional: Bool) {
+            self.role = role
+            self.text = text
+            self.isProvisional = isProvisional
+        }
+    }
+
+    /// Set when a durable `seq` skipped a value — `34` is absent from the captured stream, whose
+    /// events run 32, 33, 35… (SPEC §6.5, "detect stale, duplicate, or gapped live frames").
+    ///
+    /// Only gaps against a known watermark set this: a follow snapshot's `cursor`, or the highest
+    /// `seq` already folded. The first event of a stream with no baseline cannot be judged against
+    /// anything, so it never flags one. Recovering from a gap — dropping the invalid preview and
+    /// re-following — is the caller's, deliberately: it needs a new snapshot, not a second fold.
+    public private(set) var hasGap = false
+
+    /// Every durable event folded in, keyed by `seq` — which is also the dedupe: one `seq` is
+    /// stored once and a repeat is ignored (rule 1).
+    ///
+    /// Events that render no message (`turn/start`, `step/end`, `permission/preset`,
+    /// `agent/inbox/spliced`, and every type this build does not know) are kept here whole, their
+    /// `data` untouched as ``JSONValue``, so nothing the host sent is dropped on the floor.
+    public private(set) var events: [Int64: DurableEventEnvelope] = [:]
+
+    /// The watermark a gap is measured from when no event has arrived yet: the follow snapshot's
+    /// `cursor`.
+    private var baselineSeq: Int64?
+    /// The highest durable `seq` folded, which supersedes the baseline once events arrive.
+    private var highestSeq: Int64?
+
+    /// Attempts in the order their `start` opened them, so previews render in stream order.
+    private var attemptOrder: [String] = []
+    /// Highest `revision` seen per attempt; a frame below it drops the attempt.
+    private var revision: [String: Int64] = [:]
+    /// The text each preview has accumulated.
+    private var provisionalText: [String: String] = [:]
+    /// Highest chunk ordinal applied per attempt, so a re-delivered chunk index is not appended
+    /// a second time.
+    private var lastChunkIndex: [String: Int64] = [:]
+    /// Attempts dropped for good — a stale revision, or an `end` with no durable record behind it.
+    private var dropped: Set<String> = []
+    /// Committed attempts, mapped to the durable `seq` their `end` named. The preview renders
+    /// until that record lands, then stops: never both, never neither.
+    private var settlesOn: [String: Int64] = [:]
+
+    public init() {}
+
+    // MARK: - Ingest
+
+    /// Fold one server frame. A frame that is not an item value this build models is ignored.
+    public mutating func fold(_ frame: MuxFrame) {
+        switch frame.value {
+        case .event(let event): fold(event)
+        case .assistantStream(let streamFrame): fold(streamFrame)
+        case .snapshot(let snapshot): start(from: snapshot)
+        case .unknown, nil: break
+        }
+    }
+
+    /// Start from a `session/follow` baseline: its `cursor` becomes the watermark, and its
+    /// replayed `records` fold like any other durable event (SPEC §6.5).
+    public mutating func start(from snapshot: MuxSnapshot) {
+        baselineSeq = snapshot.cursor
+        highestSeq = highestSeq ?? snapshot.cursor
+        for record in snapshot.records {
+            if let event = record.event { fold(event) }
+        }
+    }
+
+    /// Merge durable events — a `session/page` of older history, or a replay. An older `seq`
+    /// renders ahead of what is already here, a repeat is ignored, and no held row moves (rule 5).
+    public mutating func merge(_ history: [DurableEventEnvelope]) {
+        for event in history { fold(event) }
+    }
+
+    private mutating func fold(_ event: DurableEventEnvelope) {
+        guard events[event.seq] == nil else { return }  // duplicate seq: ignored, not rendered twice
+        if let watermark = highestSeq ?? baselineSeq, event.seq > watermark + 1 {
+            hasGap = true
+        }
+        events[event.seq] = event
+        highestSeq = max(highestSeq ?? event.seq, event.seq)
+    }
+
+    // MARK: - The live assistant stream
+
+    private mutating func fold(_ frame: AssistantStreamFrame) {
+        guard let attemptId = frame.attemptId,
+              !dropped.contains(attemptId),
+              settlesOn[attemptId] == nil  // already ended: a late frame is dropped
+        else { return }
+
+        if let frameRevision = frame.revision {
+            if let seen = revision[attemptId], frameRevision < seen {
+                drop(attemptId)  // revision went backwards: the attempt is stale, not just the frame
+                return
+            }
+            revision[attemptId] = max(revision[attemptId] ?? frameRevision, frameRevision)
+        }
+
+        switch frame.type {
+        case .start:
+            if !attemptOrder.contains(attemptId) { attemptOrder.append(attemptId) }
+        case .chunk:
+            append(frame)
+        case .end:
+            retire(frame)
+        case .unknown:
+            break
+        }
+    }
+
+    /// Append a chunk's text, ordered by its index. An index already applied is a duplicate and
+    /// is ignored, so re-delivered text is never rendered twice.
+    private mutating func append(_ frame: AssistantStreamFrame) {
+        guard let attemptId = frame.attemptId, attemptOrder.contains(attemptId) else { return }
+        let index = frame.index ?? frame.chunk?.index ?? 0
+        if let applied = lastChunkIndex[attemptId], index <= applied { return }
+        lastChunkIndex[attemptId] = index
+        provisionalText[attemptId, default: ""] += Self.text(in: frame.chunk)
+    }
+
+    /// Settle an attempt (SPEC §6.5, "On settlement, retire the matching provisional response and
+    /// show the durable result exactly once").
+    ///
+    /// `committed` names the durable record that stands in the preview's place, so the preview is
+    /// held until that `seq` exists and hidden from then on — the record may arrive on either side
+    /// of this frame, and either way exactly one of the two is rendered. Any other outcome is
+    /// captured nowhere (only `committed` is in the fixture) and names no durable record, so the
+    /// preview is discarded rather than left standing as a claim no durable event supports.
+    private mutating func retire(_ frame: AssistantStreamFrame) {
+        guard let attemptId = frame.attemptId else { return }
+        if case .committed = frame.outcome?.kind, let seq = frame.outcome?.seq {
+            settlesOn[attemptId] = seq
+        } else {
+            drop(attemptId)
+        }
+    }
+
+    private mutating func drop(_ attemptId: String) {
+        dropped.insert(attemptId)
+        attemptOrder.removeAll { $0 == attemptId }
+        revision[attemptId] = nil
+        provisionalText[attemptId] = nil
+        lastChunkIndex[attemptId] = nil
+        settlesOn[attemptId] = nil
+    }
+
+    // MARK: - Read
+
+    /// The conversation, oldest first: durable messages in `seq` order, then any preview still in
+    /// flight. Reading never mutates the fold, so a settlement cannot be applied twice.
+    public var messages: [Message] {
+        var rendered: [Message] = []
+        for seq in events.keys.sorted() {
+            guard let event = events[seq], let message = Self.message(from: event) else { continue }
+            rendered.append(message)
+        }
+        for attemptId in attemptOrder {
+            // A committed attempt whose durable record has landed: that record stands alone.
+            if let seq = settlesOn[attemptId], events[seq] != nil { continue }
+            rendered.append(Message(
+                role: "assistant",
+                text: provisionalText[attemptId] ?? "",
+                isProvisional: true
+            ))
+        }
+        return rendered
+    }
+
+    /// The two durable event types that carry conversation text. Every other type renders nothing
+    /// — `agent/inbox/spliced` carries content, but it is an inbox splice rather than a message,
+    /// and its `data` is preserved in ``events`` rather than interpreted here.
+    private static func message(from event: DurableEventEnvelope) -> Message? {
+        switch event.type {
+        case "user/message":
+            return Message(
+                role: event.data["role"]?.stringValue ?? "user",
+                text: text(in: event.data["content"]),
+                isProvisional: false
+            )
+        case "assistant/message":
+            let message = event.data["message"]
+            return Message(
+                role: message?["role"]?.stringValue ?? "assistant",
+                text: text(in: message?["content"]),
+                isProvisional: false
+            )
+        default:
+            return nil
+        }
+    }
+
+    /// The `text` of every `text` block of a content array, concatenated. Reasoning blocks are
+    /// skipped, matching the durable record's own split between the two.
+    private static func text(in content: JSONValue?) -> String {
+        guard let blocks = content?.arrayValue else { return "" }
+        return blocks.compactMap { block in
+            guard block["type"]?.stringValue == "text" else { return nil }
+            return block["text"]?.stringValue
+        }.joined()
+    }
+
+    /// The text a live chunk carries, if any. The captured chunk is a `block-start` with no text
+    /// at all — text arrives as a block whose own `type` is `text` — so this yields nothing for
+    /// the recorded fixture, and the preview renders empty rather than guessed.
+    private static func text(in chunk: AssistantStreamChunkBody?) -> String {
+        guard let block = chunk?.block, block["type"]?.stringValue == "text" else { return "" }
+        return block["text"]?.stringValue ?? ""
+    }
+}

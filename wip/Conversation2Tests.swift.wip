@@ -1,0 +1,263 @@
+import Foundation
+import Testing
+
+@testable import DSHRemoteKit
+
+// Offline fold tests for `ConversationBuilder2` (SPEC §6.5). The capture holds twelve frames
+// keyed by name, so the order the host sent them in is spelled out in `captureOrder` below — a
+// Swift dictionary does not preserve the file's order, and arrival order is half of what these
+// rules are about.
+
+@Suite("Conversation builder 2")
+struct Conversation2Tests {
+    /// The twelve captured frames, in the order `session/follow` delivered them.
+    private let captureOrder = [
+        "snapshot",
+        "event/agent/inbox/spliced",
+        "event/turn/start",
+        "event/step/start",
+        "event/user/message",
+        "assistant-stream/start",
+        "event/session-log-deepseek/delivery-accepted",
+        "assistant-stream/chunk",
+        "event/assistant/message",
+        "assistant-stream/end",
+        "event/step/end",
+        "event/turn/end",
+    ]
+
+    // MARK: - Builders
+
+    private func capturedFrame(_ name: String) throws -> MuxFrame {
+        let root = try Fixtures.object(.muxStreamFrames)
+        let frames = try #require(root["frames"]?.objectValue, "the fixture has no frames object")
+        let object = try #require(frames[name]?.objectValue, "no captured frame named \(name)")
+        return try JSONDecoder().decode(MuxFrame.self, from: Fixtures.encode(object: object))
+    }
+
+    private func capturedConversation() throws -> ConversationBuilder2 {
+        var builder = ConversationBuilder2()
+        for name in captureOrder { builder.fold(try capturedFrame(name)) }
+        return builder
+    }
+
+    private func event(
+        _ type: String,
+        seq: Int64,
+        data: JSONValue = .object([:])
+    ) -> DurableEventEnvelope {
+        DurableEventEnvelope(type: type, seq: seq, time: nil, data: data, surfaceOp: nil)
+    }
+
+    private func eventFrame(_ event: DurableEventEnvelope) -> MuxFrame {
+        MuxFrame(type: .item, streamId: "1", value: .event(event))
+    }
+
+    private func textContent(_ text: String) -> JSONValue {
+        .array([.object(["type": .string("text"), "text": .string(text)])])
+    }
+
+    private func userMessage(_ text: String, seq: Int64) -> DurableEventEnvelope {
+        event("user/message", seq: seq, data: .object([
+            "role": .string("user"),
+            "content": textContent(text),
+        ]))
+    }
+
+    private func assistantMessage(_ text: String, seq: Int64) -> DurableEventEnvelope {
+        event("assistant/message", seq: seq, data: .object([
+            "message": .object([
+                "role": .string("assistant"),
+                "content": textContent(text),
+            ])
+        ]))
+    }
+
+    private func streamFrame(_ frame: AssistantStreamFrame) -> MuxFrame {
+        MuxFrame(type: .item, streamId: "1", value: .assistantStream(frame))
+    }
+
+    private func start(_ attempt: String, revision: Int64) -> MuxFrame {
+        streamFrame(AssistantStreamFrame(
+            type: .start, attemptId: attempt, revision: revision, turn: 3, step: 1,
+            startedAfterSeq: 36, index: nil, time: nil, chunk: nil, outcome: nil
+        ))
+    }
+
+    private func chunk(_ attempt: String, revision: Int64, index: Int64, text: String?) -> MuxFrame {
+        streamFrame(AssistantStreamFrame(
+            type: .chunk, attemptId: attempt, revision: revision, turn: nil, step: nil,
+            startedAfterSeq: nil, index: index, time: nil,
+            chunk: AssistantStreamChunkBody(
+                type: .blockStart,
+                index: index,
+                blockType: "text",
+                block: text.map { .object(["type": .string("text"), "text": .string($0)]) }
+            ),
+            outcome: nil
+        ))
+    }
+
+    private func end(_ attempt: String, revision: Int64, kind: String, seq: Int64?) -> MuxFrame {
+        streamFrame(AssistantStreamFrame(
+            type: .end, attemptId: attempt, revision: revision, turn: nil, step: nil,
+            startedAfterSeq: nil, index: 8, time: nil, chunk: nil,
+            outcome: AssistantStreamOutcome(
+                kind: AssistantStreamOutcomeKind(rawValue: kind),
+                eventType: "assistant/message",
+                seq: seq
+            )
+        ))
+    }
+
+    // MARK: - Tests
+
+    @Test("the captured stream folds without crashing, and its missing seq shows as a gap")
+    func capturedFixtureFolds() throws {
+        let builder = try capturedConversation()
+
+        // Twelve frames carry ten durable events: the snapshot replays two, eight arrive live.
+        #expect(builder.events.count == 10)
+        // The capture is one frame per kind, so 34 is simply absent — a gap by the wire's own
+        // ordering, and the flag is the correct reading rather than a defect.
+        #expect(builder.hasGap)
+
+        // The prompt and the answer, in seq order, and no preview left over.
+        #expect(builder.messages.map(\.role) == ["user", "assistant"])
+        #expect(builder.messages.allSatisfy { !$0.isProvisional })
+        #expect(builder.messages.allSatisfy { !$0.text.isEmpty })
+    }
+
+    @Test("a duplicate seq is ignored rather than rendered twice")
+    func duplicateSeqIgnored() throws {
+        var builder = ConversationBuilder2()
+        let frame = try capturedFrame("event/user/message")
+        builder.fold(frame)
+        let afterFirst = builder.messages
+
+        builder.fold(frame)
+        builder.fold(frame)
+
+        #expect(builder.messages == afterFirst)
+        #expect(builder.messages.count == 1)
+        #expect(builder.events.count == 1)
+    }
+
+    @Test("a gap in seq sets the flag, and a back-filled page does not")
+    func gapSetsFlag() {
+        var builder = ConversationBuilder2()
+        builder.fold(eventFrame(event("turn/start", seq: 5)))
+        builder.fold(eventFrame(event("step/start", seq: 6)))
+        #expect(!builder.hasGap)
+
+        builder.fold(eventFrame(event("step/end", seq: 8)))
+        #expect(builder.hasGap)
+
+        // Paging in what was missing is a merge, not a second gap: the flag stays as it was.
+        builder.merge([event("turn/end", seq: 7)])
+        #expect(builder.events.count == 4)
+        #expect(builder.hasGap)
+    }
+
+    @Test("an attempt whose revision goes backwards is dropped, not rendered")
+    func staleAttemptDropped() {
+        var builder = ConversationBuilder2()
+        builder.fold(start("a1", revision: 5))
+        builder.fold(chunk("a1", revision: 6, index: 0, text: "half"))
+        #expect(builder.messages.count == 1)
+
+        builder.fold(chunk("a1", revision: 4, index: 1, text: "stale"))
+
+        // The attempt is dropped whole, so the partial preview goes with it and nothing later
+        // for that attempt can revive it.
+        #expect(builder.messages.isEmpty)
+        builder.fold(chunk("a1", revision: 9, index: 2, text: "late"))
+        #expect(builder.messages.isEmpty)
+    }
+
+    @Test("a committed attempt leaves its durable record standing exactly once")
+    func committedAttemptDoesNotDuplicate() {
+        // Durable first, settlement after: the captured order.
+        var settled = ConversationBuilder2()
+        settled.fold(eventFrame(assistantMessage("answer", seq: 38)))
+        settled.fold(start("a1", revision: 19))
+        settled.fold(chunk("a1", revision: 20, index: 0, text: "partial"))
+        settled.fold(end("a1", revision: 28, kind: "committed", seq: 38))
+
+        #expect(settled.messages.count == 1)
+        #expect(settled.messages.first?.text == "answer")
+        #expect(settled.messages.first?.isProvisional == false)
+
+        // A frame for the attempt arriving after its end is dropped, not resurrected.
+        settled.fold(chunk("a1", revision: 29, index: 1, text: "late"))
+        #expect(settled.messages.count == 1)
+
+        // Settlement first, durable record after: never neither, then never both.
+        var pending = ConversationBuilder2()
+        pending.fold(start("a1", revision: 19))
+        pending.fold(chunk("a1", revision: 20, index: 0, text: "partial"))
+        pending.fold(end("a1", revision: 28, kind: "committed", seq: 38))
+        #expect(pending.messages.count == 1)
+        #expect(pending.messages.first?.isProvisional == true)
+
+        pending.fold(eventFrame(assistantMessage("answer", seq: 38)))
+        #expect(pending.messages.count == 1)
+        #expect(pending.messages.first?.text == "answer")
+        #expect(pending.messages.first?.isProvisional == false)
+
+        // An outcome naming no durable record is discarded rather than left standing.
+        var abandoned = ConversationBuilder2()
+        abandoned.fold(start("a1", revision: 19))
+        abandoned.fold(end("a1", revision: 20, kind: "aborted", seq: nil))
+        #expect(abandoned.messages.isEmpty)
+    }
+
+    @Test("paging older history merges by seq without duplicates or reordering")
+    func pagingMergesWithoutDuplicates() {
+        var builder = ConversationBuilder2()
+        builder.merge([
+            userMessage("b", seq: 11),
+            assistantMessage("c", seq: 12),
+        ])
+        #expect(builder.messages.map(\.text) == ["b", "c"])
+
+        // The page overlaps what is held and reaches one event further back.
+        builder.merge([userMessage("a", seq: 10), userMessage("b", seq: 11)])
+
+        #expect(builder.messages.map(\.text) == ["a", "b", "c"])
+        #expect(builder.events.count == 3)
+    }
+
+    @Test("provisional text is not rendered twice when a chunk index repeats")
+    func provisionalTextNotRenderedTwice() {
+        var builder = ConversationBuilder2()
+        builder.fold(start("a1", revision: 1))
+        builder.fold(chunk("a1", revision: 2, index: 0, text: "Hel"))
+        builder.fold(chunk("a1", revision: 2, index: 0, text: "Hel"))
+        builder.fold(chunk("a1", revision: 3, index: 1, text: "lo"))
+
+        #expect(builder.messages.count == 1)
+        #expect(builder.messages.first?.isProvisional == true)
+        #expect(builder.messages.first?.text == "Hello")
+    }
+
+    @Test("an empty builder renders nothing")
+    func emptyBuilderRendersNothing() {
+        let builder = ConversationBuilder2()
+        #expect(builder.messages.isEmpty)
+        #expect(builder.events.isEmpty)
+        #expect(!builder.hasGap)
+    }
+
+    @Test("an event with no message of its own is kept whole, not dropped")
+    func unmodelledEventPayloadKept() throws {
+        let builder = try capturedConversation()
+
+        // `agent/inbox/spliced` renders no message, and its payload is still there in full.
+        let spliced = try #require(builder.events[32])
+        #expect(spliced.type == "agent/inbox/spliced")
+        #expect(spliced.data["target"]?.stringValue != nil)
+        #expect(spliced.data["inserted"]?.arrayValue?.count == 1)
+        #expect(builder.messages.count == 2)
+    }
+}
