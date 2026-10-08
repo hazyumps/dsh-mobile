@@ -66,6 +66,13 @@ struct HostsView: View {
 
     private var hostList: some View {
         List {
+            // A refused pair used to be visible only inside the pairing sheet,
+            // which meant an automatic pair that failed looked exactly like one
+            // that never ran. Say it where the hosts are.
+            if case .refused(let reason) = model.pairingOutcome {
+                Label(reason, systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.secondary)
+            }
             ForEach(model.hosts) { host in
                 NavigationLink(value: host) {
                     VStack(alignment: .leading, spacing: 4) {
