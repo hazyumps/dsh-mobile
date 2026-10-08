@@ -99,10 +99,17 @@ and with a revoked token. Both are client-side; the relay behaves correctly.
    exit waits forever — which is exactly the shape observed: the budget never
    reports, and neither does anything else.
 
-   So the next look is `MuxClient`'s failure and close paths and
-   `URLSessionRelaySocket`'s `close`/`cancel`, not `connect()` and not
-   URLSession. A probe that cancels/closes a `URLSessionWebSocketTask` right
-   after a refused challenge, under a deadline, would confirm it in one run. Start by finding which await is actually parked: instrument
+   So the next look is `MuxClient`'s failure and stream-completion paths, not
+   `connect()` and not URLSession. `URLSessionRelaySocket.close()` is also
+   synchronous (`RelayTransport.swift:450` — it calls
+   `task.cancel(with:reason:)`, which returns Void), so closing is not the
+   park either. That is four eliminations by reading: the transport's open, its
+   close, `send`, and `receive`. What is left is whatever `MuxClient` awaits
+   when it fails streams or waits for its drain loop to end — which is no
+   longer readable by inspection, because it depends on which task is joined.
+   Instrument it: a print at each await boundary in `MuxClient`'s failure path
+   and its drain loop, then the wrong-pin reproduction, names the parked wait
+   in one run. Start by finding which await is actually parked: instrument
    `ConnectionCoordinator.connect()` with a print at each await boundary and run
    the wrong-pin reproduction below — that will name the parked wait in one run
    instead of another round of inference. Suspects, in order: a task joined on
