@@ -51,6 +51,32 @@ builder probably treats as unmodelled today — check `unmodelledEvents`), rende
 card above the composer for `name == "ask_user_question"`, and wire its buttons to
 `answer(...)`, which is already built and waiting.
 
+**Round 89: the card renders, and the answer RPC is accepted — with one caveat
+worth knowing.** The question card now appears for a question that arrived inside
+the follow *snapshot*, which is the fix from round 88 working.
+
+Answering the same question through the live relay returned:
+
+```json
+{"ok":true,"value":false}
+```
+
+So `UserQuestionsAnswerResult` is a plain `Bool`, and `ok: true` with `value:
+false` is **not** a transport failure — the call was accepted. The likely reading
+of `false` is that there was no longer a pending question to answer: that scratch
+question had been waiting about twenty-five minutes, and the tool call had
+presumably been abandoned. Do not treat `false` as "the answer failed to send";
+treat it as "the host did not apply it", and surface that distinction rather than
+claiming success.
+
+What is still not demonstrated end to end is the agent *receiving* an answer,
+because the only question available had gone stale. A fresh scratch session asking
+a fresh question would settle it in one run.
+
+Also captured the capture script: `/tmp/capture-question.cjs`, and the scratch
+session `session-11be456b-80a5-4bc6-bc4d-af77c28e1ffb` still has the pending
+question, so it remains a valid fixture for the card.
+
 **Round 83 correction: the question's wire shape is still unknown, and that is
 the actual blocker.** Reading further changed the picture:
 
