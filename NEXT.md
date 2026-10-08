@@ -44,6 +44,36 @@ decoding below the UI.
    because `StubRelayTransport.openSocket` cannot hang. A stub knob would
    remove the last non-stub double in `StateTests.swift`.
 
+## Two defects the live smoke run found, both unfixed
+
+Found by running the real coordinator against the live relay with a wrong pin
+and with a revoked token. Both are client-side; the relay behaves correctly.
+
+1. **A refused TLS challenge hangs `connect()` forever.** Wrong pin → the call
+   never returns, no output past the credential line, and neither the 10 s
+   establishment nor the 10 s readiness budget fires (still hung at 25 s). The
+   mechanism, inferred from the code because no stack was obtainable:
+   `URLSessionWebSocketTask` never resumes the continuation after
+   `.cancelAuthenticationChallenge`, and `ConnectionCoordinator.withBudget`
+   races the operation inside a `withThrowingTaskGroup`, which awaits *all*
+   children before its scope exits — so a child parked on an unresumed
+   continuation cannot be timed out or cancelled. Consequence: SPEC §6.9's
+   "TLS pin mismatch → stop, show certificate changed, offer re-pair" row is
+   unreachable; the app would hang instead of reporting `hostUnavailable`.
+   Note this is *not* what `0c79bea` fixed: that made the error kind travel
+   correctly, but the kind never arrives because nothing returns.
+2. **A revoked credential reads as retryable.** After revoking the device, a
+   connect exits with `status: offline` and
+   `transport interruption: URLError -1011`, and `offline` is recoverable
+   without user action — which SPEC §6.9 forbids for a relay 403. The RPC path
+   maps 403 to "pair again"; the mux *upgrade* path does not.
+
+Also worth keeping: **loopback proves nothing about authentication.** From
+`127.0.0.1` the relay serves `/api` with a garbage token and with no
+`Authorization` header at all. Any token or pairing work must be verified
+against the LAN address in the certificate's SANs (`https://10.1.0.138:3443`),
+which is where the revoke → `403 {"error":"forbidden"}` was actually observed.
+
 ## Then the chat screen
 
 **Reducers: settled.** `State/ConversationBuilder.swift` stands. The rebuilt
