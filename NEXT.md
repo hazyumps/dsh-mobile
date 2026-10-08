@@ -31,6 +31,34 @@ plainly missing — tool cards, permissions, attachments, slash commands, model
 selection — plus history paging, draft persistence, and the summaries. Anything
 claiming "v1 complete" before those is overstating it.
 
+### Verified in dark mode, and the answer path seen in words (round 104)
+
+Relaunched the simulator in **dark appearance** with that conversation open, and
+one screenshot answered two questions:
+
+- **Dark mode is fine.** Bubbles, links, the question card and the composer all
+  render correctly against the dark background, so the SPEC 1 "system light/dark
+  appearance" claim stops being an assumption.
+
+- **The answer path is proven in text, not just in events.** The transcript shows
+  the agent's own reasoning and reply:
+
+  > The user answered "Blue". ... The answer arrived. Now... I should just
+  > acknowledge briefly.
+  > **Blue it is.**
+
+  Round 91 saw `tool/result` and a continuation and inferred the rest; this is the
+  agent saying it received *Blue*. Answering now rests on visible evidence.
+
+**And it exposed a real gap: a question answered elsewhere keeps its card.** The
+Blue/Red card is still on screen in that capture, because the app only clears it
+when *the app itself* sends the answer. Answered on the computer, timed out, or
+answered from another device, and the phone keeps showing buttons that do nothing.
+
+The fix is small and the signal already arrives: `tool/result` events come down the
+same stream, and a `tool/result` whose `callId` matches a pending question is the
+resolution. Clearing on that covers timeouts too, without inventing a new rule.
+
 ### `session/control` is the projections stream (round 98)
 
 Probed it with deliberately empty args and it opened straight away — no arguments
