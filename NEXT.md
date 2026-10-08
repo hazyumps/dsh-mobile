@@ -74,11 +74,17 @@ and with a revoked token. Both are client-side; the relay behaves correctly.
    - `/tmp/ws-probe.swift` — a pending `receive()` **resumes on its own in
      0.02 s** with `NSURLErrorDomain Code=-999 "cancelled"`;
    - `/tmp/ws-probe2.swift` — and so does a pending `send()`, in the same
-     instant, `-999` as well.
+     instant, `-999` as well;
+   - `/tmp/ws-probe3.swift` — and so do a `receive()` and a `send()` issued
+     *after* the task has already failed (`-999` at the moment of the call,
+     three seconds after the refusal). A stopped agent reported an 18-second
+     park on a late `receive()`; it does not reproduce, and its own note says
+     that run was cancelled at t=0, so treat it as an artefact rather than a
+     lead.
 
-   URLSession parks nothing, on either call. **The hang is in our code**, and
-   both candidate fixes built on the framework theory were aimed at the wrong
-   layer. Start by finding which await is actually parked: instrument
+   URLSession parks nothing, on any call, early or late. **The hang is in our
+   code**, and both candidate fixes built on the framework theory were aimed at
+   the wrong layer. Start by finding which await is actually parked: instrument
    `ConnectionCoordinator.connect()` with a print at each await boundary and run
    the wrong-pin reproduction below — that will name the parked wait in one run
    instead of another round of inference. Suspects, in order: a task joined on
