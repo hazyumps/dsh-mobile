@@ -171,7 +171,7 @@ struct Options {
 
         var description: String {
             switch self {
-            case .missing(let flag): "--\(flag) is required"
+            case .missing(let name): "\(name) is required"
             case .value(let flag): "--\(flag) needs a value"
             case .notHTTPS(let scheme): "--origin must be https, got \(scheme)"
             }
@@ -200,8 +200,8 @@ struct Options {
             }
         }
 
-        guard let originValue = origin else { throw ParseError.missing("origin") }
-        guard let pinValue = pin else { throw ParseError.missing("pin") }
+        guard let originValue = origin else { throw ParseError.missing("--origin") }
+        guard let pinValue = pin else { throw ParseError.missing("--pin") }
         guard let url = URL(string: originValue) else { throw ParseError.value("origin") }
         // SPEC §3.2: v1 pins the TLS origin; a plain-HTTP `plainUrl` is ignored.
         guard url.scheme?.lowercased() == "https" else {
