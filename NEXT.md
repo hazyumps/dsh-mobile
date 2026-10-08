@@ -30,12 +30,16 @@ decoding below the UI.
    `RelayTransportError` instead of a `String`, update both throw sites, then
    delete the prefix match. Expect `StateTests` to construct
    `.socketFailed(detail:)` and need updating with it.
-2. **The `$events` ready frame is decoded as `.unknown`.** No fixture contains
-   one, so `ConnectionCoordinator` matches on `value.typeName`. It is a real
-   captured shape: `{"type":"item","streamId":"1","value":{"type":"ready","clientId":"<36>","host":{"home":"<path>"}}}`.
-   Fix: add it to `Fixtures/`, register it in `Tests/DSHRemoteKitTests/Fixtures.swift`
-   (the coverage test insists), model `.ready` in `Models/StreamFrames.swift`,
-   and let the coordinator read it properly.
+2. **The `$events` ready frame is decoded as `.unknown`.** Deferred, not fixed,
+   on 2026-10-07: an agent was given this as a bounded task and produced
+   nothing across three rounds, so it was stopped. It is a modelling wart
+   rather than a defect — `ConnectionCoordinator` matches `value.typeName ==
+   "ready"` and that path is *proven live* by the smoke run, which cannot pass
+   without the readiness handshake succeeding. The captured shape is
+   `{"type":"item","streamId":"1","value":{"type":"ready","clientId":"<36>","host":{"home":"<path>"}}}`,
+   with the fields flattened beside `type` exactly as `snapshot` decodes at
+   `Models/StreamFrames.swift:200`. Do it only if something else needs the
+   typed accessor; do not let it delay the chat screen.
 3. **The establishment budget is tested through a test-local stall transport**
    because `StubRelayTransport.openSocket` cannot hang. A stub knob would
    remove the last non-stub double in `StateTests.swift`.
