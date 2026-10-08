@@ -18,6 +18,10 @@ public actor ChatSession {
 
     private var builder = ConversationBuilder()
     private var pump: Task<Void, Never>?
+    /// Questions the harness is waiting on. Keyed by question id — two tool calls
+    /// cannot ask the same id without one shadowing the other, which is the right
+    /// failure for a UI that has to show one card per question anyway.
+    private var questions: [String: PendingQuestion] = [:]
 
     /// - Parameters:
     ///   - client: the mux client for a connected host.
@@ -112,7 +116,28 @@ public actor ChatSession {
     // MARK: - Internals
 
     private func fold(_ frame: MuxFrame) {
+        // A question arrives as a durable `tool/call`, so it is picked out here
+        // rather than by the builder: the builder's job is the transcript, and a
+        // pending question is state the screen has to act on.
+        if let event = frame.value?.event,
+           let asked = PendingQuestion.questions(inToolCall: event.data) {
+            for question in asked {
+                questions[question.id] = question
+            }
+        }
         builder.apply(frame)
+    }
+
+    /// Questions waiting on an answer, oldest first by id order of arrival.
+    public var pendingQuestions: [PendingQuestion] {
+        questions.values.sorted { $0.id < $1.id }
+    }
+
+    /// Drops a question once its answer has been sent. The host keeps no record
+    /// of "answered" that this type can see, so the screen says so explicitly
+    /// rather than the card lingering until a reconnect.
+    public func markAnswered(questionId: String) {
+        questions.removeValue(forKey: questionId)
     }
 
     private func clearPump() {
