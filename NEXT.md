@@ -212,12 +212,38 @@ and with a revoked token. Both are client-side; the relay behaves correctly.
    nor fails, and `task.send` waits forever — which is every symptom, including
    the defer never running and the budget being unable to unwind the closure.
 
-   **Next: instrument the delegate, not the caller.** Two prints inside
-   `urlSession(_:didReceive:completionHandler:)` — one on entry, one after the
-   pin comparison and immediately before `completionHandler(...)` — then the
-   wrong-pin reproduction. If the first prints and the second does not, the park
-   is the pin computation, and the fix is there: it must not block the delegate
-   queue. Start by finding which await is actually parked: instrument
+   **Round 44: the delegate is innocent, and this is the sharpest fact so far.**
+   Instrumenting `urlSession(_:didReceive:completionHandler:)` itself, then the
+   wrong-pin reproduction:
+
+   ```
+   [probe] delegate: computing SPKI
+   [probe] delegate: comparing pins
+   [probe] delegate: mismatch, refusing
+   ```
+
+   All three print, so the completion handler **is** called and the challenge
+   **is** refused, promptly. Combined with round 42 — where `open` printed up to
+   `calling send` and nothing after — the picture is now unambiguous:
+
+   > the TLS challenge is refused in time, and `task.send` still never returns.
+
+   The identical call, in a standalone probe, throws `-999` immediately. So the
+   park is **not** in TLS, not in the delegate, not in the transport, not in the
+   budget, and not in `send`'s implementation — the difference is the runtime
+   context the call is made from.
+
+   **What differs, and is unexplored:** in the app the send is issued from an
+   **actor** (`MuxClient`) that has, moments earlier, started a **concurrent
+   receive loop against the same task**, and registered a continuation whose
+   `onTermination` spawns another `Task`. None of the five probes reproduced
+   that combination — they used free functions and a detached `Task`.
+
+   **Next experiment, and it is small:** an `actor` that resumes a task, starts
+   its receive loop in a `Task`, then `try await task.send(…)` — with the same
+   refused challenge. If that parks, the cause is the actor/reentrancy
+   interaction and not URLSession at all, and the fix will be in how `MuxClient`
+   sequences its first send against its receive loop. Start by finding which await is actually parked: instrument
    `ConnectionCoordinator.connect()` with a print at each await boundary and run
    the wrong-pin reproduction below — that will name the parked wait in one run
    instead of another round of inference. Suspects, in order: a task joined on
