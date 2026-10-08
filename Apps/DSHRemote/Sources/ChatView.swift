@@ -126,25 +126,21 @@ struct ChatView: View {
     /// Sends one answer and drops the card, whichever way it went — a failed
     /// answer is reported rather than left sitting under a dead button.
     private func answer(_ question: PendingQuestion, selecting selected: [String]) async {
-        var applied = false
         do {
-            applied = try await model.answerQuestion(
+            // The returned Bool is NOT a reliable "applied" signal: a live
+            // round-trip answered a question successfully — the tool returned and
+            // the agent continued — while still reporting `false`. So an accepted
+            // call clears the card, and the value is not shown to the user rather
+            // than being used to claim something untrue in either direction.
+            _ = try await model.answerQuestion(
                 sessionId: sessionId,
                 callId: question.callId,
                 questionId: question.id,
                 selected: selected
             )
+            await session?.markAnswered(questionId: question.id)
         } catch {
             sendError = "That answer may not have been sent. It will not be resent."
-        }
-        if applied {
-            await session?.markAnswered(questionId: question.id)
-        } else if sendError == nil {
-            // The call was accepted but the host did not apply it — usually a
-            // question that was already abandoned. Keep the card so the answer can
-            // be tried again, and say what actually happened rather than claiming
-            // it went through.
-            sendError = "The harness did not apply that answer. It may have moved on."
         }
         questions = await session?.pendingQuestions ?? []
     }
