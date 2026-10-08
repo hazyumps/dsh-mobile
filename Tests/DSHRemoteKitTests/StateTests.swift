@@ -567,9 +567,11 @@ func unpairedCoordinatorRefusesLocally() async throws {
     let error = try #require(thrown as? ConnectionCoordinator.ConnectError)
     #expect(error.status == .pairingRequired)
     #expect(await coordinator.status == .pairingRequired)
+    #expect(await coordinator.lastError == error)
     // SPEC §6.2 makes the bearer header mandatory on every relay request, so there is
-    // nothing to try: no socket was asked for.
+    // nothing to try: no socket was asked for, and no generation was burned.
     #expect(await transport.openedSocketRequests.isEmpty)
+    #expect(await coordinator.generationCount == 0)
 }
 
 // MARK: - 7. Clean shutdown

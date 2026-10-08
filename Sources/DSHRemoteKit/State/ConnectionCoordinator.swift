@@ -350,12 +350,9 @@ public actor ConnectionCoordinator {
 
         guard case .bearer = origin.authorization else {
             // SPEC §6.2: every relay request carries the bearer token, so an unpaired
-            // device has nothing to connect with. Refusing locally beats a guaranteed
-            // 403 and beats a connect that hangs on a socket the relay will drop.
-            let error = ConnectError.rpc(.credentialRejected(relayError: nil, status: 403))
-            status = error.status
-            lastError = error
-            throw error
+            // device has nothing to connect with. Refusing locally beats a guaranteed 403
+            // and beats a connect that hangs on a socket the relay will drop.
+            throw await abandon(.rpc(.credentialRejected(relayError: nil, status: 403)))
         }
 
         generationCount += 1
@@ -368,8 +365,6 @@ public actor ConnectionCoordinator {
             self.connection = connection
             status = .connected
             return connection
-        } catch let failure as ConnectError {
-            throw await abandon(failure)
         } catch {
             throw await abandon(Self.failure(from: error))
         }
@@ -377,9 +372,9 @@ public actor ConnectionCoordinator {
 
     /// Discards a failed attempt and moves the status off `connecting`.
     ///
-    /// Every throw path goes through here, which is what makes "a failure never leaves
-    /// the app claiming to be trying" a property of the type rather than of each call
-    /// site.
+    /// Every throw path in ``connect()`` goes through here, which is what makes "a failure
+    /// never leaves the app claiming to be trying" a property of the type rather than of
+    /// each call site.
     private func abandon(_ failure: ConnectError) async -> ConnectError {
         await teardown()
         activeGeneration = nil
