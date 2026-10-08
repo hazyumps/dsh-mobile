@@ -39,6 +39,26 @@ still open:
 
 The test file was removed rather than left failing; the tree is green at 163.
 
+### The app layer, read on 2026-10-08 so `ChatView` is a one-pass write
+
+- `AppModel` (`Apps/DSHRemote/Sources/AppModel.swift`) is `@Observable final class`
+  with `status`, `hosts`, `sessions`, `sessionListError`, `isLoadingSessions`,
+  `pairingOutcome`, `deviceName`, `isClaiming`, `claimError` — and
+  **`private var coordinator: ConnectionCoordinator?`**.
+- **That privacy is the one thing that needs a change before the screen can exist:**
+  the view cannot reach the coordinator to build a `ChatSession`, so `AppModel`
+  needs a method such as `func chatSession(for sessionId: String) async -> ChatSession?`
+  that wraps `ChatSession.connected(to:sessionId:)`. Sending uses
+  `coordinator.prompt(sessionId:text:)`.
+- `SessionsView` is a `List` over `model.sessionGroups` with a **private
+  `SessionRow`**, and it has **no `NavigationStack` yet** — so the push has to be
+  added in `SessionsView` itself (the row is private to that file), wrapping the
+  list and giving each row a `navigationDestination`.
+- The chat screen needs: a scroll of `session.messages` (each carrying `role`,
+  `text`, `isProvisional`, `reasoning`), a composer calling `prompt`, a
+  "history has a gap" notice when `hasGap`, and a streaming indicator from
+  `isStreaming`. None of that needs kit changes beyond the accessor above.
+
 Everything below is the older, still-accurate work list.
 
 The app builds, pairs a harness, and lists real sessions. Below the UI everything
