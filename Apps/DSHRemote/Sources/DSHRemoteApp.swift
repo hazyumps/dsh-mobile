@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 /// The app's entry point. V1 navigation is Hosts → Sessions → Chat, so the app
@@ -10,6 +11,19 @@ struct DSHRemoteApp: App {
         WindowGroup {
             HostsView()
                 .environment(model)
+                .task {
+                    // Verification affordance, debug builds only: a harness can
+                    // seed pairing by passing `DSH_PAIRING_PAYLOAD`, so the whole
+                    // flow can be exercised on a simulator with no keyboard and no
+                    // GUI. It runs the ordinary `claim` path — the same code the
+                    // paste field calls — rather than a parallel one.
+                    #if DEBUG
+                    if let pasted = ProcessInfo.processInfo.environment["DSH_PAIRING_PAYLOAD"],
+                       !pasted.isEmpty {
+                        await model.claim(pasted: pasted)
+                    }
+                    #endif
+                }
         }
     }
 }
