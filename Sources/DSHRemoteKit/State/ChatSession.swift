@@ -30,6 +30,26 @@ public actor ChatSession {
         self.streamId = "follow-\(sessionId)"
     }
 
+    /// Builds a session on an already-connected coordinator's socket.
+    ///
+    /// Returns `nil` when there is no live connection, which is the honest answer:
+    /// a screen should not construct a chat that cannot follow anything, and the
+    /// coordinator's `status` is what explains why.
+    ///
+    /// **Known gap, deliberately left here rather than discovered later:** this
+    /// type follows a session over the mux stream, but *sending* a prompt goes
+    /// over the unary RPC path (`session/prompt`), which this type does not hold.
+    /// So the composer needs either the coordinator passed in alongside, or a
+    /// separate prompt-sending type. Reading a conversation and writing to one
+    /// are two capabilities, and this type currently has the first.
+    public static func connected(
+        to coordinator: ConnectionCoordinator,
+        sessionId: String
+    ) async -> ChatSession? {
+        guard let handle = await coordinator.activeStream() else { return nil }
+        return ChatSession(client: handle.client, sessionId: sessionId)
+    }
+
     // MARK: - Reading
 
     public var messages: [ConversationMessage] { builder.messages }
