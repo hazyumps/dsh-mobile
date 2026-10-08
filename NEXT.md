@@ -63,6 +63,10 @@ and with a revoked token. Both are client-side; the relay behaves correctly.
    Note this is *not* what `0c79bea` fixed: that made the error kind travel
    correctly, but the kind never arrives because nothing returns.
 
+   **Reproduced twice, independently.** The smoke agent found it first; a second
+   agent then reproduced it against the live relay and measured **41 s+ with
+   idle threads** before being stopped. So the hang is not a timing artefact.
+
    **Checked the obvious fix, and it is not a one-liner.** The challenge handler
    at `Network/RelayTransport.swift:368-392` implements the *session-level*
    delegate method, which receives no task — so there is nothing there to
@@ -71,6 +75,14 @@ and with a revoked token. Both are client-side; the relay behaves correctly.
    task there (root fix, three cancel sites to change), or stop the budget race
    from awaiting a parked child (contains it, leaves a parked task). Do the
    first if possible.
+
+   **What the fix hinges on, and was still being probed when the attempt was
+   stopped:** what URLSession actually does to a `URLSessionWebSocketTask`
+   whose authentication challenge was cancelled — whether the receive
+   continuation is resumed with an error, never resumed, or resumed only when
+   the task is cancelled. Settle that first (a tiny standalone URLSession
+   probe against the relay with a wrong pin answers it), because both candidate
+   fixes depend on it.
 2. **A revoked credential reads as retryable.** After revoking the device, a
    connect exits with `status: offline` and
    `transport interruption: URLError -1011`, and `offline` is recoverable
