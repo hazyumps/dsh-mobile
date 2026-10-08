@@ -159,11 +159,34 @@ and with a revoked token. Both are client-side; the relay behaves correctly.
    report: `withThrowingTaskGroup` may not exit its scope while a child is
    parked, so the expiry is computed and then thrown away.
 
-   So the remaining search is one level down: instrument `MuxClient.open`
-   (`Network/MuxClient.swift:159`) — `ensureSocket`, then
-   `try await liveSocket.send(…)` — and the receive loop it starts, and the
-   wrong-pin run will name the parked await in one go. Everything above
-   `client.open` is now proven innocent by measurement rather than by reading. Start by finding which await is actually parked: instrument
+   **Narrowed to one call (round 42).** Instrumenting `MuxClient.open` itself,
+   with the wrong-pin reproduction:
+
+   ```
+   [probe] open: before ensureSocket
+   [probe] open: socket ready
+   [probe] open: calling send
+   … and nothing else
+   ```
+
+   `ensureSocket` returns promptly; **`liveSocket.send(…)` never returns and
+   never throws.** So the parked await is `URLSessionRelaySocket.send` →
+   `task.send(.string(…))`.
+
+   **And the obvious explanation is refuted.** A probe with the app's exact call
+   order — resume, start a pending `receive()`, then `send` — still throws
+   `-999` in 0.21 s (`/tmp/ws-probe4.swift`). So a concurrent receive is not what
+   changes `send`'s behaviour, and neither is the delegate or the session
+   configuration, which match.
+
+   What is left between the probe and the app is `MuxClient.startReceiveLoop`:
+   the app's receive is a **loop**, and if it re-issues `receive()` on a dead
+   task without yielding, it can starve the cooperative pool that the pending
+   `send` continuation needs — a spin, not a park. That is the next thing to
+   instrument, and it is two lines: print inside the receive loop's `catch`, and
+   print its call count. If the count is climbing while `send` is parked, the fix
+   is to stop looping on a failed socket (or at minimum to yield), not to touch
+   the budget. Start by finding which await is actually parked: instrument
    `ConnectionCoordinator.connect()` with a print at each await boundary and run
    the wrong-pin reproduction below — that will name the parked wait in one run
    instead of another round of inference. Suspects, in order: a task joined on
