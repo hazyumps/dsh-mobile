@@ -311,15 +311,21 @@ and with a revoked token. Both are client-side; the relay behaves correctly.
    which is the bounded, actionable failure SPEC §6.9 asks for. The suite stayed
    green at 163 through the change.
 
-   **Still open, and now only a correctness question rather than a hang:** the
-   app's `MuxClient.open` issues `liveSocket.send(…)` and that call never
-   returns, while the same call in any standalone probe throws `-999` at once.
-   With the budget fixed, that surfaces as `establishmentTimedOut` instead of
-   silence, so it is no longer urgent — but a connect that always waits ten
-   seconds against a bad certificate is still wrong, and one abandoned task per
-   attempt is the price. The next step for it is instrumentation inside
-   `URLSessionRelaySocket.send` in the *app's* process, since the probe route is
-   exhausted. Start by finding which await is actually parked: instrument
+   **The residual, settled as far as it can be (round 48).** Instrumenting
+   `URLSessionRelaySocket.send` itself — the two-line passthrough — prints
+   `sock.send: enter` and then neither `returned` nor `threw`; the budget fires
+   and reports `establishmentTimedOut`. So **`task.send(.string(…))` never
+   returns inside this process**, while the identical call in six standalone
+   probes throws `-999` immediately. There is no code of ours left to blame: it
+   is URLSession's own call, parked under conditions the probes cannot recreate.
+
+   **Accepted, not chased.** The user-visible behaviour is now correct — a bad
+   certificate produces a bounded `hostUnavailable` with an offer to re-pair,
+   which is what §6.9 requires — and the cost is a full ten-second budget plus
+   one abandoned task per attempt. Reproducing it further means hunting a
+   framework-internal park with no reliable trigger, and that is a worse use of
+   effort than finishing the chat screen, which is what "usable v1" actually
+   lacks. Revisit only if a real device shows the ten-second delay mattering. Start by finding which await is actually parked: instrument
    `ConnectionCoordinator.connect()` with a print at each await boundary and run
    the wrong-pin reproduction below — that will name the parked wait in one run
    instead of another round of inference. Suspects, in order: a task joined on
