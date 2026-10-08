@@ -1,8 +1,32 @@
 # What is left for v1
 
-State as of 2026-10-07, round 13 of the goal "get a usable v1 iphone app".
-Everything here is committed and the suite is green (162 Swift Testing + 14
-XCTest). Read `SPEC.md` for the contract; this file is only the work list.
+State as of 2026-10-08, round 53 of the goal "get a usable v1 iphone app".
+Everything here is committed; the suite is green at 163 Swift Testing + 14
+XCTest. Read `SPEC.md` for the contract; this file is only the work list.
+
+## Start here
+
+The app builds, pairs a harness, and lists real sessions. Below the UI everything
+is proven against the live relay — see the smoke run below. **The one thing that
+makes it usable is the chat screen, and it is two files.**
+
+1. **`Sources/DSHRemoteKit/State/ChatSession.swift`** plus
+   `Tests/DSHRemoteKitTests/ChatSessionTests.swift`. The API you need, the two
+   argument shapes that cannot be guessed, and the four behaviours to test are
+   all written out under "The API a ChatSession implementer needs" below. Five
+   delegated attempts at this produced nothing — every one stalled on
+   rediscovering that API, which is why it is spelled out here. Write the file
+   first, then iterate; do not start by exploring.
+2. **`Apps/DSHRemote/Sources/ChatView.swift`** — a screen over the conversation
+   builder, which is finished and tested. `SessionsView` needs a navigation push.
+   The chat view's requirements are under "Then the chat screen".
+3. **Then the machine, not the code:** an Apple ID in Xcode for `DEVELOPMENT_TEAM`
+   (no signing identity exists here), or `xcodebuild -downloadPlatform iOS` to
+   get a simulator runtime. Both are under "Then the app has to leave this
+   machine".
+
+Two defects that were found and fixed, and one accepted residual, are recorded
+below with their measurements, so none of them needs rediscovering either.
 
 ## Proven against the live harness
 
