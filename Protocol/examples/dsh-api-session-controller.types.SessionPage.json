@@ -1,0 +1,17 @@
+{
+  "records": [
+    {
+      "type": "event",
+      "event": {
+        "type": "",
+        "seq": 1,
+        "time": 1,
+        "data": null,
+        "ignorable": true,
+        "sourceEventSeqs": null,
+        "surfaceOp": null
+      }
+    }
+  ],
+  "hasMore": true
+}

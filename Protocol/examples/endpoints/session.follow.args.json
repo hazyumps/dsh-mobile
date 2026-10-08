@@ -1,0 +1,14 @@
+{
+  "request": {
+    "address": {
+      "kind": "session",
+      "sessionId": ""
+    },
+    "assistantStream": true,
+    "maxMessages": 1,
+    "turnWindow": {
+      "minMessages": 1,
+      "minTurns": 1
+    }
+  }
+}

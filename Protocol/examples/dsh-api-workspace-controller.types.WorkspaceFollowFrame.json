@@ -1,0 +1,23 @@
+{
+  "type": "baseline",
+  "value": {
+    "items": [
+      {
+        "workspaceId": "",
+        "path": "",
+        "title": "",
+        "sessionIds": [
+          ""
+        ],
+        "createdAt": "",
+        "updatedAt": ""
+      }
+    ],
+    "archivedSessionIds": [
+      ""
+    ],
+    "pinnedSessionIds": [
+      ""
+    ]
+  }
+}

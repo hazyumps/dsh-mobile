@@ -1,0 +1,137 @@
+{
+  "type": "baseline",
+  "value": {
+    "projections": {
+      "dshUnnamed": {
+        "asOfSeq": 1,
+        "values": {
+          "inbox": {
+            "next-turn": [
+              null
+            ],
+            "next-step": [
+              null
+            ]
+          },
+          "agentPreset": "",
+          "title": "",
+          "todos": [
+            {
+              "content": "",
+              "status": "completed"
+            }
+          ],
+          "sessionListMetadata": {
+            "blank": true,
+            "lastPromptAt": 1
+          },
+          "imageLimits": {
+            "maxImageBytes": 1,
+            "maxImagesPerMessage": 1,
+            "maxMessageImageBytes": 1,
+            "maxImagePixels": 1,
+            "maxImageDimension": 1,
+            "mediaTypes": [
+              "image/png"
+            ]
+          },
+          "modelSelection": {
+            "lastUsed": {
+              "provider": "",
+              "model": "",
+              "reasoningEffort": ""
+            },
+            "next": {
+              "provider": "",
+              "model": "",
+              "reasoningEffort": ""
+            }
+          },
+          "permissions": {
+            "currentValue": ""
+          },
+          "subagentCatalog": [
+            {
+              "id": "",
+              "createdAt": 1,
+              "mode": "one-shot",
+              "label": ""
+            }
+          ],
+          "subagentTiming": {
+            "settledMs": 1,
+            "active": {
+              "since": 1,
+              "through": 1
+            },
+            "lastTurnCompleted": true
+          },
+          "subagent": {
+            "mode": "one-shot",
+            "label": "",
+            "seq": 1
+          },
+          "goal": {
+            "goal": {
+              "objective": "",
+              "phase": "active",
+              "blockedReason": {
+                "code": "",
+                "message": ""
+              },
+              "maxGoalRounds": 1,
+              "id": "",
+              "revision": 1
+            },
+            "roundsStarted": 1,
+            "createdAt": 1,
+            "updatedAt": 1
+          },
+          "userQuestions": {
+            "active": [
+              {
+                "callId": "",
+                "questions": [
+                  {
+                    "id": "",
+                    "question": "",
+                    "detail": "",
+                    "header": "",
+                    "options": [
+                      {
+                        "label": "",
+                        "description": ""
+                      }
+                    ],
+                    "multiSelect": true,
+                    "intent": {
+                      "kind": "plan-review",
+                      "approve": "",
+                      "callId": ""
+                    }
+                  }
+                ],
+                "state": "open"
+              }
+            ],
+            "settled": [
+              {
+                "callId": "",
+                "answers": [
+                  {
+                    "id": "",
+                    "selected": [
+                      ""
+                    ],
+                    "custom": ""
+                  }
+                ]
+              }
+            ]
+          },
+          "dshUnnamed": null
+        }
+      }
+    }
+  }
+}

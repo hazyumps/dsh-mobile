@@ -1,0 +1,40 @@
+{
+  "default": {
+    "provider": "",
+    "model": "",
+    "reasoningEffort": ""
+  },
+  "routableProviders": [
+    ""
+  ],
+  "groups": [
+    {
+      "id": "",
+      "name": "",
+      "models": [
+        {
+          "id": "",
+          "name": "",
+          "description": "",
+          "reasoning": {
+            "efforts": [
+              {
+                "id": "",
+                "name": "",
+                "description": ""
+              }
+            ],
+            "defaultEffort": ""
+          }
+        }
+      ]
+    }
+  ],
+  "failures": [
+    {
+      "id": "",
+      "name": "",
+      "message": ""
+    }
+  ]
+}

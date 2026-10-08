@@ -1,0 +1,11 @@
+{
+  "agentId": "",
+  "ref": {
+    "id": "",
+    "revision": 1
+  },
+  "request": {
+    "objective": "",
+    "maxGoalRounds": 1
+  }
+}

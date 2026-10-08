@@ -1,0 +1,11 @@
+[
+  {
+    "id": "",
+    "name": "",
+    "contextWindow": 1,
+    "maxTokens": 1,
+    "inputModalities": [
+      "text"
+    ]
+  }
+]

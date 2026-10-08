@@ -1,0 +1,12 @@
+{
+  "requestId": "",
+  "sessionId": "",
+  "mode": "queue",
+  "content": [
+    {
+      "type": "text",
+      "text": ""
+    }
+  ],
+  "clientTimeZone": ""
+}

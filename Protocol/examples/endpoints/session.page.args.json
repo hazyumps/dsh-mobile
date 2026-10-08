@@ -1,0 +1,15 @@
+{
+  "request": {
+    "address": {
+      "kind": "session",
+      "sessionId": ""
+    },
+    "throughSeq": 1,
+    "beforeSeq": 1,
+    "maxMessages": 1,
+    "turnWindow": {
+      "minMessages": 1,
+      "minTurns": 1
+    }
+  }
+}

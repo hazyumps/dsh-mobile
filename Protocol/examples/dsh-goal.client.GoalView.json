@@ -1,0 +1,15 @@
+{
+  "roundsStarted": 1,
+  "createdAt": 1,
+  "updatedAt": 1,
+  "activation": "armed",
+  "objective": "",
+  "phase": "active",
+  "blockedReason": {
+    "code": "",
+    "message": ""
+  },
+  "maxGoalRounds": 1,
+  "id": "",
+  "revision": 1
+}
