@@ -54,8 +54,21 @@ SPEC §3.1.
 - **No code-signing identity** (`security find-identity -v -p codesigning`
   reports none), so a device install needs an Apple ID in Xcode first — see
   above.
-- **CoreSimulator is older than this Xcode** (`1051.50.0` against `1171.7.0`),
-  so `xcodebuild` reports "Simulator device support disabled". Building for
-  `generic/platform=iOS Simulator` still succeeds, but *running* in a
-  simulator needs Xcode or CoreSimulator updated.
+- **No iOS simulator runtime is installed.** `xcrun simctl runtime list -v`
+  reports zero disk images. The two runtimes `xcodebuild` mentions
+  (`iOS-18-5`, `iOS-26-2`) are dangling references to images that are gone,
+  which is why it offers no simulator destination at all. The earlier
+  "CoreSimulator is out of date" message was a stale service job, and it
+  clears the first time `simctl` runs.
+
+  To run locally, install a runtime — several GB:
+
+  ```sh
+  xcodebuild -downloadPlatform iOS
+  ```
+
+  or Xcode → Settings → Components → iOS Simulator. Until one exists,
+  `-destination 'generic/platform=iOS Simulator'` still *builds*; it just
+  cannot *run*.
+
 
