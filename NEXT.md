@@ -343,8 +343,7 @@ cannot show.
 **`ChatSession.swift` exists as of round 56** (`d5de6ff`) and compiles: it opens
 the follow stream with the captured args shape, folds frames into a
 `ConversationBuilder`, and exposes `messages`, `hasGap`, `isStreaming`,
-`unmodelledEvents`. It is **untested** — the suite is green but nothing exercises
-it yet, and that is the first thing to fix.
+`unmodelledEvents`. It is **tested**: 8 tests across `ChatSessionTests.swift` (follow, snapshot baseline, idempotent start, stop, socket failure) and `ChatSessionQuestionTests.swift` (question arrival, clearing, duplicate events). Round 56 called it untested; that stopped being true in round 58.
 
 To write those tests without hunting: `StubRelayTransport(sockets:)` serves the
 mux socket, `StubRelaySocket` is an **actor** (so `await push(...)`, `await fail()`)
