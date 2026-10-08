@@ -294,7 +294,32 @@ and with a revoked token. Both are client-side; the relay behaves correctly.
    Why the app's `send` parks at all is **still unexplained** — six probes
    cannot reproduce it — but it no longer has to be solved first, and the
    containment fix is worth doing on its own merits: a budget that cannot fire
-   is worse than the bug it was meant to catch. Start by finding which await is actually parked: instrument
+   is worse than the bug it was meant to catch.
+
+   **Round 47: FIXED, and verified against the live relay.** `withBudget` now
+   races through a continuation with a gate (`BudgetGate`) that whichever side
+   finishes first claims; the loser is abandoned and the parked operation is
+   cancelled rather than joined. The wrong-pin run that used to hang for 41 s+
+   now reports, in about ten seconds:
+
+   ```
+   connect: FAILED
+   status: hostUnavailable (Host unavailable)
+   error: socket was not established within 10.0s
+   ```
+
+   which is the bounded, actionable failure SPEC §6.9 asks for. The suite stayed
+   green at 163 through the change.
+
+   **Still open, and now only a correctness question rather than a hang:** the
+   app's `MuxClient.open` issues `liveSocket.send(…)` and that call never
+   returns, while the same call in any standalone probe throws `-999` at once.
+   With the budget fixed, that surfaces as `establishmentTimedOut` instead of
+   silence, so it is no longer urgent — but a connect that always waits ten
+   seconds against a bad certificate is still wrong, and one abandoned task per
+   attempt is the price. The next step for it is instrumentation inside
+   `URLSessionRelaySocket.send` in the *app's* process, since the probe route is
+   exhausted. Start by finding which await is actually parked: instrument
    `ConnectionCoordinator.connect()` with a print at each await boundary and run
    the wrong-pin reproduction below — that will name the parked wait in one run
    instead of another round of inference. Suspects, in order: a task joined on
