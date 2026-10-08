@@ -62,6 +62,15 @@ and with a revoked token. Both are client-side; the relay behaves correctly.
    unreachable; the app would hang instead of reporting `hostUnavailable`.
    Note this is *not* what `0c79bea` fixed: that made the error kind travel
    correctly, but the kind never arrives because nothing returns.
+
+   **Checked the obvious fix, and it is not a one-liner.** The challenge handler
+   at `Network/RelayTransport.swift:368-392` implements the *session-level*
+   delegate method, which receives no task — so there is nothing there to
+   `cancel()` after refusing. Two real options: implement the task-level
+   `urlSession(_:task:didReceive:completionHandler:)` instead and cancel the
+   task there (root fix, three cancel sites to change), or stop the budget race
+   from awaiting a parked child (contains it, leaves a parked task). Do the
+   first if possible.
 2. **A revoked credential reads as retryable.** After revoking the device, a
    connect exits with `status: offline` and
    `transport interruption: URLError -1011`, and `offline` is recoverable
