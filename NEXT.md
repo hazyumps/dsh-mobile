@@ -13,12 +13,31 @@ the follow stream with the captured args shape, folds frames into a
 it yet, and that is the first thing to fix.
 
 To write those tests without hunting: `StubRelayTransport(sockets:)` serves the
-mux socket, `StubRelaySocket` has `push(text:)`, `push(json:)`, `fail(with:)` and
-`finish()`, and `capturedMuxFrame(_:)` in `Tests/DSHRemoteKitTests/StreamFrameTests.swift`
-loads a real frame by name from `Fixtures/mux-stream-frames.json` (names include
-`snapshot` and `event/turn/start`). Then: `session.start()`, push a snapshot,
-assert the messages appear; push a failure, assert the pump stops without taking
-the socket down; `stop()` and assert the stream was cancelled.
+mux socket, `StubRelaySocket` is an **actor** (so `await push(...)`, `await fail()`)
+with `push(text:)`, `push(json:)`, `fail(with:)` and `finish()`, and
+`muxFrameObject(_:)` in `Tests/DSHRemoteKitTests/StreamFrameTests.swift` returns a
+captured frame's raw JSON — which is what the socket wants, not a re-encoded
+`MuxFrame`.
+
+**Round 57 tried exactly that and it did not work — read this before repeating it.**
+A test file was written, compiled, and failed four expectations: the pushed
+snapshot never reached the builder. Two things were learned, one fixed and one
+still open:
+
+- **Fixed:** the fixture redacts each frame's captured id (`"streamId": "redacted"`),
+  and `MuxClient` drops any frame whose id is not registered — its leak guard,
+  working as designed. A test must rewrite `streamId` to the id the session
+  opened (`follow-\(sessionId)`).
+- **Still open:** even with the right id, a frame pushed *after* `start()` never
+  arrived. Two candidates, and checking them is the next step: whether
+  `StubRelaySocket.receive()` only hands over a message that was pushed while a
+  receive was **already waiting** (that would make the ordering impossible from a
+  test), or whether `MuxClient` withholds delivery until the stream's `ready`
+  frame — note the fixture has **no `ready` entry at all**, and a real mux stream
+  opens with one. The second is the more likely of the two and would also mean
+  `open` can be observed only after a ready frame.
+
+The test file was removed rather than left failing; the tree is green at 163.
 
 Everything below is the older, still-accurate work list.
 
