@@ -1,0 +1,830 @@
+import Foundation
+
+// The state layer's first piece: "connected to a host, here are its sessions".
+//
+// It sits exactly where SPEC §4's diagram puts it — above `DshRpcClient` and
+// `MuxClient`, below the stores — and it owns the one thing neither of those owns:
+// *when* a host counts as usable. Neither primitive may claim that on its own.
+// `MuxClient` knows a socket is open, and SPEC §6.4 is explicit that "The socket
+// opening alone is not readiness"; `DshRpcClient` has no connection at all. So the
+// readiness handshake, the two §6.4 budgets, and the mapping from a failure to the
+// word the user sees all live here.
+
+/// One host's connection, from `Connecting` to a usable `clientId`.
+///
+/// Owns exactly one ``MuxClient`` and one ``DshRpcClient`` for one origin (SPEC §4:
+/// "Use one active host connection, one `$events` stream…"). An `actor` rather than a
+/// `@MainActor` class, because nothing here is UI: SPEC §4 requires that "Network and
+/// reducer work must not block the main actor", and an actor that hops to the main
+/// actor for every frame would do exactly that.
+///
+/// ## What this type does not do
+///
+/// It does not reconnect. SPEC §6.4's jittered exponential backoff (0.5 s base, 10 s
+/// cap, stop on credential or pin failure) is the next slice; see the `Reconnect`
+/// MARK at the bottom of this file for the seam it will take. It also does not reduce
+/// conversation state (SPEC §6.5), page history, or store sessions — ``sessions()``
+/// returns what the host just said, and the store that puts it on screen is not this.
+public actor ConnectionCoordinator {
+    // MARK: - Budgets
+
+    /// SPEC §6.4's two connection budgets, in one value so they are visible together
+    /// and can be tightened in a test without pretending to be a policy engine.
+    ///
+    /// > Connection time budgets: 10 seconds for initial socket establishment, then 10
+    /// > seconds for ready.
+    ///
+    /// Note SPEC §6.4's own caveat: the installed harness's *observed* budget had not
+    /// been recorded when this was written, and the line is to be corrected to match
+    /// observation. Until it is, ten seconds is what the client enforces. These are
+    /// deadlines on the connection, not per-request `URLRequest` timeouts — which is
+    /// why `URLSessionRelayTransport` deliberately leaves `timeoutInterval` at the
+    /// session default.
+    public struct Budget: Sendable, Hashable {
+        /// Time allowed for the socket to be established and the `$events` open frame
+        /// to reach the wire.
+        public var establishmentSeconds: Double
+        /// Time allowed for the ready frame, measured from the moment the street is
+        /// open — i.e. from the return of the open call, not from the start of the
+        /// attempt.
+        public var readinessSeconds: Double
+
+        public init(establishmentSeconds: Double = 10, readinessSeconds: Double = 10) {
+            self.establishmentSeconds = establishmentSeconds
+            self.readinessSeconds = readinessSeconds
+        }
+
+        /// SPEC §6.4's stated budget.
+        public static let standard = Budget()
+    }
+
+    /// The origin, credential, and pin policy one connection is made with.
+    ///
+    /// Bundled rather than passed as three arguments because the three are never
+    /// chosen independently: SPEC §3.2 step 3 makes the payload's SPKI fingerprint
+    /// "the trust anchor for the pairing connection *and subsequent requests*", so the
+    /// credential and the pin arrive together from the pairing claim and travel
+    /// together from then on.
+    public struct Origin: Sendable, Hashable {
+        /// Relay origin, e.g. `https://192.0.2.10:3443`. SPEC §3.2 requires the TLS
+        /// origin in v1; `plainUrl` is ignored.
+        public var baseURL: URL
+        /// The device token from the pairing claim (SPEC §6.3). The token *is* the
+        /// whole credential — there is nothing else to present.
+        public var authorization: RelayAuthorization
+        /// Pin policy (SPEC §3.2 step 3, SPEC §6.3). Defaults to platform trust, which
+        /// is correct for a payload that carried no fingerprint.
+        public var pinning: RelayPinningPolicy
+
+        public init(
+            baseURL: URL,
+            authorization: RelayAuthorization,
+            pinning: RelayPinningPolicy = .platformTrust
+        ) {
+            self.baseURL = baseURL
+            self.authorization = authorization
+            self.pinning = pinning
+        }
+    }
+
+    /// Builds the transport each attempt runs on.
+    ///
+    /// A closure rather than one transport instance, so a reconnect (next slice) gets a
+    /// pristine connection instead of reusing one that just failed — and so a test can
+    /// hand out a scripted transport per attempt, which is what makes
+    /// "attempt 1 fails, attempt 2 succeeds" expressible at all.
+    ///
+    /// The coordinator's default is ``URLSessionRelayTransport``, which is the only
+    /// place a real socket can come from; every test replaces it with
+    /// ``StubRelayTransport`` and touches no network (SPEC §2 "Testing").
+    public typealias TransportFactory = @Sendable (Origin) -> any RelayTransport
+
+    /// A connection generation (SPEC §5 `ConnectionGeneration`, SPEC §6.5 "Reconnect
+    /// creates a new generation and replaces baselines").
+    ///
+    /// Fresh local, never the host's. Frames, tasks, and errors carry the generation
+    /// they belong to, so a late failure from an abandoned attempt cannot demote the
+    /// status of the attempt that replaced it. `UInt64` rather than a UUID because the
+    /// value is only ever compared and logged, and because SPEC §5 keeps host IDs
+    /// opaque but says nothing that would make a local counter unsafe.
+    public typealias Generation = UInt64
+
+    // MARK: - Errors
+
+    /// Why a connect attempt did not produce a usable connection, or why a call made
+    /// through one failed.
+    ///
+    /// Every case is something the app must say differently, which is why they are not
+    /// one `Error`. The mapping to ``ConnectionStatus`` is ``status``.
+    public enum ConnectError: Error, Sendable, Hashable, CustomStringConvertible {
+        /// The socket was not established within the establishment budget (SPEC §6.4).
+        /// The underlying attempt may still be in flight; the coordinator has already
+        /// abandoned and closed it.
+        case establishmentTimedOut(seconds: Double)
+        /// The socket opened but the ready frame did not arrive within the readiness
+        /// budget (SPEC §6.4). This is the case that exists precisely because "The
+        /// socket opening alone is not readiness": a relay that accepts the upgrade and
+        /// then says nothing is a host that is not there.
+        case readinessTimedOut(seconds: Double)
+        /// The transport failed before any status existed — no network path, or the
+        /// connection dropped.
+        case transportInterruption(detail: String)
+        /// SPEC §6.9 "TLS pin mismatch": stop, say the certificate changed, offer
+        /// re-pair. Never retried, never silently downgraded to CA validation.
+        case certificateChanged(detail: String)
+        /// A well-formed failure from an RPC exchange: a relay refusal, a rate limit, a
+        /// 404, or the host's own typed business error. Carried whole so the app can use
+        /// ``DshRPCError/guidance`` rather than a re-derived guess.
+        case rpc(DshRPCError)
+        /// An `error` frame arrived on the stream before readiness. SPEC §6.4 records
+        /// the shape (`{"type":"error","streamId":…,"error":{code,message,details}}`).
+        case streamRejected(streamId: String, detail: String)
+        /// A frame this build could not classify. SPEC §6.9 "Malformed response":
+        /// protocol incompatibility, retain state, do not crash.
+        case protocolIncompatible(reason: String)
+        /// The attempt was cancelled — by ``shutdown()`` or by the caller's task. Not an
+        /// error to show.
+        case cancelled
+        /// The ready frame arrived without a usable `clientId`, so no host request could
+        /// be addressed. SPEC §6.4 shows the field; a client that invents one would
+        /// silently address the wrong connection.
+        case readyFrameWithoutClientId
+
+        /// The word SPEC §3.1 puts on screen for this failure.
+        ///
+        /// The rule behind the mapping, in one place: a failure that means "this phone
+        /// cannot reach the host" is ``ConnectionStatus/offline``; a failure that means
+        /// "the host or the relay answered, and the answer was no" is
+        /// ``ConnectionStatus/hostUnavailable``; a refusal that only re-pairing can fix
+        /// is ``ConnectionStatus/pairingRequired``.
+        public var status: ConnectionStatus {
+            switch self {
+            case .establishmentTimedOut, .readinessTimedOut, .streamRejected,
+                 .protocolIncompatible, .readyFrameWithoutClientId:
+                .hostUnavailable
+
+            case .transportInterruption:
+                .offline
+
+            case .certificateChanged:
+                // A pin mismatch is not retryable and needs an explicit re-pair
+                // (SPEC §3.2, §6.9). SPEC §3.1 has no "Re-pair required" state, and
+                // `refreshStatus` keeps a hard `.pairingRequired` once it has been set;
+                // until then the honest word for "this host will not serve you" is
+                // Host unavailable.
+                .hostUnavailable
+
+            case .rpc(let error):
+                Self.status(for: error)
+
+            case .cancelled:
+                // Never presented. `refreshStatus` swallows it rather than letting a
+                // cancelled attempt paint a status.
+                .offline
+            }
+        }
+
+        /// The SPEC §3.1 status for a ``DshRPCError``. One mapping, shared by the
+        /// connect path and every call made through a live connection, so the two can
+        /// never disagree about what a 403 means.
+        public static func status(for error: DshRPCError) -> ConnectionStatus {
+            switch error {
+            case .credentialRejected:
+                .pairingRequired
+            case .transportInterruption:
+                .offline
+            case .cancelled:
+                .offline
+            case .relayedAuthenticationFailure, .rateLimited, .harnessUnavailable,
+                 .capabilityUnavailable, .certificateChanged, .protocolIncompatible,
+                 .unexpectedStatus, .business:
+                .hostUnavailable
+            }
+        }
+
+        /// Whether retrying could succeed with no user action. SPEC §6.4 stops retries
+        /// for credential and pin failures; SPEC §6.9 makes 429 and 502 the two
+        /// retryable statuses.
+        public var isRetryable: Bool {
+            switch self {
+            case .establishmentTimedOut, .readinessTimedOut, .transportInterruption,
+                 .readyFrameWithoutClientId:
+                true
+            case .certificateChanged, .streamRejected, .protocolIncompatible, .cancelled:
+                false
+            case .rpc(let error):
+                error.isRetryable
+            }
+        }
+
+        /// Redacted, for diagnostics (SPEC §3.7: error codes, never credential-bearing
+        /// URLs). Every detail here has already been through
+        /// ``RelayTransportError/safeDescription`` or is the host's own message.
+        public var description: String {
+            switch self {
+            case .establishmentTimedOut(let seconds):
+                "socket was not established within \(seconds)s"
+            case .readinessTimedOut(let seconds):
+                "the $events ready frame did not arrive within \(seconds)s"
+            case .transportInterruption(let detail):
+                "transport interruption: \(detail)"
+            case .certificateChanged(let detail):
+                "TLS pin mismatch: \(detail)"
+            case .rpc(let error):
+                error.readableReason ?? "\(error)"
+            case .streamRejected(let streamId, let detail):
+                "stream \(streamId) was rejected before readiness: \(detail)"
+            case .protocolIncompatible(let reason):
+                "protocol incompatibility: \(reason)"
+            case .cancelled:
+                "cancelled"
+            case .readyFrameWithoutClientId:
+                "the ready frame carried no clientId"
+            }
+        }
+    }
+
+    /// One usable connection: the generation, and the server `clientId` from the ready
+    /// frame.
+    public struct Connection: Sendable, Hashable {
+        public var generation: Generation
+        /// The server-side client id (SPEC §6.4). SPEC §6.7's `$events/result` body
+        /// requires it, so it is the single most important thing the ready frame
+        /// supplies — and it is why "socket open" cannot be treated as connected.
+        public var clientId: String
+        /// The ready frame's `host` object, kept whole.
+        ///
+        /// unverified: SPEC §6.4 shows only `{"home": "<path>"}` and nothing here needs
+        /// the value, so it stays a ``JSONValue`` rather than a guessed shape.
+        public var host: JSONValue?
+
+        public init(generation: Generation, clientId: String, host: JSONValue? = nil) {
+            self.generation = generation
+            self.clientId = clientId
+            self.host = host
+        }
+    }
+
+    /// A live ``MuxClient`` plus the generation it belongtd to.
+    ///
+    /// Handing the client out rather than proxying every endpoint keeps this type from
+    /// growing a method per stream, while making it impossible to open a stream without
+    /// knowing which generation it is on (SPEC §6.5: baselines are per generation).
+    public struct StreamHandle: Sendable {
+        public let client: MuxClient
+        public let generation: Generation
+        /// The `$events` stream's ID, as this coordinator opened it.
+        public let eventsStreamId: String
+
+        fileprivate init(client: MuxClient, generation: Generation, eventsStreamId: String) {
+            self.client = client
+            self.generation = generation
+            self.eventsStreamId = eventsStreamId
+        }
+    }
+
+    // MARK: - State
+
+    /// The current status. Read it from an actor-isolated context.
+    public private(set) var status: ConnectionStatus = .pairingRequired
+    /// The live connection, when there is one. Non-nil exactly when ``status`` is
+    /// ``ConnectionStatus/connected``.
+    public private(set) var connection: Connection?
+    /// The most recent failure, kept so the UI can show *why* rather than only *what*.
+    /// Cleared when a connect attempt starts.
+    public private(set) var lastError: ConnectError?
+
+    private let origin: Origin
+    private let budgets: Budget
+    private let makeTransport: TransportFactory
+
+    /// How many attempts this coordinator has started **and** finished. Also the next
+    /// generation's value, so every attempt has a distinct one.
+    public private(set) var generationCount: Generation = 0
+
+    private var activeGeneration: Generation?
+    private var mux: MuxClient?
+    private var drainTask: Task<Void, Never>?
+
+    /// Public for tests and for an explicit logout; production wiring passes the
+    /// origin once and leaves it alone (SPEC §3.2: selecting another host disconnects
+    /// the previous one, which is a *new* coordinator).
+    /// - Parameter makeTransport: Defaults to the real `URLSession` transport. Every
+    ///   test supplies ``StubRelayTransport`` instead.
+    public init(
+        origin: Origin,
+        budgets: Budget = .standard,
+        makeTransport: @escaping TransportFactory = { origin in
+            URLSessionRelayTransport(pinning: origin.pinning)
+        }
+    ) {
+        self.origin = origin
+        self.budgets = budgets
+        self.makeTransport = makeTransport
+        // No credential, no connection: SPEC §3.1's initial state for an unpaired
+        // device. A paired device's app moves it to `connecting` by calling `connect()`.
+        if case .none = origin.authorization {
+            self.status = .pairingRequired
+        }
+    }
+
+    // MARK: - Connecting
+
+    /// Establishes the socket, opens `$events`, and waits for the ready frame.
+    ///
+    /// Only when the ready frame has been read does this return and set
+    /// ``ConnectionStatus/connected`` (SPEC §3.2 step 6: "Only mark the host connected
+    /// after the stream readiness handshake completes").
+    ///
+    /// Calling it again tears the previous connection down first and burns a new
+    /// generation, which is the shape SPEC §6.5 requires of a reconnect. Automatic
+    /// reconnect is the next slice; a caller may drive this manually in the meantime.
+    ///
+    /// - Throws: ``ConnectError``. On *any* throw the status has already been moved off
+    ///   ``ConnectionStatus/connecting`` — a failure never leaves the app claiming to
+    ///   be trying.
+    @discardableResult
+    public func connect() async throws -> Connection {
+        await teardown()
+        lastError = nil
+
+        guard case .bearer = origin.authorization else {
+            // SPEC §6.2: every relay request carries the bearer token, so an unpaired
+            // device has nothing to connect with. Refusing locally beats a guaranteed
+            // 403 and beats a connect that hangs on a socket the relay will drop.
+            let error = ConnectError.rpc(.credentialRejected(relayError: nil, status: 403))
+            status = error.status
+            lastError = error
+            throw error
+        }
+
+        generationCount += 1
+        let generation = generationCount
+        activeGeneration = generation
+        status = .connecting
+
+        do {
+            let connection = try await performConnect(generation: generation)
+            self.connection = connection
+            status = .connected
+            return connection
+        } catch let failure as ConnectError {
+            throw await abandon(failure)
+        } catch {
+            throw await abandon(Self.failure(from: error))
+        }
+    }
+
+    /// Discards a failed attempt and moves the status off `connecting`.
+    ///
+    /// Every throw path goes through here, which is what makes "a failure never leaves
+    /// the app claiming to be trying" a property of the type rather than of each call
+    /// site.
+    private func abandon(_ failure: ConnectError) async -> ConnectError {
+        await teardown()
+        activeGeneration = nil
+        lastError = failure
+        refreshStatus(from: failure)
+        return failure
+    }
+
+    /// One attempt: establish, open `$events`, wait for ready.
+    private func performConnect(generation: Generation) async throws -> Connection {
+        let transport = makeTransport(origin)
+        let client = MuxClient(
+            baseURL: origin.baseURL,
+            authorization: origin.authorization,
+            transport: transport
+        )
+        // Published before the open call so a budget expiry can close a mux whose
+        // establishment has not returned yet. A stalled connect must not leak a socket.
+        mux = client
+
+        let eventsStreamId = Self.eventsStreamID(for: generation)
+        let opened = try await Self.withBudget(
+            seconds: budgets.establishmentSeconds,
+            onExpiry: { .establishmentTimedOut(seconds: $0) }
+        ) {
+            try await client.open(streamId: eventsStreamId, endpoint: Self.eventsEndpoint)
+        }
+
+        // The socket is up; the budget that applies from here is readiness (SPEC §6.4:
+        // "10 seconds for initial socket establishment, then 10 seconds for ready").
+        let ready = try await Self.withBudget(
+            seconds: budgets.readinessSeconds,
+            onExpiry: { .readinessTimedOut(seconds: $0) }
+        ) {
+            try await Self.firstReadyFrame(in: opened, streamId: eventsStreamId)
+        }
+
+        // Frames that arrive after the ready frame are still the socket's business —
+        // they must be read or the connection stalls — but this slice has no consumer
+        // for them yet, so they are drained. Also the only place a mid-connection
+        // socket failure can be noticed.
+        drainTask?.cancel()
+        drainTask = Task { [weak self] in
+            await Self.drain(opened, generation: generation, coordinator: self)
+        }
+
+        return Connection(generation: generation, clientId: ready.clientId, host: ready.host)
+    }
+
+    // MARK: - Sessions (SPEC §3.3)
+
+    /// The host's session list, decoded from `session/list`.
+    ///
+    /// `session/list` takes its arguments in a field named **`_request`**, and the
+    /// parameter name is per endpoint rather than a convention — `session/create`,
+    /// `session/follow` and `session/prompt` take `request` instead (SPEC §6.2). The
+    /// name is read from the installed harness's own descriptor
+    /// (`Protocol/endpoints.json`, `@deepseek-ai/dsh-api-session-controller#session/list`
+    /// → `parameters[0].name == "_request"`), which is why ``RPCArguments`` exists.
+    ///
+    /// - Throws: ``ConnectError``. A failure here is *not* necessarily a lost
+    ///   connection: a business refusal leaves the connection up and only the call
+    ///   failed, so the status is left alone unless the failure is one that means the
+    ///   connection is gone.
+    @discardableResult
+    public func sessions() async throws -> [SessionSummary] {
+        let client = DshRpcClient(
+            baseURL: origin.baseURL,
+            authorization: origin.authorization,
+            transport: makeTransport(origin)
+        )
+        do {
+            let response = try await client.call(
+                Self.sessionListMethod,
+                args: RPCArguments(request: RPCEmptyRequest()),
+                returning: SessionListResult.self
+            )
+            // SPEC §6.2: `result.ok` is the success signal, and a missing `value` is a
+            // success with no payload, not a decode failure. `session/list` always has
+            // a value, but a host that answered `{"ok":true}` must read as "no sessions"
+            // rather than as an error.
+            return response.result.value?.items ?? []
+        } catch {
+            let failure = Self.failure(from: error)
+            lastError = failure
+            applyCallFailure(failure)
+            throw failure
+        }
+    }
+
+    // MARK: - Streams
+
+    /// The live mux and its generation, for the next slices (`session/follow`,
+    /// `$events/result`, the workspace and control streams).
+    ///
+    /// Opening the streams themselves belongs to whoever reduces them: SPEC §4 gives
+    /// each one an owner, and a coordinator that opened a follow stream for a session
+    /// it does not track would be the "late frames mutating the new conversation"
+    /// hazard in the other direction.
+    public func activeStream() -> StreamHandle? {
+        guard let mux, let generation = activeGeneration, connection != nil else { return nil }
+        return StreamHandle(
+            client: mux,
+            generation: generation,
+            eventsStreamId: Self.eventsStreamID(for: generation)
+        )
+    }
+
+    /// Keeps the `$events` frame sequence alive for a consumer that has moved on.
+    ///
+    /// Unstructured on purpose: the stream's own termination handler releases the mux
+    /// subscription when the iterator is dropped, and this task is cancelled by
+    /// ``shutdown()``/``teardown()``, so it cannot outlive the connection.
+    private static func drain(
+        _ stream: AsyncThrowingStream<MuxStreamItem, any Error>,
+        generation: Generation,
+        coordinator: ConnectionCoordinator?
+    ) async {
+        do {
+            for try await _ in stream {}
+        } catch {
+            // A socket that died mid-connection. It is not an error this slice
+            // presents — reconnect is the next slice — but the status must not keep
+            // claiming `connected` over a dead socket.
+            await coordinator?.streamEnded(generation: generation, error: error)
+        }
+    }
+
+    /// Called by the drain loop when a live stream ends. Guards on the generation so a
+    /// late failure from an abandoned attempt cannot demote the attempt that replaced
+    /// it (SPEC §6.5: a reconnect replaces baselines rather than merging them).
+    private func streamEnded(generation: Generation, error: any Error) {
+        guard generation == activeGeneration, connection != nil else { return }
+        let failure = Self.failure(from: error)
+        // A socket that fails while connected is not a cancelled attempt: report it
+        // even though it is a `.cancelled`-shaped error being suppressed elsewhere.
+        var reported = failure
+        if case .cancelled = failure {
+            reported = .transportInterruption(detail: "the multiplexed socket closed")
+        }
+        lastError = reported
+        connection = nil
+        mux = nil
+        activeGeneration = nil
+        status = reported.status
+    }
+
+    // MARK: - Shutdown
+
+    /// Cancels every stream, closes the socket, and leaves no task running.
+    ///
+    /// Idempotent, and safe to call before anything was ever connected. After it, the
+    /// status is ``ConnectionStatus/offline`` — a deliberate shutdown is not a
+    /// pairing problem and not a host problem (SPEC §3.2: selecting another host
+    /// disconnects the previous one; SPEC §7: being offline on the phone does not mean
+    /// the harness stopped).
+    public func shutdown() async {
+        await teardown()
+        activeGeneration = nil
+        connection = nil
+        lastError = nil
+        status = .offline
+    }
+
+    /// The shared teardown: cancel the drain, close the mux, forget the connection.
+    ///
+    /// ``MuxClient/close()`` is what cancels the receive loop and closes the socket —
+    /// and it finishes every open stream, which is what lets a consumer's `for await`
+    /// end instead of hanging on a socket nobody will feed again.
+    private func teardown() async {
+        drainTask?.cancel()
+        drainTask = nil
+        if let mux {
+            self.mux = nil
+            await mux.close()
+        }
+        connection = nil
+    }
+
+    // MARK: - Status
+
+    /// Records that a connection was lost and is being re-established.
+    ///
+    /// The only way ``ConnectionStatus/reconnecting`` is reachable in this slice, and
+    /// it is public so the next slice's backoff loop has one call to make when it
+    /// takes over the status. Without this, `Reconnecting` would be a state the UI
+    /// renders and nothing ever sets.
+    public func reportReconnecting() {
+        status = .reconnecting
+    }
+
+    /// Moves the status for a failure, unless a terminal one is already showing.
+    ///
+    /// The rule that keeps the status honest: a hard credential failure is **sticky**.
+    /// The simplest plausible reconnect loop — backoff, `connect()`, fail, backoff —
+    /// would otherwise flip a clear "Pairing required" back to `Connecting` and then
+    /// `Host unavailable` on every attempt, and SPEC §6.9 requires the app to *stop*
+    /// retrying a 403 and clear it with a re-pair, not to churn.
+    ///
+    /// It is deliberately one-directional and tiny; when the real backoff loop lands it
+    /// may want to own this policy instead.
+    private func refreshStatus(from failure: ConnectError) {
+        if case .rpc(.credentialRejected) = failure, status == .pairingRequired {
+            return
+        }
+        status = failure.status
+    }
+
+    /// The status rule for a failure thrown by a call *through* a live connection
+    /// rather than by a connect attempt.
+    ///
+    /// The distinction SPEC §3.1's six words make necessary: every one of these
+    /// failures arrived over a connection that demonstrably still works, so a 404 for an
+    /// endpoint the host does not implement, a rate limit, or the host refusing one
+    /// request on business grounds (SPEC §6.9's "hide that feature", "429", "business
+    /// refusal" rows) is not evidence about the socket. Demoting a live connection to
+    /// `Host unavailable` because one endpoint 404'd would make the status lie.
+    ///
+    /// The two cases that *are* evidence about the connection — ``offline`` and
+    /// ``pairingRequired`` — are the ones that mean "this socket is gone" and "this
+    /// credential is no longer accepted", and those are applied.
+    private func applyCallFailure(_ failure: ConnectError) {
+        switch failure.status {
+        case .offline, .pairingRequired:
+            refreshStatus(from: failure)
+        case .connecting, .connected, .reconnecting, .hostUnavailable:
+            // Leave the connection's own status alone. Only the connect path and the
+            // drain loop may claim the host is unreachable.
+            break
+        }
+    }
+
+    /// Maps anything thrown anywhere in this file onto the one error type the app
+    /// switches on. Kept exhaustive so a new throw site cannot introduce a third error
+    /// domain by accident.
+    static func failure(from error: any Error) -> ConnectError {
+        if let error = error as? ConnectError { return error }
+        if let error = error as? DshRPCError { return .rpc(error) }
+        if let error = error as? MuxStreamError {
+            switch error {
+            case .socketFailed(let detail):
+                return .transportInterruption(detail: detail)
+            case .protocolIncompatible(let reason):
+                return .protocolIncompatible(reason: reason)
+            case .clientClosed:
+                return .cancelled
+            case .streamIdInUse(let streamId):
+                // A client-side ID collision, not a host failure: it would mean two
+                // consumers raced for one stream, which is this side's bug.
+                return .protocolIncompatible(reason: "stream id \(streamId) was already in use")
+            }
+        }
+        switch RelayTransportError.classify(error) {
+        case .offline(let detail), .other(let detail):
+            return .transportInterruption(detail: detail)
+        case .tlsPinMismatch(let detail):
+            return .certificateChanged(detail: detail)
+        case .cancelled:
+            return .cancelled
+        }
+    }
+
+    // MARK: - The ready frame (SPEC §6.4)
+
+    /// The `$events` endpoint name as SPEC §6.4 writes it, `$` included.
+    public static let eventsEndpoint = "$events"
+    /// The unary endpoint SPEC §3.3's session list comes from.
+    public static let sessionListMethod = "session/list"
+
+    /// A stream ID for `$events`, unique per generation.
+    ///
+    /// SPEC §6.4's example uses `"1"` and SPEC §5 calls the ID an opaque client-chosen
+    /// string, so the value is free. Making it per-generation keeps a re-used ID from
+    /// colliding with a cancelled stream's leftovers in one process — `MuxClient`
+    /// refuses to open a stream ID that is still registered.
+    static func eventsStreamID(for generation: Generation) -> String { "events-\(generation)" }
+
+    /// The decoded ready frame, SPEC §6.4's one item on `$events` that means the host is
+    /// there.
+    public struct ReadyFrame: Sendable, Hashable {
+        public var clientId: String
+        public var host: JSONValue?
+    }
+
+    /// Reads `$events` until the ready frame arrives, and **not** until the socket
+    /// opens.
+    ///
+    /// SPEC §6.4, captured from the running relay rather than inferred:
+    /// ```json
+    /// {"type":"item","streamId":"1","value":{"type":"ready","clientId":"<36 chars>","host":{"home":"<path>"}}}
+    /// ```
+    /// The ready frame is an ordinary `item` whose `value.type` this build models only as
+    /// ``MuxFrameValue/unknown(type:value:)`` — SPEC §5 keeps an unrecognised value
+    /// whole rather than failing, so nothing has to be added to `Models/` to read it.
+    ///
+    /// Two behaviours worth stating because they are choices:
+    /// - An `error` frame for this stream fails the attempt with what the host said
+    ///   instead of being skipped. Waiting out the ready budget for a stream the host has
+    ///   already refused would only delay the same answer.
+    /// - Any other frame before ready — an `end`, or an item of another kind — is
+    ///   skipped, not treated as readiness. A `clientId` is the *only* proof.
+    ///
+    /// - Throws: ``ConnectError/streamRejected(streamId:detail:)``,
+    ///   ``ConnectError/readyFrameWithoutClientId``, or whatever the stream threw.
+    static func firstReadyFrame(
+        in stream: AsyncThrowingStream<MuxStreamItem, any Error>,
+        streamId: String
+    ) async throws -> ReadyFrame {
+        for try await item in stream {
+            switch item.frame.type {
+            case .error:
+                throw ConnectError.streamRejected(
+                    streamId: streamId,
+                    detail: describe(item.frame)
+                )
+            case .item:
+                let value = item.frame.value
+                guard value?.typeName == MuxFrameValue.readyRawValue,
+                      let payload = value?.unknownValue
+                else { continue }
+                guard let clientId = payload["clientId"]?.stringValue, !clientId.isEmpty else {
+                    // SPEC §6.4 captured `clientId` as a 36-character string and SPEC §6.7
+                    // needs it for `$events/result`. A ready frame without one cannot
+                    // address any host request, so it is a failure rather than a partial
+                    // success.
+                    throw ConnectError.readyFrameWithoutClientId
+                }
+                return ReadyFrame(clientId: clientId, host: payload["host"])
+            case .end:
+                // SPEC §6.4: no `end` frame has ever been observed; treat it as defined
+                // but unproven and as a refusal to serve this stream.
+                throw ConnectError.streamRejected(
+                    streamId: streamId,
+                    detail: "the host ended $events before it was ready"
+                )
+            case .unknown(let raw):
+                throw ConnectError.protocolIncompatible(
+                    reason: "unrecognised mux frame type \"\(raw)\" on $events"
+                )
+            }
+        }
+        // The sequence ended without a ready frame: the socket is gone.
+        throw ConnectError.transportInterruption(
+            detail: "the $events stream ended before the ready frame"
+        )
+    }
+
+    /// A one-line, redacted rendering of a frame this build cannot classify.
+    ///
+    /// Deliberately shallow: the interesting content of an `error` frame is
+    /// `error.code` / `error.message`, both of which stay in ``MuxFrame/unknownFields``
+    /// because neither shape was captured (SPEC §6.4 shows `code`, `message`, and
+    /// `details`, but no fixture contains one). Only names and codes are surfaced, never
+    /// the whole payload, because a diagnostics line must not carry host content.
+    static func describe(_ frame: MuxFrame) -> String {
+        guard let reported = frame.unknownFields["error"] else {
+            return "the host reported an error on this stream"
+        }
+        let code = reported["code"]?.stringValue
+        let message = reported["message"]?.stringValue
+        switch (code, message) {
+        case (let code?, let message?): return "\(code): \(message)"
+        case (let code?, nil): return code
+        case (nil, let message?): return message
+        case (nil, nil): return "the host reported an error on this stream"
+        }
+    }
+
+    // MARK: - Budgets
+
+    /// Runs `operation`, failing with ``onExpiry`` if it has not returned within
+    /// `seconds`.
+    ///
+    /// A racing child task rather than a `URLRequest.timeoutInterval`: SPEC §6.4's
+    /// budgets are connection budgets, and the operation here spans the transport's own
+    /// upgrade *and* the protocol's handshake, which no request timeout can cover.
+    ///
+    /// The cancellation detail that matters: when the deadline wins, leaving the task
+    /// group cancels `operation` and **awaits it** before returning. So a budget expiry
+    /// cannot return while a socket upgrade is still in flight — the caller's teardown
+    /// then closes the mux, and the socket is released rather than leaked.
+    ///
+    /// `sleeper` rather than `Task.sleep` so a test can fire the deadline without
+    /// waiting for the wall clock; the default is the real one.
+    static func withBudget<T: Sendable>(
+        seconds: Double,
+        onExpiry: @escaping @Sendable (Double) -> ConnectError,
+        sleeper: any RelaySleeper = TaskRelaySleeper(),
+        operation: @escaping @Sendable () async throws -> T
+    ) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask { try await operation() }
+            group.addTask {
+                try await sleeper.sleep(seconds: seconds)
+                throw onExpiry(seconds)
+            }
+            guard let first = try await group.next() else {
+                // Unreachable: the group always has two children.
+                throw onExpiry(seconds)
+            }
+            group.cancelAll()
+            return first
+        }
+    }
+}
+
+// MARK: - MuxFrameValue, read as the unknown case it is
+
+extension MuxFrameValue {
+    /// The wire value of SPEC §6.4's `$events` ready frame.
+    ///
+    /// It lives here rather than in `Models/StreamFrames.swift` on purpose: a `ready`
+    /// frame's own shape is stated by SPEC from the running relay but is **not** in
+    /// `Fixtures/mux-stream-frames.json`, and that file's design rule is that a value
+    /// type becomes a modelled case only when a capture proves its fields. Adding a
+    /// case there would be inventing a shape on the strength of a spec sentence, in
+    /// files this slice may not touch. The obvious follow-up is to capture one — then
+    /// `ready` earns a modelled case and this extension goes away.
+    public static let readyRawValue = "ready"
+
+    /// The payload of an ``MuxFrameValue/unknown(type:value:)`` value, or `nil` for a
+    /// value this build models.
+    public var unknownValue: JSONValue? {
+        if case .unknown(_, let value) = self { value } else { nil }
+    }
+}
+
+// MARK: - Reconnect (next slice)
+
+// SPEC §6.4: reconnect with jittered exponential backoff, 0.5 s base, 10 s cap, while
+// foregrounded; honour relay rate limiting; stop retrying on credential or pin
+// failure and offer the user the relevant action. None of that is implemented here.
+//
+// The seam it will take, so the next slice does not have to redesign this file:
+//
+// 1. `connect()` already starts from a clean slate — it tears the previous attempt down
+//    and burns a new ``Generation`` — so a retry loop needs no new entry point.
+// 2. `ConnectError.isRetryable` and `ConnectError.status` already answer "should I try
+//    again" and "what do I say meanwhile". `.certificateChanged` answers no, and
+//    `refreshStatus(from:)` keeps a hard `Pairing required` from being churned back to
+//    `Connecting`.
+// 3. `reportReconnecting()` exists so the loop has one call to make for the
+//    ``ConnectionStatus/reconnecting`` state, and `makeTransport` hands out a fresh
+//    transport per attempt rather than reusing a dead one.
+// 4. What is missing is only the schedule: a `RelaySleeper`-driven loop with jitter
+//    over `RPCFailureRetryPolicy.backoffBaseSeconds` (0.5) / `backoffCapSeconds` (10),
+//    plus foreground/background gating from SPEC §7 and `Retry-After` honouring from
+//    SPEC §6.9 — which `RelayExchange` already parses for unary calls.
