@@ -67,17 +67,26 @@ and with a revoked token. Both are client-side; the relay behaves correctly.
    agent then reproduced it against the live relay and measured **41 s+ with
    idle threads** before being stopped. So the hang is not a timing artefact.
 
-   **The assumed mechanism is wrong, and that is now measured.** A standalone
-   probe (`/tmp/ws-probe.swift`, a session-level delegate that refuses every
-   server-trust challenge, against `wss://10.1.0.138:3443`) shows the pending
-   `receive()` **resuming on its own in 0.02 s** with
-   `NSURLErrorDomain Code=-999 "cancelled"`. URLSession does not park the
-   continuation at all. So the hang is **our code, not the framework**: either
-   the -999 is classified and then swallowed somewhere on the connect path, or
-   `withBudget` awaits a child that is not the one that failed — for example a
-   readiness wait whose task the refusal orphaned. Start by tracing what the
-   transport does with `-999` and what the connect path is actually awaiting
-   when it hangs; do not go looking at URLSession again.
+   **The assumed mechanism is wrong, and that is measured — twice.** Two
+   standalone probes against `wss://10.1.0.138:3443`, each with a session-level
+   delegate that refuses every server-trust challenge:
+
+   - `/tmp/ws-probe.swift` — a pending `receive()` **resumes on its own in
+     0.02 s** with `NSURLErrorDomain Code=-999 "cancelled"`;
+   - `/tmp/ws-probe2.swift` — and so does a pending `send()`, in the same
+     instant, `-999` as well.
+
+   URLSession parks nothing, on either call. **The hang is in our code**, and
+   both candidate fixes built on the framework theory were aimed at the wrong
+   layer. Start by finding which await is actually parked: instrument
+   `ConnectionCoordinator.connect()` with a print at each await boundary and run
+   the wrong-pin reproduction below — that will name the parked wait in one run
+   instead of another round of inference. Suspects, in order: a task joined on
+   the connect *error* path that outlives the failure; the readiness wait
+   surviving a socket-open failure; something in `MuxClient`'s subscription
+   teardown that ignores cancellation. `withBudget` itself is sound — it takes
+   the first result, cancels the rest, and its sleeper is a cancellable
+   `Task.sleep`, so do not start by rewriting it.
 
    **Checked the obvious fix, and it is not a one-liner.** The challenge handler
    at `Network/RelayTransport.swift:368-392` implements the *session-level*
