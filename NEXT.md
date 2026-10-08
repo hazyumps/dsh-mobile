@@ -186,7 +186,38 @@ and with a revoked token. Both are client-side; the relay behaves correctly.
    instrument, and it is two lines: print inside the receive loop's `catch`, and
    print its call count. If the count is climbing while `send` is parked, the fix
    is to stop looping on a failed socket (or at minimum to yield), not to touch
-   the budget. Start by finding which await is actually parked: instrument
+   the budget.
+
+   **Round 43: that is refuted too, and five probes now point somewhere else.**
+   `startReceiveLoop` exits on the first error — the `catch` is outside the
+   `while`, so there is no spin. And the `URLRequest` form the app uses
+   (`GET` + `Authorization`) behaves exactly like a plain `URL`: with a refused
+   challenge, `send` throws `-999` at once, with or without a pending receive
+   (`/tmp/ws-probe5.swift`). Five probes have now exonerated raw URLSession in
+   every configuration constructible by hand:
+
+   | probe | shape | result |
+   |---|---|---|
+   | 1 | pending `receive` | `-999` in 0.02 s |
+   | 2 | `send` | `-999` immediately |
+   | 3 | `send`/`receive` *after* the failure | `-999` at call time |
+   | 4 | app's order: pending receive, then send | `-999` in 0.21 s |
+   | 5 | `URLRequest` + auth header, with and without pending receive | `-999` immediately |
+
+   **The remaining difference is the delegate's own work.** Every probe refuses
+   the challenge on the spot. The app's `TransportDelegate` first computes the
+   actual SPKI from the trust and compares it to the pin (`RelayTransport.swift:368-392`)
+   before answering, and if that work blocks or never returns on the delegate
+   queue, the completion handler is never called, the handshake neither succeeds
+   nor fails, and `task.send` waits forever — which is every symptom, including
+   the defer never running and the budget being unable to unwind the closure.
+
+   **Next: instrument the delegate, not the caller.** Two prints inside
+   `urlSession(_:didReceive:completionHandler:)` — one on entry, one after the
+   pin comparison and immediately before `completionHandler(...)` — then the
+   wrong-pin reproduction. If the first prints and the second does not, the park
+   is the pin computation, and the fix is there: it must not block the delegate
+   queue. Start by finding which await is actually parked: instrument
    `ConnectionCoordinator.connect()` with a print at each await boundary and run
    the wrong-pin reproduction below — that will name the parked wait in one run
    instead of another round of inference. Suspects, in order: a task joined on
