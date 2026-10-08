@@ -8,9 +8,10 @@ struct HostsView: View {
     @Environment(AppModel.self) private var model
     @State private var isPairing = false
     @State private var pendingForget: SavedHost?
+    @State private var path = NavigationPath()
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             Group {
                 if model.hosts.isEmpty {
                     emptyState
@@ -21,6 +22,16 @@ struct HostsView: View {
             .navigationTitle("Hosts")
             .navigationDestination(for: SavedHost.self) { host in
                 SessionsView(host: host)
+            }
+            .task {
+                // Verification affordance: open the first host when asked, so the
+                // session list and the chat screen can be checked on a simulator
+                // where nothing can be tapped. Inert without the variable.
+                guard model.shouldOpenFirstHostOnLaunch,
+                      path.isEmpty,
+                      let first = model.hosts.first
+                else { return }
+                path.append(first)
             }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {

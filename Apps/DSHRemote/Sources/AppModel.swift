@@ -37,6 +37,21 @@ final class AppModel {    /// The kit owns `ConnectionStatus` — this is the tr
         case notConnected
     }
 
+    /// Whether a launch should open the first host without a tap.
+    ///
+    /// Xcode 27 ships no Simulator GUI and `simctl` cannot inject touches, so
+    /// there is no other way to reach the session list or the chat screen on a
+    /// simulator. Debug builds only, and it changes nothing unless the variable
+    /// is set. Read here rather than in the view because this file already
+    /// imports Foundation.
+    var shouldOpenFirstHostOnLaunch: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.environment["DSH_OPEN_HOST"] != nil
+        #else
+        false
+        #endif
+    }
+
     /// The chat session for one conversation, or `nil` when there is no live
     /// connection.
     ///
