@@ -6,6 +6,22 @@ XCTest. Read `SPEC.md` for the contract; this file is only the work list.
 
 ## Start here
 
+**`ChatSession.swift` exists as of round 56** (`d5de6ff`) and compiles: it opens
+the follow stream with the captured args shape, folds frames into a
+`ConversationBuilder`, and exposes `messages`, `hasGap`, `isStreaming`,
+`unmodelledEvents`. It is **untested** — the suite is green but nothing exercises
+it yet, and that is the first thing to fix.
+
+To write those tests without hunting: `StubRelayTransport(sockets:)` serves the
+mux socket, `StubRelaySocket` has `push(text:)`, `push(json:)`, `fail(with:)` and
+`finish()`, and `capturedMuxFrame(_:)` in `Tests/DSHRemoteKitTests/StreamFrameTests.swift`
+loads a real frame by name from `Fixtures/mux-stream-frames.json` (names include
+`snapshot` and `event/turn/start`). Then: `session.start()`, push a snapshot,
+assert the messages appear; push a failure, assert the pump stops without taking
+the socket down; `stop()` and assert the stream was cancelled.
+
+Everything below is the older, still-accurate work list.
+
 The app builds, pairs a harness, and lists real sessions. Below the UI everything
 is proven against the live relay — see the smoke run below. **The one thing that
 makes it usable is the chat screen, and it is two files.**
