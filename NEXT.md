@@ -6,7 +6,50 @@ XCTest. Read `SPEC.md` for the contract; this file is only the work list.
 
 ## Start here
 
-### Answering what the harness asks — the next real feature (round 81)
+### Answering what the harness asks — CAPTURED (round 85)
+
+The wire shape is no longer a guess. A session was prompted to ask a question
+through the live relay, and the follow stream was captured with an authenticated
+mux connection (`/tmp/capture-question.cjs`; the relay's own `ws` is needed to
+set the Authorization header, and the follow args require the `address` union).
+
+**The carrier is a durable event, not `userQuestions/attachWait`:**
+
+```json
+{"type":"event","event":{"type":"tool/call","seq":21,"data":{
+  "turn":1,"step":1,
+  "callId":"call_00_ET_EBIuBY8wfsMAMoUnsQ0P2566",
+  "name":"ask_user_question",
+  "arguments":"{\"questions\": [{\"id\": \"colour\", \"header\": \"Colour\", \"question\": \"Which colour do you prefer?\", \"options\": [{\"label\": \"Blue\"}, {\"label\": \"Red\"}]}]}"
+}}}
+```
+
+Three things that matter and are easy to get wrong:
+
+- **`arguments` is a JSON *string***, so the questions array must be parsed a
+  second time out of the event.
+- The question shape is `{id, question, header?, options?: [{label, description?}], multi_select?}`
+  — taken from the tool's own schema, which also arrives in the stream as a
+  `request/header` event listing every tool the model was given.
+- **`callId` is the answer's identifier.** `answer(agentId: sessionId, callId: data.callId, questionId: q.id, …)`
+  — the agentId is the session, the callId is that field, and the questionId is
+  the question's own `id`.
+
+The same tool call also appears inside `assistant/message` (seq 20) as a
+`{"type":"tool-call","id":…,"name":"ask_user_question","arguments":"…"}` block,
+so a renderer can pick it up from either place; the durable `tool/call` event is
+the one that survives a reconnect.
+
+Other event types seen in the same capture, useful generally: `approval/policy`
+(`{"policy":"ask"}`), `permission/preset` (`workspace-write`), `sandbox/mode`,
+`session/title`, `session/title-llm-request`, `request/header`, `system/message`,
+`user/message` (with `surfaceOp`), `agent/inbox/spliced`, `turn/start`,
+`step/start`.
+
+**Remaining work is now small and concrete:** model `tool/call` (an event case the
+builder probably treats as unmodelled today — check `unmodelledEvents`), render a
+card above the composer for `name == "ask_user_question"`, and wire its buttons to
+`answer(...)`, which is already built and waiting.
 
 **Round 83 correction: the question's wire shape is still unknown, and that is
 the actual blocker.** Reading further changed the picture:
