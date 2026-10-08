@@ -504,6 +504,58 @@ public actor ConnectionCoordinator {
         }
     }
 
+    // MARK: - Questions
+
+    /// Answers a question the harness asked a session.
+    ///
+    /// Retries are off for the same reason prompts have them off (SPEC §3.4): an
+    /// answer delivered twice is worse than one reported as uncertain, because the
+    /// agent may act on both.
+    ///
+    /// - Parameters:
+    ///   - agentId: the session that asked.
+    ///   - callId: the tool call carrying the question.
+    ///   - questionId: which question this answers, from the question's own `id`.
+    ///   - selected: option ids chosen.
+    ///   - custom: free text, when the question allows it.
+    public func answer(
+        agentId: SessionId,
+        callId: ToolCallId,
+        questionId: String,
+        selected: [String],
+        custom: String? = nil
+    ) async throws {
+        let client = DshRpcClient(
+            baseURL: origin.baseURL,
+            authorization: origin.authorization,
+            transport: makeTransport(origin)
+        )
+        let arguments = UserQuestionsAnswerArguments(
+            agentId: agentId,
+            callId: callId,
+            answer: AskUserQuestionAnswer(answers: [
+                AskUserQuestionAnswerAnswersItem(
+                    id: questionId,
+                    selected: selected,
+                    custom: custom
+                )
+            ])
+        )
+        do {
+            _ = try await client.call(
+                Self.userQuestionsAnswerMethod,
+                args: arguments,
+                returning: UserQuestionsAnswerResult.self,
+                retryPolicy: .none
+            )
+        } catch {
+            let failure = Self.failure(from: error)
+            lastError = failure
+            applyCallFailure(failure)
+            throw failure
+        }
+    }
+
     // MARK: - Streams
 
     /// The live mux and its generation, for the next slices (`session/follow`,
@@ -750,6 +802,7 @@ public actor ConnectionCoordinator {
     /// The unary endpoint SPEC §3.3's session list comes from.
     public static let sessionListMethod = "session/list"
     public static let sessionPromptMethod = "session/prompt"
+    public static let userQuestionsAnswerMethod = "userQuestions/answer"
 
     /// A stream ID for `$events`, unique per generation.
     ///
