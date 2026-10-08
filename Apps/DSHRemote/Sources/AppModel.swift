@@ -3,46 +3,17 @@ import Foundation
 import Observation
 import UIKit
 
-/// The connection states SPEC §3.1 requires the UI to show. Every case carries
-/// text as well as a symbol, because colour alone is not a status.
-enum ConnectionStatus: String, Sendable, CaseIterable {
-    case connecting
-    case connected
-    case reconnecting
-    case offline
-    case pairingRequired
-    case hostUnavailable
-
-    var label: String {
-        switch self {
-        case .connecting: "Connecting"
-        case .connected: "Connected"
-        case .reconnecting: "Reconnecting"
-        case .offline: "Offline"
-        case .pairingRequired: "Pairing required"
-        case .hostUnavailable: "Host unavailable"
-        }
-    }
-
-    var symbol: String {
-        switch self {
-        case .connecting: "ellipsis.circle"
-        case .connected: "checkmark.circle.fill"
-        case .reconnecting: "arrow.clockwise.circle"
-        case .offline: "wifi.slash"
-        case .pairingRequired: "qrcode"
-        case .hostUnavailable: "exclamationmark.triangle"
-        }
-    }
-}
-
-/// Everything the UI reads. Pairing is wired; connecting to a host and reading
-/// its sessions is the next slice, so the host list is real but inert.
+/// Everything the UI reads. Pairing and the session list are wired; the chat is
+/// the next slice.
 @MainActor
 @Observable
-final class AppModel {
+final class AppModel {    /// The kit owns `ConnectionStatus` — this is the transport's own view of
+    /// where the connection stands, not a UI invention.
     var status: ConnectionStatus = .pairingRequired
     var hosts: [SavedHost] = []
+    var sessions: [SessionSummary] = []
+    var sessionListError: String?
+    var isLoadingSessions = false
 
     /// Result of reading a pasted pairing payload, shown beside the field.
     var pairingOutcome: PairingOutcome?
@@ -57,11 +28,14 @@ final class AppModel {
     private let clock: any EpochClock = SystemEpochClock()
     private let store = HostStore()
     private let secrets = KeychainSecretStore()
+    private var coordinator: ConnectionCoordinator?
 
     init() {
         hosts = store.load()
         if !hosts.isEmpty { status = .offline }
     }
+
+    // MARK: - Pairing
 
     /// What the user pasted, decoded and checked. The payload is untrusted
     /// input, so nothing here authorises anything — it only says what the
@@ -166,5 +140,78 @@ final class AppModel {
         }
         try? store.save(hosts)
         if hosts.isEmpty { status = .pairingRequired }
+    }
+
+    // MARK: - Sessions
+
+    /// Connect to a saved host and read its sessions. The token comes from the
+    /// keychain, so this works after a relaunch without re-pairing.
+    func loadSessions(for host: SavedHost) async {
+        isLoadingSessions = true
+        sessionListError = nil
+        defer { isLoadingSessions = false }
+
+        do {
+            let coordinator = try await connected(to: host)
+            status = await coordinator.status
+            sessions = try await coordinator.sessions()
+            status = await coordinator.status
+        } catch {
+            sessionListError = String(describing: error)
+            sessions = []
+            status = .hostUnavailable
+        }
+    }
+
+    /// SPEC §3.3 groups by the host's workspace registry. The session row carries
+    /// `cwd` and the projections carry a title, so that is what this groups on
+    /// until the workspace stream is wired.
+    var sessionGroups: [(key: String, sessions: [SessionSummary])] {
+        let groups = Dictionary(grouping: sessions) { $0.cwd ?? "No directory" }
+        return groups
+            .map { (key: $0.key, sessions: $0.value.sorted { ($0.updatedAt ?? 0) > ($1.updatedAt ?? 0) }) }
+            .sorted { $0.key < $1.key }
+    }
+
+    func lastActivity(_ session: SessionSummary) -> Date? {
+        session.updatedAt.map { Date(timeIntervalSince1970: Double($0) / 1000) }
+    }
+
+    private func connected(to host: SavedHost) async throws -> ConnectionCoordinator {
+        if let coordinator, await coordinator.status.isUsable {
+            return coordinator
+        }
+        let token = try await secrets.secret(for: RelayDeviceCredential.account(hostUUID: host.id))
+        guard let token else { throw HostConnectionError.missingCredential }
+        let origin = ConnectionCoordinator.Origin(
+            baseURL: host.origin,
+            authorization: .bearer(token),
+            pinning: RelayPinningPolicy(
+                expectedSPKIPin: host.pinnedFingerprint,
+                requiresPlatformTrust: host.pinnedFingerprint == nil
+            )
+        )
+        let coordinator = ConnectionCoordinator(origin: origin)
+        _ = try await coordinator.connect()
+        self.coordinator = coordinator
+        return coordinator
+    }
+
+    func disconnect() async {
+        await coordinator?.shutdown()
+        coordinator = nil
+        sessions = []
+    }
+}
+
+/// A saved host whose keychain entry is gone — the metadata survived a restore
+/// but the credential did not. Re-pairing is the only fix, so say so.
+enum HostConnectionError: LocalizedError {
+    case missingCredential
+
+    var errorDescription: String? {
+        switch self {
+        case .missingCredential: "This host has no stored credential. Pair it again."
+        }
     }
 }

@@ -1,3 +1,4 @@
+import DSHRemoteKit
 import SwiftUI
 
 /// V1's landing screen. Sessions live under a host, so nothing else can be
@@ -18,6 +19,9 @@ struct HostsView: View {
                 }
             }
             .navigationTitle("Hosts")
+            .navigationDestination(for: SavedHost.self) { host in
+                SessionsView(host: host)
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     StatusBadge(status: model.status)
@@ -63,37 +67,27 @@ struct HostsView: View {
     private var hostList: some View {
         List {
             ForEach(model.hosts) { host in
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(host.displayName)
-                        .font(.headline)
-                    Text(host.origin.absoluteString)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    if let pin = host.pinnedFingerprint {
-                        Label(pin, systemImage: "lock")
-                            .font(.caption2)
+                NavigationLink(value: host) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(host.displayName)
+                            .font(.headline)
+                        Text(host.origin.absoluteString)
+                            .font(.caption)
                             .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
+                        if let pin = host.pinnedFingerprint {
+                            Label(pin, systemImage: "lock")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
                     }
+                    .padding(.vertical, 2)
                 }
-                .padding(.vertical, 2)
             }
             .onDelete { offsets in
                 pendingForget = offsets.map { model.hosts[$0] }.first
             }
         }
-    }
-}
-
-/// Text and symbol, never colour alone.
-struct StatusBadge: View {
-    let status: ConnectionStatus
-
-    var body: some View {
-        Label(status.label, systemImage: status.symbol)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .labelStyle(.titleAndIcon)
     }
 }
