@@ -44,6 +44,13 @@ struct ChatView: View {
             do {
                 try await opened.start()
                 isOpen = true
+                // Verification affordance: send one message automatically, so the
+                // composer's wiring and the resulting turn can be seen without a
+                // tap. Inert unless DSH_SEND_MESSAGE is set.
+                if let message = model.launchMessage {
+                    draft = message
+                    await send()
+                }
                 await watch(opened)
             } catch {
                 sendError = "Could not follow this conversation."

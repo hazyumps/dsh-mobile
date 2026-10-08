@@ -62,6 +62,28 @@ final class AppModel {    /// The kit owns `ConnectionStatus` — this is the tr
         #endif
     }
 
+    /// A specific session to open instead of the first, for verifying one
+    /// conversation rather than whatever happens to be newest.
+    var launchSessionId: String? {
+        #if DEBUG
+        ProcessInfo.processInfo.environment["DSH_SESSION_ID"]
+        #else
+        nil
+        #endif
+    }
+
+    /// A message to send once the conversation opens. Only ever set for
+    /// verification, and only ever pointed at a scratch session: a duplicate or
+    /// stray prompt costs real work, so this must not be aimed at a conversation
+    /// somebody cares about.
+    var launchMessage: String? {
+        #if DEBUG
+        ProcessInfo.processInfo.environment["DSH_SEND_MESSAGE"]
+        #else
+        nil
+        #endif
+    }
+
     /// The chat session for one conversation, or `nil` when there is no live
     /// connection.
     ///

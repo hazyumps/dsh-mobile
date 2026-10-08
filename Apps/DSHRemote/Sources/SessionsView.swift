@@ -61,6 +61,12 @@ struct SessionsView: View {
             // unless DSH_OPEN_SESSION is set.
             guard model.shouldOpenFirstSessionOnLaunch else { return }
             for _ in 0..<40 {
+                // A named session wins over "newest": verifying a specific
+                // conversation should not depend on list order.
+                if let wanted = model.launchSessionId {
+                    autoOpened = wanted
+                    return
+                }
                 if let first = model.sessionGroups.first?.sessions.first?.sessionId {
                     autoOpened = first
                     return
