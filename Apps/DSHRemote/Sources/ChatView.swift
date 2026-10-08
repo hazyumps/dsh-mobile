@@ -23,12 +23,25 @@ struct ChatView: View {
     @State private var draft = ""
     @State private var isSending = false
     @State private var sendError: String?
+    @State private var openError: String?
     @State private var isOpen = false
 
     var body: some View {
         Group {
             if isOpen {
                 conversation
+            } else if let openError {
+                // Before this, a failed open showed a spinner forever: the error
+                // was only rendered inside the composer, which does not exist
+                // until the conversation is open. A dead end with no explanation
+                // and no way forward.
+                ContentUnavailableView {
+                    Label("Can't open this conversation", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text(openError)
+                } actions: {
+                    Button("Try again") { Task { await open() } }
+                }
             } else {
                 ProgressView("Opening conversation…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -37,24 +50,8 @@ struct ChatView: View {
         .navigationTitle("Conversation")
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            guard session == nil else { return }
-            let opened = await model.chatSession(for: sessionId)
-            session = opened
-            guard let opened else { return }
-            do {
-                try await opened.start()
-                isOpen = true
-                // Verification affordance: send one message automatically, so the
-                // composer's wiring and the resulting turn can be seen without a
-                // tap. Inert unless DSH_SEND_MESSAGE is set.
-                if let message = model.launchMessage {
-                    draft = message
-                    await send()
-                }
-                await watch(opened)
-            } catch {
-                sendError = "Could not follow this conversation."
-            }
+            guard session == nil, !isOpen else { return }
+            await open()
         }
         .onDisappear {
             let closing = session
@@ -132,6 +129,35 @@ struct ChatView: View {
         .padding(.horizontal)
         .padding(.vertical, 8)
         .background(.bar)
+    }
+
+    /// Opens the conversation, or records why it could not be opened. Extracted
+    /// so the error state's retry runs the same path the first attempt did.
+    private func open() async {
+        openError = nil
+        guard let opened = await model.chatSession(for: sessionId) else {
+            // Not connected. This used to return silently and spin forever too.
+            openError = "Not connected to the harness. Go back and open the host again."
+            return
+        }
+        session = opened
+        do {
+            try await opened.start()
+            isOpen = true
+            // Verification affordance: send one message automatically, so the
+            // composer's wiring and the resulting turn can be seen without a tap.
+            // Inert unless DSH_SEND_MESSAGE is set.
+            if let message = model.launchMessage {
+                draft = message
+                await send()
+            }
+            await watch(opened)
+        } catch {
+            openError = """
+                The harness did not open this conversation. It may be too new to \
+                follow yet, or the connection dropped.
+                """
+        }
     }
 
     private func send() async {
