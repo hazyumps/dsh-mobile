@@ -1,10 +1,8 @@
+import DSHRemoteKit
 import SwiftUI
 
-/// The first half of SPEC §3.2: read the payload, say where it points and what
-/// it pins, and refuse anything malformed before a credential exists.
-///
-/// Claiming the code is the second half and needs the network layer, so the
-/// button says so rather than pretending to work.
+/// SPEC §3.2: read the payload, say where it points and what it pins, then
+/// claim the one-time code and keep the token.
 struct PairHarnessView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -31,8 +29,9 @@ struct PairHarnessView: View {
                 switch model.pairingOutcome {
                 case .none:
                     EmptyView()
+
                 case .accepted(let summary):
-                    Section("This would pair") {
+                    Section("This host") {
                         LabeledContent("Host", value: summary.host)
                         LabeledContent("Code", value: summary.code)
                         LabeledContent("Expires") {
@@ -46,12 +45,33 @@ struct PairHarnessView: View {
                             }
                         }
                     }
+
                     Section {
-                        Button("Claim pairing") {}
-                            .disabled(true)
+                        TextField("This phone's name", text: Bindable(model).deviceName)
+                        Button {
+                            Task {
+                                await model.claim(pasted: pasted)
+                                if model.claimError == nil { dismiss() }
+                            }
+                        } label: {
+                            if model.isClaiming {
+                                HStack(spacing: 8) {
+                                    ProgressView()
+                                    Text("Claiming…")
+                                }
+                            } else {
+                                Text("Claim pairing")
+                            }
+                        }
+                        .disabled(model.isClaiming)
                     } footer: {
-                        Text("Claiming needs the transport layer, which is not wired yet.")
+                        if let error = model.claimError {
+                            Text(error).foregroundStyle(.red)
+                        } else {
+                            Text("The relay records this name so you can tell devices apart later.")
+                        }
                     }
+
                 case .refused(let reason):
                     Section {
                         Label(reason, systemImage: "exclamationmark.triangle")

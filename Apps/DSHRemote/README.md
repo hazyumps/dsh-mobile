@@ -38,8 +38,24 @@ regenerate does not lose it.
 
 ## What the app does today
 
-`HostsView` is the v1 landing screen, and `PairHarnessView` reads a pasted
-pairing payload, validates it against `PairingPayload`, and shows the host it
-points at and the key it pins. Claiming the code, listing sessions, and the
-chat itself are the next slices; the status badge already carries text as well
-as a symbol, per SPEC §3.1.
+`HostsView` is the v1 landing screen. Pairing works end to end: paste the
+relay's pairing JSON, see the host and key it pins, claim the one-time code,
+and the device token goes into the keychain while the host's nonsensitive
+metadata goes to `hosts.json` in Application Support. Forgetting a host
+deletes its credential and says plainly that it does not revoke the device at
+the relay.
+
+Connecting to a saved host, listing its sessions, and the chat itself are the
+next slices. The status badge already carries text as well as a symbol, per
+SPEC §3.1.
+
+## Two environment blockers on this machine
+
+- **No code-signing identity** (`security find-identity -v -p codesigning`
+  reports none), so a device install needs an Apple ID in Xcode first — see
+  above.
+- **CoreSimulator is older than this Xcode** (`1051.50.0` against `1171.7.0`),
+  so `xcodebuild` reports "Simulator device support disabled". Building for
+  `generic/platform=iOS Simulator` still succeeds, but *running* in a
+  simulator needs Xcode or CoreSimulator updated.
+
