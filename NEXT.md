@@ -84,7 +84,25 @@ and with a revoked token. Both are client-side; the relay behaves correctly.
 
    URLSession parks nothing, on any call, early or late. **The hang is in our
    code**, and both candidate fixes built on the framework theory were aimed at
-   the wrong layer. Start by finding which await is actually parked: instrument
+   the wrong layer.
+
+   **Read the connect path and the transport, which relocates the suspect
+   again.** `URLSessionRelayTransport.openSocket` (`Network/RelayTransport.swift:326`)
+   does not await anything at all — it creates the task, calls `resume()`, and
+   returns the socket wrapper. So the establishment step cannot hang in the
+   transport. With `send` and `receive` both throwing immediately, the park is
+   most likely in the **teardown path**: failing the open stream, and closing a
+   `URLSessionWebSocketTask` whose handshake never completed. If any of that
+   awaits a delegate callback (`didCloseWith`, `didCompleteWithError`) that a
+   refused challenge never delivers, then the `withBudget` operation child parks
+   *after* its error, cancellation cannot interrupt it, and the group's scope
+   exit waits forever — which is exactly the shape observed: the budget never
+   reports, and neither does anything else.
+
+   So the next look is `MuxClient`'s failure and close paths and
+   `URLSessionRelaySocket`'s `close`/`cancel`, not `connect()` and not
+   URLSession. A probe that cancels/closes a `URLSessionWebSocketTask` right
+   after a refused challenge, under a deadline, would confirm it in one run. Start by finding which await is actually parked: instrument
    `ConnectionCoordinator.connect()` with a print at each await boundary and run
    the wrong-pin reproduction below — that will name the parked wait in one run
    instead of another round of inference. Suspects, in order: a task joined on
