@@ -14,7 +14,7 @@ settings:
     CODE_SIGN_STYLE: Automatic
     # Set DEVELOPMENT_TEAM (or pick a team in Xcode) before installing on a
     # device. Simulator builds need no identity at all.
-    DEVELOPMENT_TEAM: ""
+    DEVELOPMENT_TEAM: "U6LC736TBG"
 
 packages:
   DSHRemoteKit:
