@@ -135,8 +135,20 @@ struct ChatView: View {
     /// so the error state's retry runs the same path the first attempt did.
     private func open() async {
         openError = nil
-        guard let opened = await model.chatSession(for: sessionId) else {
-            // Not connected. This used to return silently and spin forever too.
+        // A navigation can arrive before the host's connect finishes: the list is
+        // pushed faster than the socket opens. Waiting beats failing instantly —
+        // the verification affordance made this reproducible, but a quick tap on
+        // a real phone would hit the same race. Bounded, so a genuinely offline
+        // host still ends in the error state rather than a spinner.
+        var opened: ChatSession?
+        for _ in 0..<40 {
+            if let session = await model.chatSession(for: sessionId) {
+                opened = session
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(250))
+        }
+        guard let opened else {
             openError = "Not connected to the harness. Go back and open the host again."
             return
         }
