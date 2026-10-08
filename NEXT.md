@@ -8,6 +8,27 @@ XCTest. Read `SPEC.md` for the contract; this file is only the work list.
 
 ### Answering what the harness asks — the next real feature (round 81)
 
+**Round 83 correction: the question's wire shape is still unknown, and that is
+the actual blocker.** Reading further changed the picture:
+
+- `userQuestions/attachWait` returns only `{ remainingMs: Int64 }`. It is a
+  *wait*, not the carrier — it tells a client how long to hold, and nothing about
+  the question itself.
+- There is no tool-call model generated beyond `ToolCallId`, and **no captured
+  fixture contains a question or tool frame at all**. `ask_user_question` appears
+  nowhere in `Protocol/` or `Sources/` — it belongs to the harness's own plugin,
+  so the earlier extraction never saw it.
+
+So before any UI, the same discipline that produced the rest of this protocol
+applies: **capture it**. Create a session through the live relay, prompt it so it
+asks a question, and capture the follow-stream frames into
+`Fixtures/mux-stream-frames.json` alongside the twelve that are already there.
+Then the question model is written from a capture rather than from a guess, which
+is exactly what `Protocol/README.md` records as the rule for this repo.
+
+Everything else is ready: `ConnectionCoordinator.answer(...)` is built and takes
+the `agentId`, `callId` and answer the capture will supply.
+
 The app's own empty-state copy promises this: *"Pair a harness to read its
 sessions, follow a conversation, and answer what it asks."* Reading and sending
 work; answering does not, and a session that asks a question stalls on the phone
