@@ -161,11 +161,11 @@ private struct MessageBubble: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             if let reasoning = message.reasoning, !reasoning.isEmpty {
-                Text(reasoning)
+                Text(Self.rendered(reasoning))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            Text(message.text)
+            Text(Self.rendered(message.text))
                 .foregroundStyle(message.isProvisional ? .secondary : .primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -173,5 +173,23 @@ private struct MessageBubble: View {
         .background(message.isProvisional ? Color.secondary.opacity(0.1) : Color.accentColor.opacity(0.12))
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .textSelection(.enabled)
+    }
+
+    /// Agent output is markdown, and until this it arrived as literal `##` and
+    /// `**` — visible in the first real conversation the app rendered.
+    ///
+    /// Inline-only **on purpose, and this is the second attempt**. Full block
+    /// parsing renders headings and lists properly, but it also swallows the line
+    /// breaks, turning a structured answer into one wall of text — measurably
+    /// worse to read than the literal markers it replaced. Inline-only keeps
+    /// emphasis, code spans and paragraph structure; the cost is that a line
+    /// starting with `#` shows its hashes.
+    private static func rendered(_ text: String) -> AttributedString {
+        let options = AttributedString.MarkdownParsingOptions(
+            interpretedSyntax: .inlineOnlyPreservingWhitespace,
+            failurePolicy: .returnPartiallyParsedIfPossible
+        )
+        return (try? AttributedString(markdown: text, options: options))
+            ?? AttributedString(text)
     }
 }
