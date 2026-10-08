@@ -67,22 +67,23 @@ and with a revoked token. Both are client-side; the relay behaves correctly.
    agent then reproduced it against the live relay and measured **41 s+ with
    idle threads** before being stopped. So the hang is not a timing artefact.
 
+   **The assumed mechanism is wrong, and that is now measured.** A standalone
+   probe (`/tmp/ws-probe.swift`, a session-level delegate that refuses every
+   server-trust challenge, against `wss://10.1.0.138:3443`) shows the pending
+   `receive()` **resuming on its own in 0.02 s** with
+   `NSURLErrorDomain Code=-999 "cancelled"`. URLSession does not park the
+   continuation at all. So the hang is **our code, not the framework**: either
+   the -999 is classified and then swallowed somewhere on the connect path, or
+   `withBudget` awaits a child that is not the one that failed — for example a
+   readiness wait whose task the refusal orphaned. Start by tracing what the
+   transport does with `-999` and what the connect path is actually awaiting
+   when it hangs; do not go looking at URLSession again.
+
    **Checked the obvious fix, and it is not a one-liner.** The challenge handler
    at `Network/RelayTransport.swift:368-392` implements the *session-level*
    delegate method, which receives no task — so there is nothing there to
-   `cancel()` after refusing. Two real options: implement the task-level
-   `urlSession(_:task:didReceive:completionHandler:)` instead and cancel the
-   task there (root fix, three cancel sites to change), or stop the budget race
-   from awaiting a parked child (contains it, leaves a parked task). Do the
-   first if possible.
-
-   **What the fix hinges on, and was still being probed when the attempt was
-   stopped:** what URLSession actually does to a `URLSessionWebSocketTask`
-   whose authentication challenge was cancelled — whether the receive
-   continuation is resumed with an error, never resumed, or resumed only when
-   the task is cancelled. Settle that first (a tiny standalone URLSession
-   probe against the relay with a wrong pin answers it), because both candidate
-   fixes depend on it.
+   `cancel()` after refusing. That is now moot: cancelling the task is not what
+   unblocks anything, because nothing was blocked.
 2. **A revoked credential reads as retryable.** After revoking the device, a
    connect exits with `status: offline` and
    `transport interruption: URLError -1011`, and `offline` is recoverable
