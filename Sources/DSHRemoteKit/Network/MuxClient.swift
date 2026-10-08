@@ -58,7 +58,11 @@ public enum MuxStreamError: Error, Sendable, Hashable, CustomStringConvertible {
     /// The socket failed. Every open stream fails with this (SPEC §6.9
     /// "Offline/transport interruption"): a multiplexed socket has no per-stream
     /// reconnect, so the caller reconnects and re-establishes baselines.
-    case socketFailed(detail: String)
+    ///
+    /// Carries the transport error rather than a message: the difference between
+    /// a dropped connection and a TLS pin mismatch decides whether the caller may
+    /// retry at all (SPEC §6.4), and a string cannot carry that honestly.
+    case socketFailed(RelayTransportError)
     /// A frame arrived that is not a `MuxFrame` at all — not JSON, not an object,
     /// or with a non-string `type`. SPEC §6.9 "Malformed response": protocol
     /// incompatibility rather than a crash.
@@ -72,7 +76,7 @@ public enum MuxStreamError: Error, Sendable, Hashable, CustomStringConvertible {
 
     public var description: String {
         switch self {
-        case .socketFailed(let detail): "mux socket failed: \(detail)"
+        case .socketFailed(let error): "mux socket failed: \(error.safeDescription)"
         case .protocolIncompatible(let reason): "mux protocol incompatibility: \(reason)"
         case .clientClosed: "mux client closed"
         case .streamIdInUse(let streamId): "mux stream \(streamId) is already open"
@@ -191,7 +195,7 @@ public actor MuxClient {
         } catch {
             subscriptions.removeValue(forKey: streamId)
             continuation.finish()
-            throw MuxStreamError.socketFailed(detail: RelayTransportError.classify(error).safeDescription)
+            throw MuxStreamError.socketFailed(RelayTransportError.classify(error))
         }
 
         return stream
@@ -366,6 +370,6 @@ public actor MuxClient {
 
     private func classify(_ error: any Error) -> MuxStreamError {
         if let error = error as? MuxStreamError { return error }
-        return .socketFailed(detail: RelayTransportError.classify(error).safeDescription)
+        return .socketFailed(RelayTransportError.classify(error))
     }
 }

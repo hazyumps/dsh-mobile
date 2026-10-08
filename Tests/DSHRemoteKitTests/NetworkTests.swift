@@ -1113,7 +1113,7 @@ func muxSocketFailureFailsAllStreams() async throws {
     let secondError = await #expect(throws: MuxStreamError.self) {
         _ = try await secondIterator.next()
     }
-    #expect(firstError == .socketFailed(detail: "transport offline: connection lost"))
+    #expect(firstError == .socketFailed(.offline("connection lost")))
     #expect(secondError == firstError)
 
     let stillOpen = await mux.openStreamIds

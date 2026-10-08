@@ -439,7 +439,7 @@ func transportFailureSurfacesAsStatus() async throws {
     let thrown = await failure { try await coordinator.connect() }
     let error = try #require(thrown as? ConnectionCoordinator.ConnectError)
 
-    #expect(error == .transportInterruption(detail: "transport offline: network connection was lost"))
+    #expect(error == .transportInterruption(detail: "network connection was lost"))
     #expect(error.isRetryable == true)
     // SPEC §6.9 "Offline/transport interruption". The second assertion is the point: it
     // must not still be claiming to be trying.
@@ -465,10 +465,13 @@ func upgradeFailureSurfacesAsOffline() async throws {
     let error = try #require(thrown as? ConnectionCoordinator.ConnectError)
 
     // `StubRelayTransport` itself produces this detail when its socket script is empty,
-    // which is exactly the "the transport refused" shape: no status, no socket.
-    #expect(error == .transportInterruption(
-        detail: "transport failure: StubRelayTransport has no scripted socket"
-    ))
+    // which is exactly the "the transport refused" shape: no status, no socket. The
+    // detail is the transport's own message now, without a redundant category prefix.
+    guard case .transportInterruption(let detail) = error else {
+        Issue.record("expected a transport interruption, got \(error)")
+        return
+    }
+    #expect(detail.contains("StubRelayTransport has no scripted socket"))
     #expect(await coordinator.status == .offline)
     #expect(await coordinator.connection == nil)
 }
@@ -491,7 +494,7 @@ func socketFailureStopsTheAttempt() async throws {
 
     // SPEC §6.9 "Offline/transport interruption": preserve state, reconnect in the
     // foreground. This one *is* retryable, unlike a pin mismatch below.
-    #expect(error == .transportInterruption(detail: "transport offline: network connection was lost"))
+    #expect(error == .transportInterruption(detail: "network connection was lost"))
     #expect(error.isRetryable == true)
     #expect(await coordinator.status == .offline)
     #expect(await transport.openedSocketRequests.count == 1)
@@ -501,17 +504,16 @@ func socketFailureStopsTheAttempt() async throws {
 func pinMismatchStops() {
     // This is the shape a *real* transport produces: `URLSessionRelayTransport` answers the
     // TLS challenge inside `openSocket`, so a pin mismatch is thrown during the WebSocket
-    // upgrade and `MuxClient` reports it as `socketFailed` with only a redacted string
-    // detail. `StubRelaySocket` cannot reproduce that — it has no TLS — so the recovery is
-    // asserted on the exact detail string the real transport builds.
+    // upgrade. It now arrives as the transport error itself rather than a string, so the
+    // recovery is asserted on the kind rather than on its wording.
     let recovered = ConnectionCoordinator.failure(
-        from: MuxStreamError.socketFailed(detail: RelayTransportError.tlsPinMismatch("cert 1").safeDescription)
+        from: MuxStreamError.socketFailed(.tlsPinMismatch("cert 1"))
     )
 
     // SPEC §6.9 "TLS pin mismatch": stop, say the certificate changed, offer re-pair. It
     // must never fall back to normal CA validation (SPEC §3.2), and SPEC §6.4 says to stop
     // retrying pin failures.
-    #expect(recovered == .certificateChanged(detail: "TLS pin mismatch: cert 1"))
+    #expect(recovered == .certificateChanged(detail: "cert 1"))
     #expect(recovered.isRetryable == false)
     #expect(recovered.status == .hostUnavailable)
     #expect(ConnectionCoordinator.ConnectError.status(for: .certificateChanged(detail: "x")) == .hostUnavailable)
@@ -639,7 +641,7 @@ func socketLossAfterReadyDemotesTheStatus() async throws {
     #expect(await coordinator.status == .offline)
     #expect(await coordinator.connection == nil)
     #expect(await coordinator.lastError
-        == .transportInterruption(detail: "transport offline: network connection was lost"))
+        == .transportInterruption(detail: "network connection was lost"))
 }
 
 // MARK: - 8. The reconnect seam (SPEC §6.4)

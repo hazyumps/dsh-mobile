@@ -643,8 +643,8 @@ public actor ConnectionCoordinator {
         }
         if let error = error as? MuxStreamError {
             switch error {
-            case .socketFailed(let detail):
-                return socketFailure(detail: detail)
+            case .socketFailed(let transportError):
+                return socketFailure(transportError)
             case .protocolIncompatible(let reason):
                 return .protocolIncompatible(reason: reason)
             case .clientClosed:
@@ -688,14 +688,17 @@ public actor ConnectionCoordinator {
     /// only on a `TLS pin mismatch: ` prefix. Matching one prefix in isolation is a long
     /// way from matching on prose, but the durable fix is to carry the case through
     /// `MuxStreamError` instead of a string; see this slice's report.
-    static func socketFailure(detail: String) -> ConnectError {
-        if detail.hasPrefix(pinMismatchPrefix) {
+    static func socketFailure(_ error: RelayTransportError) -> ConnectError {
+        switch error {
+        case .tlsPinMismatch(let detail):
+            // SPEC §6.4: stop, say the certificate changed, offer re-pairing. The
+            // kind is read from the error itself, not recovered from its wording.
             return .certificateChanged(detail: detail)
-        }
-        if detail == "transport cancelled" {
+        case .cancelled:
             return .cancelled
+        case .offline(let detail), .other(let detail):
+            return .transportInterruption(detail: detail)
         }
-        return .transportInterruption(detail: detail)
     }
 
     /// The prefix ``RelayTransportError/safeDescription`` puts on a pin mismatch.
