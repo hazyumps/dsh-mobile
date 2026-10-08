@@ -826,24 +826,54 @@ public actor ConnectionCoordinator {
     ///
     /// `sleeper` rather than `Task.sleep` so a test can fire the deadline without
     /// waiting for the wall clock; the default is the real one.
+    /// Resumes a budget race exactly once, whichever side finishes first.
+    private actor BudgetGate {
+        private var used = false
+        func claim() -> Bool {
+            if used { return false }
+            used = true
+            return true
+        }
+    }
+
     static func withBudget<T: Sendable>(
         seconds: Double,
         onExpiry: @escaping @Sendable (Double) -> ConnectError,
         sleeper: any RelaySleeper = TaskRelaySleeper(),
         operation: @escaping @Sendable () async throws -> T
     ) async throws -> T {
-        try await withThrowingTaskGroup(of: T.self) { group in
-            group.addTask { try await operation() }
-            group.addTask {
-                try await sleeper.sleep(seconds: seconds)
-                throw onExpiry(seconds)
+        // Raced through a continuation rather than a task group.
+        //
+        // A task group cannot leave its scope while a child is parked, so a stuck
+        // operation made this budget unreachable: the expiry was computed, thrown
+        // at the group, and then discarded by the scope exit. A wrong pin hung for
+        // forty seconds rather than failing at ten, which is the opposite of what
+        // SPEC §6.9 asks for. Here the first outcome wins and the loser is
+        // abandoned, so the budget always fires.
+        let gate = BudgetGate()
+        return try await withCheckedThrowingContinuation { continuation in
+            let work = Task {
+                do {
+                    let value = try await operation()
+                    if await gate.claim() { continuation.resume(returning: value) }
+                } catch {
+                    if await gate.claim() { continuation.resume(throwing: error) }
+                }
             }
-            guard let first = try await group.next() else {
-                // Unreachable: the group always has two children.
-                throw onExpiry(seconds)
+            Task {
+                do {
+                    try await sleeper.sleep(seconds: seconds)
+                } catch {
+                    // The sleeper was cancelled; another outcome owns the race.
+                    return
+                }
+                if await gate.claim() {
+                    // A bounded failure beats an unbounded hang: stop waiting on an
+                    // operation that is not coming back.
+                    work.cancel()
+                    continuation.resume(throwing: onExpiry(seconds))
+                }
             }
-            group.cancelAll()
-            return first
         }
     }
 }
