@@ -123,7 +123,24 @@ and with a revoked token. Both are client-side; the relay behaves correctly.
 
    Instrumentation is therefore the only remaining move, and it should start
    with `teardown()`, because it is awaited twice on the failing path and is the
-   only one of the three that sits directly in `connect()`'s way. Start by finding which await is actually parked: instrument
+   only one of the three that sits directly in `connect()`'s way.
+
+   **Two more cleared, and the hang re-reproduced by hand.** `teardown()`
+   (`ConnectionCoordinator.swift:547`) cancels the drain task and awaits
+   `mux.close()`, which is synchronous; `TaskRelaySleeper.sleep`
+   (`RelayTransport.swift:228`) is a cancellable `Task.sleep`; and the
+   transport builds its `URLSession` with `delegateQueue: nil`
+   (`RelayTransport.swift:295`) — the same configuration the probes used. Running
+   the smoke with a wrong pin against the LAN address still prints up to
+   `credential:` and then sits past eighteen seconds.
+
+   So the code reads clean end to end and misbehaves anyway, which means the
+   cause is in an interaction rather than a body. The way to see it is to stop
+   probing raw URLSession and probe **the package's own transport**: a temporary
+   executable that builds `URLSessionRelayTransport` with a wrong pin, calls
+   `openSocket`, and prints around each step. That isolates our wrapper from the
+   framework, and it is the one experiment nobody has run — every probe so far
+   re-implemented the delegate path instead of using the code under suspicion. Start by finding which await is actually parked: instrument
    `ConnectionCoordinator.connect()` with a print at each await boundary and run
    the wrong-pin reproduction below — that will name the parked wait in one run
    instead of another round of inference. Suspects, in order: a task joined on
