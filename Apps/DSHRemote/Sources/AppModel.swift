@@ -30,6 +30,31 @@ final class AppModel {    /// The kit owns `ConnectionStatus` — this is the tr
     private let secrets = KeychainSecretStore()
     private var coordinator: ConnectionCoordinator?
 
+    /// Raised when a chat action is attempted with no live connection. The
+    /// coordinator reports *why* through ``status``; this only says the screen
+    /// cannot act yet.
+    enum ChatUnavailable: Error {
+        case notConnected
+    }
+
+    /// The chat session for one conversation, or `nil` when there is no live
+    /// connection.
+    ///
+    /// The screen cannot reach the coordinator itself: reading a conversation and
+    /// writing to one are different capabilities (SPEC §4), and this is the seam
+    /// that keeps them out of the view.
+    func chatSession(for sessionId: String) async -> ChatSession? {
+        guard let coordinator else { return nil }
+        return await ChatSession.connected(to: coordinator, sessionId: sessionId)
+    }
+
+    /// Sends a prompt. Never retried — an uncertain send is reported, not
+    /// repeated, because a duplicate turn costs real work (SPEC §3.4).
+    func sendPrompt(_ text: String, to sessionId: String) async throws {
+        guard let coordinator else { throw ChatUnavailable.notConnected }
+        try await coordinator.prompt(sessionId: sessionId, text: text)
+    }
+
     init() {
         hosts = store.load()
         if !hosts.isEmpty { status = .offline }

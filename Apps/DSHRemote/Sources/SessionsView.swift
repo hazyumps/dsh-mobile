@@ -25,7 +25,11 @@ struct SessionsView: View {
             ForEach(model.sessionGroups, id: \.key) { group in
                 Section(group.key) {
                     ForEach(group.sessions, id: \.sessionId) { session in
-                        SessionRow(session: session, updated: model.lastActivity(session))
+                        NavigationLink {
+                            ChatView(sessionId: session.sessionId)
+                        } label: {
+                            SessionRow(session: session, updated: model.lastActivity(session))
+                        }
                     }
                 }
             }
