@@ -7,6 +7,7 @@ struct SessionsView: View {
     let host: SavedHost
     @Environment(AppModel.self) private var model
     @State private var hasLoaded = false
+    @State private var autoOpened: String?
 
     var body: some View {
         List {
@@ -51,6 +52,22 @@ struct SessionsView: View {
             }
         }
         .refreshable { await model.loadSessions(for: host) }
+        .navigationDestination(item: $autoOpened) { sessionId in
+            ChatView(sessionId: sessionId)
+        }
+        .task {
+            // Verification affordance: open the first session once the list has
+            // loaded, so the chat screen can be reached without a tap. Inert
+            // unless DSH_OPEN_SESSION is set.
+            guard model.shouldOpenFirstSessionOnLaunch else { return }
+            for _ in 0..<40 {
+                if let first = model.sessionGroups.first?.sessions.first?.sessionId {
+                    autoOpened = first
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(250))
+            }
+        }
         .task {
             guard !hasLoaded else { return }
             hasLoaded = true

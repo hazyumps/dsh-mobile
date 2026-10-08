@@ -52,6 +52,16 @@ final class AppModel {    /// The kit owns `ConnectionStatus` — this is the tr
         #endif
     }
 
+    /// Whether a launch should also open the first session, for the same reason:
+    /// the chat screen is unreachable on a simulator without a tap.
+    var shouldOpenFirstSessionOnLaunch: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.environment["DSH_OPEN_SESSION"] != nil
+        #else
+        false
+        #endif
+    }
+
     /// The chat session for one conversation, or `nil` when there is no live
     /// connection.
     ///
