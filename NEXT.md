@@ -6,6 +6,38 @@ XCTest. Read `SPEC.md` for the contract; this file is only the work list.
 
 ## Start here
 
+### Answering what the harness asks — the next real feature (round 81)
+
+The app's own empty-state copy promises this: *"Pair a harness to read its
+sessions, follow a conversation, and answer what it asks."* Reading and sending
+work; answering does not, and a session that asks a question stalls on the phone
+until somebody reaches a computer. That makes it the biggest remaining v1 gap.
+
+The API is already generated, so this is UI plus wiring rather than protocol work:
+
+- **`userQuestions/attachWait`** — a *stream*. This is how pending questions
+  arrive; it belongs beside the follow stream in `ChatSession`, folded into
+  something the view can render.
+- **`userQuestions/answer`** — unary. Args are
+  `UserQuestionsAnswerArguments(answer: AskUserQuestionAnswer)`, and:
+
+  ```swift
+  AskUserQuestionAnswer { answers: [AskUserQuestionAnswerAnswersItem] }
+  AskUserQuestionAnswerAnswersItem { id: String, selected: [String], custom: String? }
+  ```
+
+  So a question carries an `id`, may be answered by selecting from a set, may
+  accept a custom string, or both.
+
+Where it goes: a card above the composer in `ChatView`, with the options as
+buttons and a free-text field when `custom` is allowed. `Sending` it is the same
+shape as `ConnectionCoordinator.prompt` — one more unary call, with retries off
+for the same §3.4 reason: an answer sent twice is worse than one reported as
+uncertain.
+
+Also generated and worth knowing about for later: `PermissionCatalog`, plus
+`UserQuestionsAttachWaitResult` and `UserQuestionsAnswerResult`.
+
 ### The composer verification, ready to run (round 77)
 
 A scratch session exists for exactly this:
