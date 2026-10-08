@@ -100,16 +100,30 @@ and with a revoked token. Both are client-side; the relay behaves correctly.
    reports, and neither does anything else.
 
    So the next look is `MuxClient`'s failure and stream-completion paths, not
-   `connect()` and not URLSession. `URLSessionRelaySocket.close()` is also
-   synchronous (`RelayTransport.swift:450` — it calls
-   `task.cancel(with:reason:)`, which returns Void), so closing is not the
-   park either. That is four eliminations by reading: the transport's open, its
-   close, `send`, and `receive`. What is left is whatever `MuxClient` awaits
-   when it fails streams or waits for its drain loop to end — which is no
-   longer readable by inspection, because it depends on which task is joined.
-   Instrument it: a print at each await boundary in `MuxClient`'s failure path
-   and its drain loop, then the wrong-pin reproduction, names the parked wait
-   in one run. Start by finding which await is actually parked: instrument
+   `connect()` and not URLSession. Five things are now cleared by reading, and
+   each one *should* have hung if the framework theory were right:
+
+   1. `URLSessionRelayTransport.openSocket` (`RelayTransport.swift:326`) awaits
+      nothing — create, `resume()`, return the wrapper;
+   2. `URLSessionRelaySocket.send(_:)` (`:429`) is `try await task.send(…)`,
+      which throws `-999` immediately (probe 2);
+   3. `URLSessionRelaySocket.receive()` (`:437`) is `try await task.receive()`,
+      which throws `-999` immediately (probes 1 and 3);
+   4. `URLSessionRelaySocket.close()` (`:450`) is synchronous;
+   5. `MuxClient.ensureSocket()` (`MuxClient.swift:248`) has **no retry loop** —
+      it classifies and throws.
+
+   **That leaves a contradiction worth stating plainly: every function on the
+   path either returns without awaiting or throws immediately, yet `connect()`
+   hangs for more than forty seconds.** So the park is not in a function body I
+   have read; it is in bookkeeping those bodies call into — the three unread
+   candidates are `ConnectionCoordinator.teardown()` (awaited at the top of
+   `connect()` and again in `abandon()`), `TaskRelaySleeper.sleep`, and the
+   receive loop's own error handling in `MuxClient.startReceiveLoop`.
+
+   Instrumentation is therefore the only remaining move, and it should start
+   with `teardown()`, because it is awaited twice on the failing path and is the
+   only one of the three that sits directly in `connect()`'s way. Start by finding which await is actually parked: instrument
    `ConnectionCoordinator.connect()` with a print at each await boundary and run
    the wrong-pin reproduction below — that will name the parked wait in one run
    instead of another round of inference. Suspects, in order: a task joined on
