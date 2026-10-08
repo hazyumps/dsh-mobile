@@ -1,9 +1,6 @@
 .DS_Store
 build/
-.build/
-.build-mine/
-.build-codegen/
-.build-network/
+.build*/
 DerivedData/
 xcuserdata/
 *.xcuserstate
