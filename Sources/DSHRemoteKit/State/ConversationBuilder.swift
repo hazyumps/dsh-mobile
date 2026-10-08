@@ -43,6 +43,10 @@ public struct ConversationBuilder: Sendable {
     private var open: [String: (revision: Int64, chunks: Int)] = [:]
     /// Attempts that ended, so late chunks for them are dropped.
     private var ended: Set<String> = []
+    /// Attempts whose `committed` end named a durable `seq` that has not arrived
+    /// yet: the preview is held until that record exists, so the reply never
+    /// vanishes in the gap between the two.
+    private var held: [String: Int64] = [:]
     private var highestSeq: Int64?
 
     public init() {}
@@ -97,10 +101,15 @@ public struct ConversationBuilder: Sendable {
             open[attempt] = current
 
         case .end:
-            // Retire the provisional exactly once. The durable record that
-            // replaces it arrives as its own event; nothing is duplicated here.
+            // Retire the provisional exactly once. Its durable record arrives as
+            // its own event, and the two orders are not guaranteed: a committed
+            // end that arrives first holds the preview until that record lands,
+            // so the reply is never momentarily absent and never doubled.
             open[attempt] = nil
             ended.insert(attempt)
+            if let outcome = frame.outcome, outcome.kind == .committed, let seq = outcome.seq {
+                held[attempt] = seq
+            }
 
         case .unknown:
             return
@@ -123,6 +132,17 @@ public struct ConversationBuilder: Sendable {
             .compactMap(Self.message(from:))
 
         for (attempt, state) in open.sorted(by: { $0.key < $1.key }) where state.chunks > 0 {
+            result.append(
+                ConversationMessage(
+                    id: "attempt:\(attempt)",
+                    role: .assistant,
+                    text: "",
+                    isProvisional: true,
+                    reasoning: nil
+                )
+            )
+        }
+        for (attempt, awaited) in held.sorted(by: { $0.key < $1.key }) where events[awaited] == nil {
             result.append(
                 ConversationMessage(
                     id: "attempt:\(attempt)",

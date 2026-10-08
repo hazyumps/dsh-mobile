@@ -42,17 +42,15 @@ decoding below the UI.
 
 ## Then the chat screen
 
-**One open decision first.** Two reducers exist. The committed one
-(`State/ConversationBuilder.swift`, 190 lines, 8 tests) wins rule 3: a chunk
-whose revision goes backwards is dropped as a frame, while the other drops the
-whole attempt on a single out-of-order frame, which over-reacts. But the parked
-one (`wip/ConversationBuilder2.swift.wip`, 241 lines, 9 tests) wins rule 4: it
-holds a preview until the durable `seq` its `end` named actually exists, so a
-`committed` end arriving *before* its durable record shows neither briefly. The
-committed one has that gap. Either port that ordering handling into the
-committed builder, or promote the parked one with the recipe its author gave
-(delete both committed files, `git mv` the `.wip` into place, rename the type).
-Nothing depends on either yet, so this is cheap to settle now and awkward later.
+**Reducers: settled.** `State/ConversationBuilder.swift` stands. The rebuilt
+alternative in `wip/ConversationBuilder2.swift.wip` raised one genuine defect
+in it — a `committed` end arriving before its durable record cleared the
+preview and briefly rendered neither — and that is now fixed: a settled
+preview is held until the `seq` its `outcome` named exists, with a test for
+the order the capture did not exercise. Its other disagreement, dropping the
+whole attempt when one revision goes backwards rather than only the stale
+frame, is resolved in favour of the surgical reading. The parked duplicate is
+now redundant and can be deleted.
 
 `Sources/DSHRemoteKit/State/ConversationBuilder.swift` is done and tested
 (190 lines, eight tests). What it needs from the UI:

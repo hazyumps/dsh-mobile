@@ -118,4 +118,27 @@ struct ConversationBuilderTests {
         #expect(builder.messages.isEmpty)
         #expect(builder.unmodelledEvents.count == 2)
     }
+
+    @Test("a committed end arriving before its durable record holds the preview")
+    func settledPreviewHeldUntilItsRecordArrives() throws {
+        var builder = ConversationBuilder()
+        builder.apply(try streamFrame(#"{"type":"start","attemptId":"a1","revision":5}"#))
+        builder.apply(try streamFrame(#"{"type":"chunk","attemptId":"a1","revision":6,"index":0}"#))
+        // The end names seq 48, which has not arrived yet. The reply must not
+        // disappear in the gap between settlement and its durable record.
+        builder.apply(try streamFrame(#"{"type":"end","attemptId":"a1","revision":7,"index":1,"outcome":{"kind":"committed","eventType":"assistant/message","seq":48}}"#))
+        #expect(!builder.isStreaming)
+        #expect(builder.messages.count == 1)
+        #expect(builder.messages.first?.isProvisional == true)
+
+        // The record lands: exactly one message, and it is the durable one.
+        builder.apply(event: try event(
+            "assistant/message",
+            seq: 48,
+            data: #"{"message":{"content":[{"type":"text","text":"done"}]}}"#
+        ))
+        #expect(builder.messages.count == 1)
+        #expect(builder.messages.first?.text == "done")
+        #expect(builder.messages.first?.isProvisional == false)
+    }
 }
