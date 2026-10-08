@@ -21,6 +21,7 @@ struct ChatView: View {
     @State private var hasGap = false
     @State private var isStreaming = false
     @State private var draft = ""
+    @State private var questions: [PendingQuestion] = []
     @State private var isSending = false
     @State private var sendError: String?
     @State private var openError: String?
@@ -96,8 +97,56 @@ struct ChatView: View {
                 }
             }
 
+            // A question the harness is waiting on. Without this the session
+            // stalls until somebody reaches a computer, which is the one thing
+            // the app's own empty state promises it will not do.
+            ForEach(questions) { question in
+                VStack(alignment: .leading, spacing: 8) {
+                    if let header = question.header {
+                        Text(header).font(.caption).foregroundStyle(.secondary)
+                    }
+                    Text(question.question).font(.callout)
+                    ForEach(question.options) { option in
+                        Button(option.label) {
+                            Task { await answer(question, selecting: [option.label]) }
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.accentColor.opacity(0.15))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+            }
+
             composer
         }
+    }
+
+    /// Sends one answer and drops the card, whichever way it went — a failed
+    /// answer is reported rather than left sitting under a dead button.
+    private func answer(_ question: PendingQuestion, selecting selected: [String]) async {
+        var applied = false
+        do {
+            applied = try await model.answerQuestion(
+                sessionId: sessionId,
+                callId: question.callId,
+                questionId: question.id,
+                selected: selected
+            )
+        } catch {
+            sendError = "That answer may not have been sent. It will not be resent."
+        }
+        if applied {
+            await session?.markAnswered(questionId: question.id)
+        } else if sendError == nil {
+            // The call was accepted but the host did not apply it — usually a
+            // question that was already abandoned. Keep the card so the answer can
+            // be tried again, and say what actually happened rather than claiming
+            // it went through.
+            sendError = "The harness did not apply that answer. It may have moved on."
+        }
+        questions = await session?.pendingQuestions ?? []
     }
 
     private var composer: some View {
@@ -195,6 +244,7 @@ struct ChatView: View {
             if next.count != messages.count { messages = next }
             hasGap = await session.hasGap
             isStreaming = await session.isStreaming
+            questions = await session.pendingQuestions
             try? await Task.sleep(for: .milliseconds(250))
         }
     }

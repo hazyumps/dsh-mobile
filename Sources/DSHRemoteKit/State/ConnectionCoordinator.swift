@@ -524,7 +524,7 @@ public actor ConnectionCoordinator {
         questionId: String,
         selected: [String],
         custom: String? = nil
-    ) async throws {
+    ) async throws -> Bool {
         let client = DshRpcClient(
             baseURL: origin.baseURL,
             authorization: origin.authorization,
@@ -542,12 +542,17 @@ public actor ConnectionCoordinator {
             ])
         )
         do {
-            _ = try await client.call(
+            let response = try await client.call(
                 Self.userQuestionsAnswerMethod,
                 args: arguments,
                 returning: UserQuestionsAnswerResult.self,
                 retryPolicy: .none
             )
+            // `ok: true` means the call was accepted; this value says whether the
+            // host actually applied it. A question that had already been abandoned
+            // answers `false`, which is not a transport failure and must not be
+            // reported as one — the caller decides what to tell the user.
+            return response.result.value ?? false
         } catch {
             let failure = Self.failure(from: error)
             lastError = failure

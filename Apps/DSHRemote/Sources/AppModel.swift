@@ -102,6 +102,29 @@ final class AppModel {    /// The kit owns `ConnectionStatus` — this is the tr
         try await coordinator.prompt(sessionId: sessionId, text: text)
     }
 
+    /// Answers a question the harness asked, so a session that needs a decision
+    /// does not stall until somebody reaches a computer.
+    ///
+    /// Never retried, for the same reason a prompt is not: an answer delivered
+    /// twice is worse than one reported as uncertain, because the agent may act
+    /// on both (SPEC §3.4).
+    func answerQuestion(
+        sessionId: String,
+        callId: String,
+        questionId: String,
+        selected: [String],
+        custom: String? = nil
+    ) async throws -> Bool {
+        guard let coordinator else { throw ChatUnavailable.notConnected }
+        return try await coordinator.answer(
+            agentId: sessionId,
+            callId: callId,
+            questionId: questionId,
+            selected: selected,
+            custom: custom
+        )
+    }
+
     init() {
         hosts = store.load()
         if !hosts.isEmpty { status = .offline }
