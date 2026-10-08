@@ -116,16 +116,29 @@ public actor ChatSession {
     // MARK: - Internals
 
     private func fold(_ frame: MuxFrame) {
-        // A question arrives as a durable `tool/call`, so it is picked out here
-        // rather than by the builder: the builder's job is the transcript, and a
-        // pending question is state the screen has to act on.
-        if let event = frame.value?.event,
-           let asked = PendingQuestion.questions(inToolCall: event.data) {
-            for question in asked {
-                questions[question.id] = question
+        // Questions hide in two places, and missing the first one cost a round:
+        // a *fresh* follow receives history as a snapshot whose `records` carry
+        // the tool calls, while only events arriving after the follow come as
+        // standalone `event` frames. Handling just the latter meant a question
+        // asked before you opened the conversation never produced a card.
+        if let event = frame.value?.event {
+            collectQuestions(from: event)
+        }
+        if let snapshot = frame.value?.snapshot {
+            for record in snapshot.records {
+                if let event = record.event {
+                    collectQuestions(from: event)
+                }
             }
         }
         builder.apply(frame)
+    }
+
+    private func collectQuestions(from event: DurableEventEnvelope) {
+        guard let asked = PendingQuestion.questions(inToolCall: event.data) else { return }
+        for question in asked {
+            questions[question.id] = question
+        }
     }
 
     /// Questions waiting on an answer, oldest first by id order of arrival.
