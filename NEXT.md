@@ -92,9 +92,9 @@ Those `DSH_*` variables are DEBUG-only affordances added because Xcode 27 ships
 no Simulator GUI and `simctl` cannot tap. They run the ordinary code paths.
 
 For anything whose wire shape is unknown, **capture it from the live harness
-first** — `/tmp/capture-question.cjs` follows a session and prints every event
-type, and needs only a session id and a device token (`ws` is installed in
-`/tmp`). Probing with deliberately wrong arguments is faster still: the gateway's
+first** — `Tools/capture/follow-session.cjs` follows a session and prints every event
+type, and needs only a session id and a device token (`ws` is installed under
+`Tools/capture`). Probing with deliberately wrong arguments is faster still: the gateway's
 rejections name every missing field, which is how `attachWait`'s arguments were
 learned in one call.
 
@@ -216,7 +216,7 @@ this needs a new identifier or a session-level registration.
 Worth noting for whoever builds it: the three probes were cheap and the gateway's
 error messages named every missing field, which is a faster way to learn an
 argument shape than reading generated code. The probe script is
-`/tmp/attachwait.cjs`, and the device was revoked afterwards.
+`Tools/capture/attachwait.cjs`, and the device was revoked afterwards.
 
 **Round 96 mapped the gap to endpoints, and the answerer question is answered.**
 Listing the generated endpoints (`grep '^// MARK: - ' Generated/Endpoints.swift`)
@@ -288,7 +288,7 @@ nor the call that answers it is known.
 Capture it the way questions were captured (round 85): create a session, prompt it
 to do something that needs approval — something outside the workspace sandbox, so
 the `ask` policy actually fires — and follow it with
-`/tmp/capture-question.cjs`, which prints each event type and needs only a session
+`Tools/capture/follow-session.cjs`, which prints each event type and needs only a session
 id and a device token. Then read the request's shape out of the capture and find
 the answering call in `Protocol/endpoints.json` beside `userQuestions/answer`.
 
@@ -305,7 +305,7 @@ XCTest. Read `SPEC.md` for the contract; this file is only the work list.
 
 The wire shape is no longer a guess. A session was prompted to ask a question
 through the live relay, and the follow stream was captured with an authenticated
-mux connection (`/tmp/capture-question.cjs`; the relay's own `ws` is needed to
+mux connection (`Tools/capture/follow-session.cjs`; the relay's own `ws` is needed to
 set the Authorization header, and the follow args require the `address` union).
 
 **The carrier is a durable event, not `userQuestions/attachWait`:**
@@ -371,7 +371,7 @@ What is still not demonstrated end to end is the agent *receiving* an answer,
 because the only question available had gone stale. A fresh scratch session asking
 a fresh question would settle it in one run.
 
-Also captured the capture script: `/tmp/capture-question.cjs`, and the scratch
+Also captured the capture script: `Tools/capture/follow-session.cjs`, and the scratch
 session `session-11be456b-80a5-4bc6-bc4d-af77c28e1ffb` still has the pending
 question, so it remains a valid fixture for the card.
 
@@ -610,11 +610,11 @@ and with a revoked token. Both are client-side; the relay behaves correctly.
    standalone probes against `wss://10.1.0.138:3443`, each with a session-level
    delegate that refuses every server-trust challenge:
 
-   - `/tmp/ws-probe.swift` — a pending `receive()` **resumes on its own in
+   - `Tools/probes/ws-probe.swift` — a pending `receive()` **resumes on its own in
      0.02 s** with `NSURLErrorDomain Code=-999 "cancelled"`;
-   - `/tmp/ws-probe2.swift` — and so does a pending `send()`, in the same
+   - `Tools/probes/ws-probe2.swift` — and so does a pending `send()`, in the same
      instant, `-999` as well;
-   - `/tmp/ws-probe3.swift` — and so do a `receive()` and a `send()` issued
+   - `Tools/probes/ws-probe3.swift` — and so do a `receive()` and a `send()` issued
      *after* the task has already failed (`-999` at the moment of the call,
      three seconds after the refusal). A stopped agent reported an 18-second
      park on a late `receive()`; it does not reproduce, and its own note says
@@ -714,7 +714,7 @@ and with a revoked token. Both are client-side; the relay behaves correctly.
 
    **And the obvious explanation is refuted.** A probe with the app's exact call
    order — resume, start a pending `receive()`, then `send` — still throws
-   `-999` in 0.21 s (`/tmp/ws-probe4.swift`). So a concurrent receive is not what
+   `-999` in 0.21 s (`Tools/probes/ws-probe4.swift`). So a concurrent receive is not what
    changes `send`'s behaviour, and neither is the delegate or the session
    configuration, which match.
 
@@ -732,7 +732,7 @@ and with a revoked token. Both are client-side; the relay behaves correctly.
    `while`, so there is no spin. And the `URLRequest` form the app uses
    (`GET` + `Authorization`) behaves exactly like a plain `URL`: with a refused
    challenge, `send` throws `-999` at once, with or without a pending receive
-   (`/tmp/ws-probe5.swift`). Five probes have now exonerated raw URLSession in
+   (`Tools/probes/ws-probe5.swift`). Five probes have now exonerated raw URLSession in
    every configuration constructible by hand:
 
    | probe | shape | result |
@@ -787,7 +787,7 @@ and with a revoked token. Both are client-side; the relay behaves correctly.
    **Round 45: that is refuted as well, and the probe route is exhausted.** The
    last untested ordering — send issued *while* a receive is still outstanding,
    with the challenge refused after both are in flight — also throws `-999`, in
-   0.02 s (`/tmp/ws-probe6.swift`, case A; case B confirms the settled ordering
+   0.02 s (`Tools/probes/ws-probe6.swift`, case A; case B confirms the settled ordering
    too). Six probes have now covered every ordering and every construction:
 
    | probe | shape | result |
@@ -800,7 +800,7 @@ and with a revoked token. Both are client-side; the relay behaves correctly.
    | 6 | send in flight during the refusal, receive outstanding | `-999` in 0.02 s |
 
    **Round 46: the budget is now measured, not read — and it is the reason
-   nothing reports.** `/tmp/budget-probe.swift` recreates `withBudget` exactly
+   nothing reports.** `Tools/probes/budget-probe.swift` recreates `withBudget` exactly
    and drives it two ways, with no URLSession anywhere:
 
    ```
