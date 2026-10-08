@@ -1,0 +1,456 @@
+import Foundation
+
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+
+#if canImport(Security)
+import Security
+#endif
+
+// The one seam between this layer and the network. Everything above it — RPC,
+// binary upload, the event result, pairing, the multiplexed socket — is written
+// against ``RelayTransport`` and ``RelaySocket``, so the whole layer is exercised
+// offline by ``StubRelayTransport`` (SPEC §2 "Network: URLSession HTTP and
+// URLSessionWebSocketTask", SPEC §9 "Add focused tests around protocol/state
+// boundaries").
+//
+// Deliberately narrow: one HTTP exchange, one WebSocket session, cancellation.
+// No URL builder, no credential handling, no retry — those are policy and belong
+// above the seam where a stub can script them.
+
+// MARK: - One HTTP exchange
+
+/// A single request/response exchange, independent of what performs it.
+///
+/// Field names are transport-shaped rather than API-shaped: this layer knows
+/// nothing about relay paths, bearer tokens, or RPC envelopes.
+public struct RelayHTTPRequest: Sendable, Hashable {
+    public var url: URL
+    /// Upper-case HTTP verb, e.g. `GET`, `POST`.
+    public var method: String
+    /// Header names as supplied. Lookup is case-insensitive through
+    /// ``header(_:)``, because HTTP header names are.
+    public var headers: [String: String]
+    public var body: Data?
+
+    public init(url: URL, method: String, headers: [String: String] = [:], body: Data? = nil) {
+        self.url = url
+        self.method = method
+        self.headers = headers
+        self.body = body
+    }
+
+    /// Case-insensitive header lookup.
+    public func header(_ name: String) -> String? {
+        let wanted = name.lowercased()
+        return headers.first { $0.key.lowercased() == wanted }?.value
+    }
+
+    /// Convenience for the one header every relay request carries (SPEC §6.2:
+    /// "Every relay request, including WebSocket upgrade and binary upload,
+    /// carries `Authorization: Bearer <device token>`").
+    public static func authorizationHeader(_ authorization: RelayAuthorization) -> [String: String] {
+        guard let value = authorization.headerValue else { return [:] }
+        return ["Authorization": value]
+    }
+}
+
+/// A single response, with the body already fully read.
+///
+/// The body is `Data` rather than a stream because every response this client
+/// reads is a small JSON object — including the bare `{ok,value}` upload body
+/// (SPEC §6.8). Upload *request* bodies may be large, and ``RelayHTTPRequest``
+/// therefore carries `Data?`; streaming a file from disk to the request body
+/// without a second in-memory copy is a Stage 3 concern (SPEC §3.6) and would
+/// change that field to a body source, not this one.
+public struct RelayHTTPResponse: Sendable, Hashable {
+    public var status: Int
+    /// Header names as received; ``header(_:)`` is case-insensitive so a caller
+    /// can ask for `retry-after` without knowing the peer's casing.
+    public var headers: [String: String]
+    public var body: Data
+
+    public init(status: Int, headers: [String: String] = [:], body: Data = Data()) {
+        self.status = status
+        self.headers = headers
+        self.body = body
+    }
+
+    public func header(_ name: String) -> String? {
+        let wanted = name.lowercased()
+        return headers.first { $0.key.lowercased() == wanted }?.value
+    }
+
+    public var isSuccess: Bool { (200..<300).contains(status) }
+}
+
+// MARK: - One WebSocket session
+
+/// One inbound WebSocket message.
+public enum RelaySocketMessage: Sendable, Hashable {
+    case text(String)
+    case binary(Data)
+}
+
+/// One open WebSocket session.
+///
+/// Deliberately not `AsyncSequence`: a protocol requirement that is a sequence
+/// would force every implementation to hand out a fresh iterator and make
+/// cancellation semantics part of the type. `receive()` is a single awaited
+/// step, which is all ``MuxClient`` needs.
+///
+/// `receive()` throws to report a closed or failed socket. It must not return a
+/// sentinel message for closure, because the difference between "the peer said
+/// end" and "the socket died" decides whether SPEC §6.9 wants a reconnect or a
+/// protocol-incompatibility message.
+public protocol RelaySocket: Sendable {
+    /// Sends a text frame. JSON only reaches the mux socket as text (SPEC §6.4).
+    func send(text: String) async throws
+
+    /// Awaits the next inbound message.
+    func receive() async throws -> RelaySocketMessage
+
+    /// Closes the session. Idempotent and non-throwing: it is called from
+    /// cancellation paths where there is nobody left to report a failure to.
+    func close() async
+}
+
+// MARK: - The transport itself
+
+/// One HTTP exchange and one WebSocket session, abstracted (deliverable 1).
+///
+/// The two methods are exactly what the relay contract needs and nothing more:
+/// SPEC §6.2's unary POST, SPEC §6.8's raw-byte POST, SPEC §6.3's pairing claim,
+/// and SPEC §6.4's `/api/remote.mux` upgrade all reduce to ``send(_:)``, and the
+/// multiplexed socket to ``openSocket(_:)``.
+public protocol RelayTransport: Sendable {
+    func send(_ request: RelayHTTPRequest) async throws -> RelayHTTPResponse
+
+    /// Performs the WebSocket upgrade and returns the live session.
+    ///
+    /// The returned socket is owned by the caller: ``RelaySocket/close()`` is the
+    /// only way to release it, and nothing here reopens it.
+    func openSocket(_ request: RelayHTTPRequest) async throws -> any RelaySocket
+}
+
+// MARK: - Transport failures
+
+/// What a transport may report before any HTTP status exists.
+///
+/// Separated from ``DshRPCError`` because these are properties of the connection
+/// rather than of an exchange, and because the URLSession implementation is the
+/// only thing that can produce them.
+public enum RelayTransportError: Error, Sendable, Hashable {
+    /// No usable network path, or the connection dropped mid-exchange. SPEC §6.9
+    /// "Offline/transport interruption": preserve the draft, reconnect in the
+    /// foreground.
+    case offline(String)
+    /// The peer's certificate did not match the pin. SPEC §6.9 "TLS pin
+    /// mismatch": stop, say the certificate changed, offer re-pair. It is a
+    /// distinct case because it must never be retried and never fall back to
+    /// normal CA validation (SPEC §3.2).
+    case tlsPinMismatch(String)
+    /// The exchange was cancelled by the caller's task. Not an error to show.
+    case cancelled
+    /// Anything else the platform reported.
+    case other(String)
+
+    /// Redacted description. `URL` strings can carry a launch token (SPEC §12),
+    /// so a transport error is never rendered verbatim into diagnostics without
+    /// passing through here first.
+    public var safeDescription: String {
+        switch self {
+        case .offline(let detail): "transport offline: \(detail)"
+        case .tlsPinMismatch(let detail): "TLS pin mismatch: \(detail)"
+        case .cancelled: "transport cancelled"
+        case .other(let detail): "transport failure: \(detail)"
+        }
+    }
+
+    /// Classifies a platform error. `URLError` codes carry the distinction the
+    /// SPEC §6.9 table needs; anything else is ``other(_:)``.
+    public static func classify(_ error: any Error) -> RelayTransportError {
+        if let error = error as? RelayTransportError { return error }
+        if error is CancellationError { return .cancelled }
+        let urlError = error as? URLError
+        if let urlError {
+            switch urlError.code {
+            case .cancelled:
+                return .cancelled
+            case .notConnectedToInternet, .networkConnectionLost, .cannotConnectToHost,
+                 .cannotFindHost, .timedOut, .dnsLookupFailed, .dataNotAllowed,
+                 .internationalRoamingOff, .secureConnectionFailed:
+                return .offline(urlError.code.rawValue.description)
+            case .serverCertificateUntrusted, .serverCertificateHasBadDate,
+                 .serverCertificateNotYetValid, .serverCertificateHasUnknownRoot,
+                 .clientCertificateRejected, .clientCertificateRequired:
+                return .tlsPinMismatch(urlError.code.rawValue.description)
+            default:
+                return .other("URLError \(urlError.code.rawValue)")
+            }
+        }
+        return .other(String(describing: type(of: error)))
+    }
+}
+
+// MARK: - Authorization
+
+/// The relay credential as it appears on the wire (SPEC §6.3).
+///
+/// An enum rather than a bare `String?` so an unpaired client cannot be
+/// accidentally represented as `"Bearer "` with an empty token.
+public enum RelayAuthorization: Sendable, Hashable {
+    case bearer(String)
+    /// No credential. Only a loopback operator connection is served without one.
+    case none
+
+    public var headerValue: String? {
+        switch self {
+        case .bearer(let token): "Bearer \(token)"
+        case .none: nil
+        }
+    }
+}
+
+// MARK: - Sleeping
+
+/// Where a backoff waits. SPEC §6.9 requires honouring `Retry-After`; tests
+/// cannot wait 60 seconds, so the wait is a dependency like any other.
+public protocol RelaySleeper: Sendable {
+    func sleep(seconds: Double) async throws
+}
+
+/// The real one.
+public struct TaskRelaySleeper: RelaySleeper {
+    public init() {}
+
+    public func sleep(seconds: Double) async throws {
+        guard seconds > 0 else { return }
+        try await Task.sleep(for: .seconds(seconds))
+    }
+}
+
+// MARK: - URLSession
+
+/// Header carrying the pin of the certificate the caller already trusts.
+///
+/// `URLSession` has no public API for "trust exactly this key", so pinning is
+/// enforced at the `URLSessionDelegate` challenge instead. The URLSession
+/// transport is therefore not the thing that *decides* the pin — that decision
+/// belongs with the saved host — but it must not silently succeed when a caller
+/// has asked for a pin. ``URLSessionRelayTransport`` treats a mismatch as
+/// ``RelayTransportError/tlsPinMismatch(_:)`` and never falls back to the system
+/// trust store when a pin is configured (SPEC §3.2: "A supplied pin mismatch is
+/// a hard error … it never silently falls back to normal CA validation").
+public struct RelayPinningPolicy: Sendable, Hashable {
+    /// Base64 SHA-256 of the DER SubjectPublicKeyInfo, as the relay publishes it
+    /// (SPEC §6.3).
+    public var expectedSPKIPin: String?
+    /// Whether the platform must also validate the chain and hostname. SPEC §3.2:
+    /// a payload without a fingerprint "must pass normal platform TLS and
+    /// hostname validation". A self-signed relay with a pin cannot, so pinning
+    /// and platform validation are separate switches.
+    public var requiresPlatformTrust: Bool
+
+    public init(expectedSPKIPin: String? = nil, requiresPlatformTrust: Bool = true) {
+        self.expectedSPKIPin = expectedSPKIPin
+        self.requiresPlatformTrust = requiresPlatformTrust
+    }
+
+    /// The policy for a relay that published a pin: the pin is the whole
+    /// authority and the chain is not required.
+    public static func pinned(_ pin: String) -> RelayPinningPolicy {
+        RelayPinningPolicy(expectedSPKIPin: pin, requiresPlatformTrust: false)
+    }
+
+    public static let platformTrust = RelayPinningPolicy()
+
+    var isPinned: Bool { expectedSPKIPin != nil }
+}
+
+/// The real transport (deliverable 1): `URLSession` for HTTP,
+/// `URLSessionWebSocketTask` for the mux socket.
+///
+/// Redirects are refused outright. SPEC §6.2: "Do not forward credentials to
+/// redirects or another origin. Do not follow API redirects in v1." A refusal
+/// surfaces as the redirect response itself, which is then classified by status
+/// like any other — never as a followed request.
+public final class URLSessionRelayTransport: NSObject, RelayTransport, @unchecked Sendable {
+    private let session: URLSession
+    private let pinning: RelayPinningPolicy
+    private let delegate: TransportDelegate
+
+    /// - Parameters:
+    ///   - configuration: Defaults to `.ephemeral` so nothing about a host is
+    ///     cached on disk. SPEC §2 stores host metadata deliberately; a URL cache
+    ///     is not part of that decision.
+    ///   - pinning: Pin policy for challenges. See ``RelayPinningPolicy``.
+    public init(
+        configuration: URLSessionConfiguration = .ephemeral,
+        pinning: RelayPinningPolicy = .platformTrust
+    ) {
+        self.pinning = pinning
+        self.delegate = TransportDelegate(pinning: pinning)
+        self.session = URLSession(
+            configuration: configuration,
+            delegate: delegate,
+            delegateQueue: nil
+        )
+        super.init()
+    }
+
+    deinit {
+        session.invalidateAndCancel()
+    }
+
+    public func send(_ request: RelayHTTPRequest) async throws -> RelayHTTPResponse {
+        let urlRequest = Self.urlRequest(from: request)
+        do {
+            let (data, response) = try await session.data(for: urlRequest)
+            guard let http = response as? HTTPURLResponse else {
+                throw RelayTransportError.other("response was not HTTP")
+            }
+            var headers: [String: String] = [:]
+            for (key, value) in http.allHeaderFields {
+                if let key = key as? String, let value = value as? String {
+                    headers[key] = value
+                }
+            }
+            return RelayHTTPResponse(status: http.statusCode, headers: headers, body: data)
+        } catch {
+            throw RelayTransportError.classify(error)
+        }
+    }
+
+    public func openSocket(_ request: RelayHTTPRequest) async throws -> any RelaySocket {
+        let task = session.webSocketTask(with: Self.urlRequest(from: request))
+        task.resume()
+        return URLSessionRelaySocket(task: task)
+    }
+
+    private static func urlRequest(from request: RelayHTTPRequest) -> URLRequest {
+        var urlRequest = URLRequest(url: request.url)
+        urlRequest.httpMethod = request.method
+        urlRequest.httpBody = request.body
+        for (name, value) in request.headers {
+            urlRequest.setValue(value, forHTTPHeaderField: name)
+        }
+        // `timeoutInterval` is left at the session default: SPEC §6.4's 10-second
+        // budgets are connection budgets owned by the caller, not per-request
+        // timeouts, and a unary RPC has no stated budget at all.
+        return urlRequest
+    }
+
+    /// Shared challenge handling for HTTP and the WebSocket upgrade.
+    ///
+    /// The pin is computed from the server's key, not from the certificate, and
+    /// not from anything in the response (SPEC §3.2 step 3: "Never learn a pin
+    /// from an unverified network response").
+    private final class TransportDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+        let pinning: RelayPinningPolicy
+
+        init(pinning: RelayPinningPolicy) {
+            self.pinning = pinning
+        }
+
+        func urlSession(
+            _ session: URLSession,
+            task: URLSessionTask,
+            willPerformHTTPRedirection response: HTTPURLResponse,
+            newRequest request: URLRequest,
+            completionHandler: @escaping (URLRequest?) -> Void
+        ) {
+            // SPEC §6.2: no redirects, and never a credential to another origin.
+            completionHandler(nil)
+        }
+
+        func urlSession(
+            _ session: URLSession,
+            didReceive challenge: URLAuthenticationChallenge,
+            completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
+        ) {
+            guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
+                  let trust = challenge.protectionSpace.serverTrust
+            else {
+                completionHandler(.performDefaultHandling, nil)
+                return
+            }
+
+            if let expected = pinning.expectedSPKIPin {
+                guard let actual = Self.spkiPin(of: trust) else {
+                    completionHandler(.cancelAuthenticationChallenge, nil)
+                    return
+                }
+                guard SPKIPin.matches(pin: expected, pin: actual) else {
+                    completionHandler(.cancelAuthenticationChallenge, nil)
+                    return
+                }
+                // A pinned self-signed relay cannot satisfy the platform chain;
+                // the pin stands in for it when the policy says so.
+                completionHandler(.useCredential, URLCredential(trust: trust))
+                return
+            }
+
+            if pinning.requiresPlatformTrust {
+                completionHandler(.performDefaultHandling, nil)
+            } else {
+                completionHandler(.useCredential, URLCredential(trust: trust))
+            }
+        }
+
+        /// The server's leaf key as `SecKeyCopyExternalRepresentation` gives it,
+        /// wrapped into SPKI and hashed.
+        ///
+        /// unverified: `SecKeyCopyExternalRepresentation` returning the raw
+        /// uncompressed X9.63 point for P-256 is documented behaviour and the
+        /// reason ``SPKIPin/derSPKI(fromRawP256PublicKey:)`` exists, but this
+        /// environment has no live TLS handshake in tests to observe it on. The
+        /// pin arithmetic itself is proven against the relay's published vector.
+        static func spkiPin(of trust: SecTrust) -> String? {
+            guard let chain = SecTrustCopyCertificateChain(trust) as? [SecCertificate],
+                  let leaf = chain.first,
+                  let key = SecCertificateCopyKey(leaf),
+                  let raw = SecKeyCopyExternalRepresentation(key, nil) as Data?
+            else { return nil }
+            return try? SPKIPin.pin(rawP256PublicKey: raw)
+        }
+    }
+}
+
+/// One `URLSessionWebSocketTask` behind ``RelaySocket``.
+private final class URLSessionRelaySocket: RelaySocket, @unchecked Sendable {
+    private let task: URLSessionWebSocketTask
+
+    init(task: URLSessionWebSocketTask) {
+        self.task = task
+    }
+
+    func send(text: String) async throws {
+        do {
+            try await task.send(.string(text))
+        } catch {
+            throw RelayTransportError.classify(error)
+        }
+    }
+
+    func receive() async throws -> RelaySocketMessage {
+        do {
+            switch try await task.receive() {
+            case .string(let text): return .text(text)
+            case .data(let data): return .binary(data)
+            @unknown default:
+                throw RelayTransportError.other("unknown WebSocket message kind")
+            }
+        } catch {
+            throw RelayTransportError.classify(error)
+        }
+    }
+
+    func close() async {
+        // `.goingAway` rather than `.normalClosure`: this side is leaving but the
+        // host keeps running (SPEC §7: "Do not imply the harness stopped merely
+        // because the phone is offline").
+        task.cancel(with: .goingAway, reason: nil)
+    }
+}

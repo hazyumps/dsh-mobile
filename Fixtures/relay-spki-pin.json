@@ -1,0 +1,11 @@
+{
+  "description": "Known-vector material for SPKIPin: the live dsh-relay self-signed certificate's DER SubjectPublicKeyInfo and the pin the relay publishes. The certificate itself is deliberately not included, and its Subject Alternative Names are dropped.",
+  "source": "~/.dsh/relay/relay-cert.pem (harness 0.2.0-rc.2 + patched dsh-relay v0.2.1 fork, captured 2026-10-07)",
+  "subject": "CN=dsh-relay",
+  "keyAlgorithm": "id-ecPublicKey",
+  "namedCurve": "prime256v1",
+  "spkiDerBase64": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEotFXVvjb7G1fUyJqZgSL/XQZmkQIPYszdQyJ/AWakIUsyIGNABp0gjxNLQS48tzwLHvdYu/B2r9y9Qnka2oCCw==",
+  "rawPublicKeyBase64": "BKLRV1b42+xtX1MiamYEi/10GZpECD2LM3UMifwFmpCFLMiBjQAadII8TS0EuPLc8Cx73WLvwdq/cvUJ5GtqAgs=",
+  "expectedPin": "7pcXvn2Kosz4qWgFpUmIao9YQ05bXYTLbfP0IskaeN4=",
+  "competingPinOverWholeCertificate": "EIf1JjS96q/Zcjh2tGePmhsZpyxin9uYb2i3ylsUfdo="
+}

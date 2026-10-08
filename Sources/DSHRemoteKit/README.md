@@ -1,7 +1,9 @@
 # DSHRemoteKit — Stage 1 foundation
 
-Wire types and credential storage for the iPhone companion, as a Swift package: no UI,
-no networking, no app target. `swift test` on this Mac builds and exercises everything.
+Wire types, credential storage, and the transport layer for the iPhone companion, as a
+Swift package: no UI, no app target. `swift test` on this Mac builds and exercises
+everything, and the transport is exercised offline — every exchange and every socket in
+`Network/` goes through `RelayTransport`, which the tests satisfy with an in-memory stub.
 
 ```sh
 swift test
@@ -73,9 +75,13 @@ are the seven files in the repository's `Fixtures/` directory, taken from the pa
   which side of exact equality is safe; the stricter reading is used.
 - **`plainUrl` is decoded and ignored,** per SPEC §3.2 step 1. An HTTPS `url` beside an
   HTTP `plainUrl` still validates.
-- **Nothing here pins TLS.** The SPKI `fingerprint` is carried as an opaque base64
-  `String`; computing and comparing SHA-256 over DER SubjectPublicKeyInfo, and refusing
-  a pin mismatch, is Stage 1 task 6 (SPEC §6.3, §8 A02).
+- **`SPKIPin` now computes the pin.** SHA-256 over DER SubjectPublicKeyInfo, base64, is
+  reproduced from the live relay's own certificate in `Fixtures/relay-spki-pin.json`
+  (`7pcXvn2Kosz4qWgFpUmIao9YQ05bXYTLbfP0IskaeN4=`), both from the SPKI and from the raw
+  P-256 point that `SecKeyCopyExternalRepresentation` returns. What is *not* observed is a
+  live TLS handshake: `URLSessionRelayTransport`'s challenge handling is written against
+  that documented return shape and has no test that performs one (SPEC §8 A02 still needs
+  the physical-device pairing run).
 - **Only `item` frames are captured.** `mux-stream-frames.json` holds twelve `item` frames
   and no `error` or `end` frame, so those two kinds have no modelled payload — a frame this
   build cannot classify keeps its unmodelled keys in `MuxFrame.unknownFields` instead of
@@ -104,7 +110,32 @@ Models/RPCEnvelope.swift        unary request/response envelopes and the typed e
 Models/SessionSummary.swift     session/list rows and their projections
 Models/StreamFrames.swift       remote.mux frames, the snapshot, and the live stream
 Persistence/KeychainStore.swift SecretStore, KeychainSecretStore, InMemorySecretStore
+Network/RelayTransport.swift    RelayTransport, RelaySocket, the URLSession implementation
+Network/RelayTransportStub.swift  in-memory transport, socket, and recording sleeper
+Network/RPCFailure.swift        DshRPCError, the SPEC §6.9 guidance map, retry policy
+Network/RelayExchange.swift     send, classify, and retry — shared by every endpoint
+Network/DshRpcClient.swift      unary envelopes, POST /api/<method>, envelope decoding
+Network/DshBareEndpointClient.swift  session/uploadFileBinary and $events/result
+Network/MuxClient.swift         /api/remote.mux: open, cancel, route, isolate
+Network/PairingClient.swift     payload validation and POST /relay/pair
+Network/SPKIPin.swift           DER SubjectPublicKeyInfo wrapping and the SPKI pin
 ```
+
+## The transport seam
+
+`RelayTransport` is one HTTP exchange and one WebSocket session, and nothing more. Every
+caller above it — the RPC client, the upload and event-result endpoints, pairing, the mux
+— is written against the protocol, including the retry policy, so the whole layer runs
+without a network in `Tests/DSHRemoteKitTests/NetworkTests.swift`.
+
+Two behaviours that are pinned there and worth knowing before changing anything:
+
+- **Success is `result.ok`, never the status.** An HTTP 200 carrying `ok: false` is a
+  business refusal with the host's `code`, `message` and `details.endpoint` intact
+  (SPEC §6.2, SPEC §6.9), and `{"ok":true}` with no `value` key is a success.
+- **Retry is opt-out, not opt-in.** 429 and 502 retry within
+  `RPCFailureRetryPolicy.default`; 403, 401, 404 and a pin mismatch never do. Prompt
+  submission passes `.none`, because SPEC §3.4 forbids resending an uncertain prompt.
 
 Host identifiers — session IDs, device IDs, endpoints, provider and model names, error
 codes — are opaque `String`s everywhere, per SPEC §5.
