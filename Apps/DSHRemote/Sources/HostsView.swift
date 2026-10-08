@@ -69,7 +69,15 @@ struct HostsView: View {
             // A refused pair used to be visible only inside the pairing sheet,
             // which meant an automatic pair that failed looked exactly like one
             // that never ran. Say it where the hosts are.
-            if case .refused(let reason) = model.pairingOutcome {
+            //
+            // Two fields, because the flow uses both: a claim that reached the
+            // relay and failed lands in `claimError`, while a payload rejected
+            // before that lands in `pairingOutcome`. Checking only the second is
+            // why the first attempt at this showed nothing.
+            if let claimError = model.claimError {
+                Label(claimError, systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.secondary)
+            } else if case .refused(let reason) = model.pairingOutcome {
                 Label(reason, systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.secondary)
             }
