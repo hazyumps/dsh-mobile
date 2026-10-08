@@ -16,13 +16,20 @@ decoding below the UI.
 
 ## Three known defects, all small and all specified
 
-1. **`MuxClient` discards the transport error kind.** `MuxStreamError.socketFailed(detail:)`
-   keeps only redacted prose, so a TLS pin mismatch — thrown inside
-   `transport.openSocket`, where the challenge is answered — reaches the
-   coordinator as a string. SPEC §6.4 requires pin failures to stop retrying
-   and offer re-pairing. Fix: carry `RelayTransportError` through
-   `MuxStreamError` instead of a `String`. `ConnectionCoordinator` already
-   recovers the kind by string prefix; that hack goes away with it.
+1. **`MuxClient` discards the transport error kind.** Confirmed by inspection
+   on 2026-10-07, not taken on trust:
+   - `MuxStreamError.socketFailed(detail: String)` — `Network/MuxClient.swift:61`;
+   - the kind is thrown away at both throw sites, `MuxClient.swift:194` and
+     `MuxClient.swift:369`, each calling `RelayTransportError.classify(error).safeDescription`;
+   - `ConnectionCoordinator.swift:232` reconstructs it by matching the literal
+     prefix `"TLS pin mismatch: "`, and the comment at :676 admits this is a
+     "long" shot that only works because that prefix construction is unique.
+
+   SPEC §6.4 requires a pin failure to stop retrying and offer re-pairing, so
+   the distinction is load-bearing. Fix: make the case carry
+   `RelayTransportError` instead of a `String`, update both throw sites, then
+   delete the prefix match. Expect `StateTests` to construct
+   `.socketFailed(detail:)` and need updating with it.
 2. **The `$events` ready frame is decoded as `.unknown`.** No fixture contains
    one, so `ConnectionCoordinator` matches on `value.typeName`. It is a real
    captured shape: `{"type":"item","streamId":"1","value":{"type":"ready","clientId":"<36>","host":{"home":"<path>"}}}`.
