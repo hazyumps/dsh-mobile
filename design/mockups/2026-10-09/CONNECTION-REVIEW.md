@@ -131,7 +131,7 @@ The app should remember the relationship and resume it automatically. It cannot 
 - Existing Swift smoke: pinned handshake and mux ready succeeded; session.list returned the exact persistence-path failure.
 - Session headers: 78 inspected, two specific Mac-directory/Linux-header mismatches; no conversation body contents printed.
 - Relay identity probe: same address set preserves key; changed set rotates key, reproduced with temporary state only.
-- Current Swift package suite: 177 tests reported passing. Live Keychain round-trip/delete checks explicitly skipped in the restricted environment.
+- Swift package suite: 177 tests passed in the pre-fix snapshot this section describes; the follow-up foreground-recovery change took it to 193, matching the count in the status note above. Live Keychain round-trip/delete checks explicitly skipped in the restricted environment.
 - No physical iPhone reproduction, live host migration, new pairing, session repair, or remote tunnel deployment.
 - Visuals are proposals, not screenshots of implemented changes.
 

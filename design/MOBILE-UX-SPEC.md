@@ -25,6 +25,8 @@ The images establish direction rather than exact pixel measurements. The sizes a
 
 **Correction to the approval mockup:** “Apply the recovery changes?” illustrates an agent requesting permission to edit code. It is not a reconnect permission. Future screenshots should use an unambiguous example such as “Run this command?” with the actual command supplied by the host.
 
+**Correction to the recovery mockup:** its composer is captioned “Send when reconnected”, which promises that a send will be queued and delivered on reconnect. This design does not do that — a phone disconnect never queues a send, and Send is disabled while offline because delivery could not be confirmed. The label should read as a disabled state with its reason (“Offline — reconnect to send”), not as a promise of later delivery. Reconciling an uncertain send is a deliberate user action, never an automatic replay.
+
 ## Product priorities
 
 1. Resume the same work reliably after locking the phone or switching apps.

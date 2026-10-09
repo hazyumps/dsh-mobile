@@ -367,6 +367,8 @@ For timed questions, the native UI owns the foreground claim's lifetime. Release
 
 Hiding a named question card is local presentation only. Provide a way to reopen it. An explicit cancellation for a live unnamed question uses `outcome:{kind:"rejected",error:{name:"UserQuestionError",message:"the user cancelled ask_user_question",code:"ASK_CANCELLED"}}`. Ordinary navigation/reconnect never sends a fabricated cancellation or answer. Releasing an event to another handler uses `next`, with no approval implication.
 
+The web client defines a third code alongside those two — `ASK_ABORTED`, with the message `ask_user_question was aborted before the user answered` — so a live question can also be settled by the host aborting it rather than by a timeout or a user cancellation. Render an aborted question as settled history exactly like the other two; do not leave a live card behind for it, and do not treat it as a rejection the user made. All three codes come from the same table in `dsh-client-ui-user-questions/lib/client.js` (`rejectionMessages`), which is the reference for their exact strings.
+
 Replace the existing one-question helper with a full-batch reply intent that selects the verified channel. The transcript parser can support history rendering; it cannot be the authority for active controls.
 
 ## 9. Images, files, and slash commands
