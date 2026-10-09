@@ -30,6 +30,7 @@ struct ConversationView: View {
     @State private var isImportingImage = false
     @State private var photoSelection: PhotosPickerItem?
     @State private var isPickingPhoto = false
+    @State private var didAnswerLaunchQuestion = false
     @Environment(\.scenePhase) private var scenePhase
     @State private var followAttempt = 0
     @State private var didSendLaunchMessage = false
@@ -86,6 +87,11 @@ struct ConversationView: View {
         }
         .onDisappear {
             Task { await model.releaseTimedClaim() }
+        }
+        .task(id: model.decisions(for: sessionId).first?.id) {
+            #if DEBUG
+            await answerLaunchQuestionIfAsked()
+            #endif
         }
         .onAppear {
             #if DEBUG
@@ -151,6 +157,14 @@ struct ConversationView: View {
     /// Pending approvals for this conversation.
     private var approvalRequests: [InteractionRequest] {
         model.decisions(for: sessionId).filter { $0.event == "approval/request" }
+    }
+
+    /// Live question deliveries: what a card may act on, as opposed to the durable record of a
+    /// question having been asked.
+    private var liveQuestionRequests: [InteractionRequest] {
+        model.decisions(for: sessionId).filter {
+            $0.event == "user-questions/request" && $0.state.isActionable
+        }
     }
 
     private var title: String {
@@ -220,7 +234,11 @@ struct ConversationView: View {
                         onLoadOlder: { Task { await session?.loadOlder() } },
                         onAnswer: { answers in Task { await answer(answers) } },
                         approvals: approvalRequests,
-                        onApproval: { eventId, isAllow in Task { await decide(eventId, isAllow: isAllow) } }
+                        onApproval: { eventId, isAllow in Task { await decide(eventId, isAllow: isAllow) } },
+                        liveQuestions: liveQuestionRequests,
+                        onAnswerLive: { eventId, answers in
+                            Task { await answerLive(eventId, answers) }
+                        }
                     )
                     .id("transcript")
                 }
@@ -603,6 +621,41 @@ struct ConversationView: View {
         else { return }
         let url = URL(fileURLWithPath: path)
         Task { await model.attachFile(at: url, name: url.lastPathComponent, to: sessionId) }
+    }
+    #endif
+
+    /// Answers a live question delivery through `$events/result`.
+    private func answerLive(_ eventId: String, _ answers: [DecisionCard.Answer]) async {
+        isSubmittingAnswer = true
+        defer { isSubmittingAnswer = false }
+        let replies = answers.map {
+            QuestionAnswer(id: $0.itemId, selected: $0.selected, custom: $0.custom)
+        }
+        if let failure = await model.answerLive(eventId, with: replies) {
+            sendError = failure
+        }
+    }
+
+    #if DEBUG
+    /// Debug builds only: answer the first live question with a named option.
+    ///
+    /// The decision card needs a tap this machine cannot make, and the point of the exercise is
+    /// the *path* — `$events` waterfall → store → `$events/result` → host. It goes through
+    /// exactly the call the card's Submit makes.
+    private func answerLaunchQuestionIfAsked() async {
+        guard let wanted = ProcessInfo.processInfo.environment["DSH_ANSWER"],
+              !wanted.isEmpty,
+              !didAnswerLaunchQuestion
+        else { return }
+        guard let request = model.decisions(for: sessionId).first(where: { $0.state.isActionable }),
+              let batch = await model.questionBatch(for: request.id),
+              let question = batch.questions.first
+        else { return }
+
+        didAnswerLaunchQuestion = true
+        if let failure = await model.answerLive(request.id, with: [QuestionAnswer(id: question.id, selected: [wanted])]) {
+            sendError = failure
+        }
     }
     #endif
 

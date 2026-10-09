@@ -318,11 +318,16 @@ public actor InteractionStore {
                 outcome: outcome
             ))
             settle(id, as: .settled)
+            // Publish the transition, not just the mutation. Without this the snapshot the
+            // screens hold still says the request is pending, so an answered card stays on
+            // screen offering controls whose every press is refused as not-actionable.
+            publish()
         } catch {
             // A `cancel` may have arrived while the submission was in flight, and the host
             // is the authority on whether the request is still open. Record the uncertainty
             // on the request only if it is still ours to describe.
             settle(id, as: .uncertain)
+            publish()
             throw InteractionRefusal.uncertain(reason: String(describing: error))
         }
     }
@@ -338,6 +343,7 @@ public actor InteractionStore {
         request.state = state
         requests[id] = request
     }
+
 
     /// Forgets everything. Called when a conversation closes or a host is switched.
     public func removeAll() {

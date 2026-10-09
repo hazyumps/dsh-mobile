@@ -24,6 +24,14 @@ struct ConversationTranscript: View {
     /// waiting (SPEC §8). The closure is `(eventId, isAllow)`.
     var approvals: [InteractionRequest] = []
     var onApproval: ((String, Bool) -> Void)?
+    /// Live question deliveries from `$events`, which are the authority for *controls*.
+    ///
+    /// The durable fold below is history: a `tool/call` record says a question was asked, not
+    /// that it can still be answered. SPEC §8 gets this the other way round from the way it
+    /// looks — the live waterfall is what a card may act on, and answering it goes through
+    /// `$events/result` rather than the continued channel.
+    var liveQuestions: [InteractionRequest] = []
+    var onAnswerLive: ((String, [DecisionCard.Answer]) -> Void)?
 
     /// One durable event that is not a message, in the order it arrived.
     private struct Activity: Identifiable {
@@ -159,6 +167,32 @@ struct ConversationTranscript: View {
                     isSubmitting: isSubmitting,
                     footnote: isStale ? "This request is no longer confirmed open. It is kept as history." : nil,
                     onSubmit: onAnswer
+                )
+            }
+        }
+
+        ForEach(liveQuestions) { request in
+            if let batch = QuestionBatch(request: request.request), !batch.questions.isEmpty {
+                DecisionCard(
+                    content: .question(DecisionCard.Question(
+                        header: batch.questions.count == 1
+                            ? batch.questions[0].header
+                            : "\(batch.questions.count) questions",
+                        items: batch.questions.map { question in
+                            DecisionCard.Item(
+                                id: question.id,
+                                prompt: question.question,
+                                options: question.options.map(\.label),
+                                allowsMultipleSelection: question.multiSelect,
+                                allowsCustomAnswer: false,
+                                customAnswerPlaceholder: nil
+                            )
+                        }
+                    )),
+                    isStale: !request.state.isActionable,
+                    isSubmitting: isSubmitting,
+                    footnote: Self.footnote(for: request),
+                    onSubmit: { answers in onAnswerLive?(request.id, answers) }
                 )
             }
         }

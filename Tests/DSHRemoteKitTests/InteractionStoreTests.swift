@@ -38,15 +38,35 @@ struct InteractionStoreTests {
         }
     }
 
+    /// A snapshot sink the collector task can append to without sending a closure across
+    /// isolation boundaries.
+    private actor SettleSink {
+        static let shared = SettleSink()
+        private(set) var last: [InteractionRequest]?
+        func append(_ value: [InteractionRequest]) { last = value }
+        func reset() { last = nil }
+    }
+
     private func waterfall(
         eventId: String,
         callId: String? = "call-1",
-        event: String = "approval/request"
+        event: String = "approval/request",
+        questions: Bool = false
     ) -> RemoteEvent {
-        var request: [String: JSONValue] = [
-            "toolName": .string("bash"),
-            "reason": .string("Run the requested test command"),
-        ]
+        var request: [String: JSONValue] = questions
+            ? ["callId": .string("call-1"), "questions": .array([
+                .object([
+                    "id": .string("q1"),
+                    "header": .string("Colour"),
+                    "question": .string("Which colour do you prefer?"),
+                    "options": .array([.object(["label": .string("Blue")]),
+                                       .object(["label": .string("Red")])]),
+                ]),
+            ])]
+            : [
+                "toolName": .string("bash"),
+                "reason": .string("Run the requested test command"),
+            ]
         if let callId { request["callId"] = .string(callId) }
         return .waterfall(RemoteWaterfall(
             event: event,
@@ -64,6 +84,39 @@ struct InteractionStoreTests {
             identity: { RemoteEventRouter.Identity(generation: generation, clientId: "client-1") },
             submit: { request in try await submitter.submit(request) }
         )
+    }
+
+    @Test("answering publishes the settled state, so the card stops offering controls")
+    func settlingIsPublished() async throws {
+        // Measured against the live host: without this the store mutated a request to
+        // `.settled` but no snapshot carried it, so an answered question card stayed on screen
+        // with a live Submit whose every press was refused as not-actionable.
+        let submitter = Submitter()
+        let store = store(submitter: submitter)
+        await SettleSink.shared.reset()
+        let stream = await store.snapshots()
+        let collector = Task { @Sendable in
+            for await value in stream { await SettleSink.shared.append(value) }
+        }
+
+        await store.observe(waterfall(eventId: "e1", event: "user-questions/request",
+                                     questions: true), generation: 1)
+        for _ in 0..<200 where await store.actionable.isEmpty {
+            try? await Task.sleep(for: .milliseconds(2))
+        }
+        #expect(await store.actionable.count == 1)
+
+        try await store.answerLiveQuestions("e1", with: [QuestionAnswer(id: "q1", selected: ["Blue"])])
+
+        // The store is settled...
+        #expect(await store.actionable.isEmpty)
+        #expect(await store.all.first?.state == .settled)
+        // ...and a subscriber was told, which is what the screen renders from.
+        for _ in 0..<200 where await SettleSink.shared.last?.first?.state != .settled {
+            try? await Task.sleep(for: .milliseconds(2))
+        }
+        #expect(await SettleSink.shared.last?.first?.state == .settled)
+        collector.cancel()
     }
 
     // MARK: - The two exact strings
@@ -293,6 +346,15 @@ struct QuestionChannelTests {
             ]),
         ])
     ])
+
+    /// A snapshot sink the collector task can append to without sending a closure across
+    /// isolation boundaries.
+    private actor SettleSink {
+        static let shared = SettleSink()
+        private(set) var last: [InteractionRequest]?
+        func append(_ value: [InteractionRequest]) { last = value }
+        func reset() { last = nil }
+    }
 
     private func waterfall(eventId: String = "e1", timed: Bool = false, event: String = "user-questions/request") -> RemoteEvent {
         var request: [String: JSONValue] = ["callId": .string("call-1")]

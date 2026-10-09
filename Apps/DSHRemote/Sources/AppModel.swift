@@ -515,6 +515,11 @@ final class AppModel {
         interactions.filter { $0.sessionId == sessionId }
     }
 
+    /// The questions a live waterfall carries, for a caller that has to answer without a card.
+    func questionBatch(for id: String) async -> QuestionBatch? {
+        await interactionStore?.questionBatch(id)
+    }
+
     /// The live question waterfall for a tool call, when one is still open.
     ///
     /// SPEC §8's channel table turns on this: a question with a current delivery is answered
