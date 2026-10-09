@@ -473,3 +473,22 @@ private func makeTestRPCClient(_ transport: StubRelayTransport) -> DshRpcClient 
         transport: transport
     )
 }
+
+/// SPEC §4's archived rule, which the browse list has to honour.
+@Suite("Session visibility")
+struct SessionVisibilityTests {
+    @Test("archived sessions are filtered out, and everything else keeps its order")
+    func archivedAreHidden() {
+        #expect(SessionVisibility.visible(
+            sessionIds: ["a", "s7", "b", "s8"],
+            archivedSessionIds: ["s7", "s8"]
+        ) == ["a", "b"])
+
+        // No archived ids is the common case and must not reorder or drop anything.
+        #expect(SessionVisibility.visible(sessionIds: ["a", "b"], archivedSessionIds: []) == ["a", "b"])
+        // An archived id that is not in the section changes nothing.
+        #expect(SessionVisibility.visible(sessionIds: ["a"], archivedSessionIds: ["zz"]) == ["a"])
+        #expect(SessionVisibility.isArchived("s7", archivedSessionIds: ["s7"]))
+        #expect(!SessionVisibility.isArchived("s9", archivedSessionIds: ["s7"]))
+    }
+}

@@ -62,14 +62,31 @@ struct ScreensGalleryView: View {
                     id: "seq:11",
                     role: .assistant,
                     text: """
+                    ## Why it stopped
+
                     The step ended without a matching durable record, so the window kept \
                     the preview until it could prove what happened.
+
+                    - **The preview is provisional** until a durable record lands.
+                    - The cursor only advances on committed sequence numbers.
+                      - A nested note, to check indentation.
+                    1. Check the expectation first.
+                    2. Then the frame that follows.
+
+                    | Source | Effect |
+                    | --- | --- |
+                    | `$events` | carries the committed sequence |
+                    | `session/follow` | replaces the baseline |
+
+                    > A late frame from a retired generation must not answer.
 
                     ```sh
                     swift test --disable-sandbox --filter ChatSessionTests
                     ```
 
                     Then the next `$events` frame carried the committed sequence.
+
+                    ---
                     """,
                     isProvisional: false,
                     reasoning: "Check the sequence expectation first: cursor + 1, not one past the highest record."

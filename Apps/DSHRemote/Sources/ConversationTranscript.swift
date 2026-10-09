@@ -388,62 +388,12 @@ private struct ReasoningDisclosure: View {
 struct MessageBody: View {
     let text: String
 
-    enum Block: Equatable {
-        case prose(String)
-        case code(language: String?, text: String)
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: DSHMetrics.space) {
-            ForEach(Array(Self.blocks(text).enumerated()), id: \.offset) { _, block in
-                switch block {
-                case .prose(let value):
-                    Text(Self.inline(value))
-                        .font(.dshMessageBody)
-                        .foregroundStyle(DSHPalette.primaryText)
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
-                case .code(let language, let value):
-                    CodeBlock(language: language, code: value)
-                }
+            ForEach(Array(MarkdownBlocks.parse(text).enumerated()), id: \.offset) { _, block in
+                MarkdownBlockView(block: block, inline: Self.inline)
             }
         }
-    }
-
-    /// Splits on ``` fences. An unterminated fence renders as code rather than being
-    /// dropped: the reply is still streaming, and the alternative is text that vanishes
-    /// until the closing fence arrives.
-    static func blocks(_ text: String) -> [Block] {
-        var blocks: [Block] = []
-        var prose: [String] = []
-        var code: [String]?
-        var language: String?
-
-        func flushProse() {
-            let joined = prose.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-            if !joined.isEmpty { blocks.append(.prose(joined)) }
-            prose.removeAll()
-        }
-
-        for line in text.components(separatedBy: "\n") {
-            if line.hasPrefix("```") {
-                if code == nil {
-                    flushProse()
-                    code = []
-                    let tag = line.dropFirst(3).trimmingCharacters(in: .whitespaces)
-                    language = tag.isEmpty ? nil : tag
-                } else {
-                    blocks.append(.code(language: language, text: (code ?? []).joined(separator: "\n")))
-                    code = nil
-                    language = nil
-                }
-                continue
-            }
-            if code != nil { code?.append(line) } else { prose.append(line) }
-        }
-        if let code { blocks.append(.code(language: language, text: code.joined(separator: "\n"))) }
-        flushProse()
-        return blocks
     }
 
     static func inline(_ text: String) -> AttributedString {
@@ -494,5 +444,153 @@ private struct CodeBlock: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(DSHPalette.elevatedSurface)
         .clipShape(RoundedRectangle(cornerRadius: DSHMetrics.spaceCard, style: .continuous))
+    }
+}
+
+/// Draws one markdown block.
+///
+/// Inline styling (bold, italic, code spans, links) is the platform's job — `Text` renders an
+/// `AttributedString` from inline markdown well. What the platform will not do is decide that
+/// `- item` is a list or that `|---|` makes a table, so those decisions arrive here as blocks
+/// and this draws them.
+private struct MarkdownBlockView: View {
+    let block: MarkdownBlock
+    /// Inline markdown parsing, shared with the message body so a bold word looks the same
+    /// inside a list item as in a paragraph.
+    let inline: (String) -> AttributedString
+
+    var body: some View {
+        switch block {
+        case .paragraph(let text):
+            Text(inline(text))
+                .font(.dshMessageBody)
+                .foregroundStyle(DSHPalette.primaryText)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+
+        case .heading(let level, let text):
+            Text(inline(text))
+                .font(Self.headingFont(level))
+                .foregroundStyle(DSHPalette.primaryText)
+                .textSelection(.enabled)
+                // Space above so a heading reads as one, except when it opens the message.
+                .padding(.top, level <= 2 ? DSHMetrics.space : DSHMetrics.spaceSmall)
+                .fixedSize(horizontal: false, vertical: true)
+
+        case .bullet(let depth, let text):
+            HStack(alignment: .firstTextBaseline, spacing: DSHMetrics.spaceSmall) {
+                Text("•")
+                    .font(.dshMessageBody)
+                    .foregroundStyle(DSHPalette.secondaryText)
+                Text(inline(text))
+                    .font(.dshMessageBody)
+                    .foregroundStyle(DSHPalette.primaryText)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.leading, CGFloat(depth) * DSHMetrics.spaceGroup)
+
+        case .numbered(let depth, let marker, let text):
+            HStack(alignment: .firstTextBaseline, spacing: DSHMetrics.spaceSmall) {
+                Text("\(marker).")
+                    .font(.dshMessageBody)
+                    .foregroundStyle(DSHPalette.secondaryText)
+                    .monospacedDigit()
+                Text(inline(text))
+                    .font(.dshMessageBody)
+                    .foregroundStyle(DSHPalette.primaryText)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.leading, CGFloat(depth) * DSHMetrics.spaceGroup)
+
+        case .quote(let text):
+            HStack(alignment: .top, spacing: DSHMetrics.space) {
+                // A rule in the palette rather than a `Divider`: it marks the quote without
+                // competing with the card edges around it.
+                Rectangle()
+                    .fill(DSHPalette.divider)
+                    .frame(width: 3)
+                Text(inline(text))
+                    .font(.dshMessageBody)
+                    .foregroundStyle(DSHPalette.secondaryText)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+
+        case .rule:
+            Divider().overlay(DSHPalette.divider)
+
+        case .code(let language, let text):
+            CodeBlock(language: language, code: text)
+
+        case .table(let headers, let rows):
+            MarkdownTable(headers: headers, rows: rows, inline: inline)
+        }
+    }
+
+    static func headingFont(_ level: Int) -> Font {
+        switch level {
+        case 1: .dshCardTitle
+        case 2: .dshSupporting.weight(.semibold)
+        default: .dshMessageBody.weight(.semibold)
+        }
+    }
+}
+
+/// A markdown table, drawn as a real grid.
+///
+/// Horizontally scrollable rather than squeezed: a harness table with four columns and long
+/// cell text is unreadable when wrapped into a phone's width, and a scroll keeps the columns
+/// lined up with their headers.
+private struct MarkdownTable: View {
+    let headers: [String]
+    let rows: [[String]]
+    let inline: (String) -> AttributedString
+
+    private var columnCount: Int {
+        max(headers.count, rows.map(\.count).max() ?? 0)
+    }
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 0) {
+                row(headers, isHeader: true)
+                Divider().overlay(DSHPalette.divider)
+                ForEach(Array(rows.enumerated()), id: \.offset) { index, cells in
+                    row(cells, isHeader: false)
+                    if index < rows.count - 1 {
+                        Divider().overlay(DSHPalette.divider)
+                    }
+                }
+            }
+            .background(DSHPalette.elevatedSurface)
+            .clipShape(RoundedRectangle(cornerRadius: DSHMetrics.spaceSmall, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: DSHMetrics.spaceSmall, style: .continuous)
+                    .strokeBorder(DSHPalette.cardEdge, lineWidth: 1)
+            )
+        }
+    }
+
+    private func row(_ cells: [String], isHeader: Bool) -> some View {
+        HStack(alignment: .top, spacing: 0) {
+            ForEach(0..<columnCount, id: \.self) { column in
+                let value = column < cells.count ? cells[column] : ""
+                Text(inline(value))
+                    .font(isHeader ? .dshMetadata.weight(.semibold) : .dshMetadata)
+                    .foregroundStyle(isHeader ? DSHPalette.primaryText : DSHPalette.secondaryText)
+                    .multilineTextAlignment(.leading)
+                    .frame(minWidth: 110, alignment: .leading)
+                    .padding(.horizontal, DSHMetrics.spaceCard)
+                    .padding(.vertical, DSHMetrics.spaceSmall + 2)
+                if column < columnCount - 1 {
+                    Rectangle()
+                        .fill(DSHPalette.divider)
+                        .frame(width: 1)
+                }
+            }
+        }
     }
 }

@@ -135,6 +135,12 @@ struct BrowseState: Hashable {
     ///   store — the third signal, which the projections cannot carry because a live request
     ///   is not a projection.
     static func from(_ snapshot: HostSessionStore.Snapshot, liveWaiters: Set<String> = []) -> BrowseState {
+        // SPEC §4 gives the registry an `archived` delta and `archivedSessionIds` in its
+        // baseline, and the host's own app hides those sessions. Listing them here was the
+        // difference the phone showed against the desktop: archived sessions came back as
+        // ordinary recent cards. Membership is still the registry's — this only removes the
+        // ones the host has taken out of the list.
+        let archived = snapshot.archivedSessionIds
         let workspaces = snapshot.sections.map { section in
             BrowseWorkspace(
                 id: section.workspaceId ?? BrowseWorkspace.ungroupedId,
@@ -142,7 +148,10 @@ struct BrowseState: Hashable {
                 path: section.workspaceId.flatMap { id in
                     snapshot.workspaces.first { $0.workspaceId == id }?.path
                 },
-                sessions: section.sessionIds.map { id in
+                sessions: SessionVisibility.visible(
+                    sessionIds: section.sessionIds,
+                    archivedSessionIds: archived
+                ).map { id in
                     Self.session(
                         id: id,
                         record: snapshot.sessions[id],

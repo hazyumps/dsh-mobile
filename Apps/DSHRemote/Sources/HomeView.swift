@@ -148,6 +148,25 @@ struct HomeView: View {
             // workspace stays selected, which is where the user lands.
             if next.isEmpty, model.selectedSessionId != nil { model.closeSession() }
         }
+        // Swiping right from the leading edge opens the drawer; swiping left on it closes it.
+        // Two targeted gestures rather than one on the root: a horizontal drag across the
+        // transcript would compete with the scroll views, and edge-drag is the platform's own
+        // answer to exactly this.
+        .overlay(alignment: .leading) {
+            if !isDrawerOpen {
+                Color.clear
+                    .frame(width: 22)
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture(minimumDistance: 12)
+                            .onEnded { value in
+                                guard value.translation.width > 44 else { return }
+                                withAnimation(.snappy) { isDrawerOpen = true }
+                            }
+                    )
+                    .accessibilityHidden(true)
+            }
+        }
         .onChange(of: isDrawerOpen) { _, open in
             if open { Task { await model.refreshSessions() } }
         }
@@ -158,8 +177,12 @@ struct HomeView: View {
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
         ToolbarItem(placement: .topBarLeading) {
-            DSHIconAction(label: "Open navigation", symbol: "sidebar.left") {
-                withAnimation(.snappy) { isDrawerOpen = true }
+            // A toggle, not just an opener: the same button that opens the drawer closes it.
+            DSHIconAction(
+                label: isDrawerOpen ? "Close navigation" : "Open navigation",
+                symbol: "sidebar.left"
+            ) {
+                withAnimation(.snappy) { isDrawerOpen.toggle() }
             }
         }
         ToolbarItem(placement: .principal) {
@@ -431,6 +454,14 @@ struct HomeView: View {
             )
             .transition(.move(edge: .leading))
             .frame(maxWidth: 340)
+            // Swipe the panel away to close it, the mirror of the edge drag that opens it.
+            .gesture(
+                DragGesture(minimumDistance: 12)
+                    .onEnded { value in
+                        guard value.translation.width < -44 else { return }
+                        withAnimation(.snappy) { isDrawerOpen = false }
+                    }
+            )
         }
     }
 
