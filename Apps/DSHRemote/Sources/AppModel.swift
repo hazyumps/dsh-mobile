@@ -994,6 +994,29 @@ final class AppModel {
         return hostSnapshot?.projections[sessionId]?["imageLimits"].flatMap { ImageLimits(json: $0.value) }
     }
 
+    /// One session's usage, from the projections `session/projections` returns (SPEC §10).
+    ///
+    /// Read through the same call the image limits use, and nil until it has answered: an empty
+    /// screen that says "not reported" is honest, a screen of zeros would not be.
+    func usage(for sessionId: String) -> SessionUsage? {
+        if let projected = sessionProjections[sessionId] {
+            var values = projected.values.additionalProperties
+            // The typed subset wins where it overlaps, so one source of truth per key.
+            if let inbox = projected.values.inbox { values["inbox"] = .object([:]) ; _ = inbox }
+            return SessionUsage(projections: values)
+        }
+        guard let snapshot = hostSnapshot?.projections[sessionId] else { return nil }
+        return SessionUsage(projections: snapshot.mapValues(\.value))
+    }
+
+    /// Whether this session's projections have been read yet.
+    ///
+    /// Distinct from "the usage is empty": a screen that has not read yet and a session the host
+    /// reports nothing for are different, and only one of them is worth waiting on.
+    func hasProjections(for sessionId: String) -> Bool {
+        sessionProjections[sessionId] != nil || hostSnapshot?.projections[sessionId] != nil
+    }
+
     /// Reads a session's projections, which is where its image limits live.
     func loadProjections(for sessionId: String) async {
         guard let coordinator, status.isUsable else { return }

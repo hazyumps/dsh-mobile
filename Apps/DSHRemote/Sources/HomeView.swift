@@ -17,6 +17,7 @@ struct HomeView: View {
         /// `nil` lists every session the host reported.
         case sessions(String?)
         /// The capability-gated drawer destinations (SPEC §10).
+        case usage
         case plugins
         case schedules
     }
@@ -67,6 +68,8 @@ struct HomeView: View {
                     ConversationView(sessionId: sessionId)
                 case .sessions(let workspaceId):
                     SessionBrowserView(workspaceId: workspaceId)
+                case .usage:
+                    UsageView(sessionId: model.selectedSessionId, title: "Usage")
                 case .plugins:
                     PluginsView()
                 case .schedules:
@@ -106,6 +109,14 @@ struct HomeView: View {
             // only way to reach a drawer screen on a machine that cannot tap, and the
             // restored session would otherwise always get there first.
             if let route = Self.launchRoute(for: model.launchDestination) {
+                #if DEBUG
+                // A destination like Usage needs a session to report on, and selecting one is a
+                // separate action from navigating to a conversation. A launch that names both
+                // gets both, which is how a screen behind two taps gets reviewed here.
+                if let named = model.launchSessionId, model.selectedSessionId != named {
+                    model.openSession(named)
+                }
+                #endif
                 path = [route]
                 return
             }
@@ -409,6 +420,10 @@ struct HomeView: View {
                     withAnimation(.snappy) { isDrawerOpen = false }
                     path.append(.schedules)
                 },
+                openUsage: {
+                    withAnimation(.snappy) { isDrawerOpen = false }
+                    path.append(.usage)
+                },
                 openNewSession: {
                     withAnimation(.snappy) { isDrawerOpen = false }
                     focusRequest += 1
@@ -422,6 +437,7 @@ struct HomeView: View {
     /// A launch destination, in the drawer's own terms.
     private static func launchRoute(for destination: String?) -> Route? {
         switch destination {
+        case "usage": .usage
         case "plugins": .plugins
         case "schedules": .schedules
         default: nil

@@ -19,6 +19,7 @@ struct DrawerView: View {
     let openSettings: () -> Void
     let openPlugins: () -> Void
     let openSchedules: () -> Void
+    let openUsage: () -> Void
     /// Closes the drawer and puts the cursor in Home's prompt field.
     let openNewSession: () -> Void
 
@@ -136,6 +137,7 @@ struct DrawerView: View {
     /// the connected host does not answer them.
     private var destinations: some View {
         VStack(spacing: 0) {
+            destinationRow("Usage", symbol: "chart.bar", action: openUsage)
             destinationRow("Plugins", symbol: "puzzlepiece.extension", action: openPlugins)
             destinationRow("Scheduled tasks", symbol: "calendar.badge.clock", action: openSchedules)
         }
