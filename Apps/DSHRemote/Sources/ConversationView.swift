@@ -647,8 +647,25 @@ struct ConversationView: View {
               !wanted.isEmpty,
               !didAnswerLaunchQuestion
         else { return }
-        guard let request = model.decisions(for: sessionId).first(where: { $0.state.isActionable }),
-              let batch = await model.questionBatch(for: request.id),
+        guard let request = model.decisions(for: sessionId).first(where: { $0.state.isActionable })
+        else { return }
+
+        // An approval is answered the same way a question is — one `$events/result` — so the
+        // same affordance covers both, and `deny`/`allow` name the approval's two outcomes.
+        if request.event == "approval/request" {
+            didAnswerLaunchQuestion = true
+            switch wanted.lowercased() {
+            case "deny", "reject":
+                if let failure = await model.deny(request.id) { sendError = failure }
+            case "allow", "allow-once":
+                if let failure = await model.allowOnce(request.id) { sendError = failure }
+            default:
+                didAnswerLaunchQuestion = false
+            }
+            return
+        }
+
+        guard let batch = await model.questionBatch(for: request.id),
               let question = batch.questions.first
         else { return }
 

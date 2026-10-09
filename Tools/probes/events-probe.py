@@ -98,7 +98,10 @@ def main():
             print("stream ended:", error)
             break
         head = payload[:160].decode("utf-8", "replace")
-        print(f"frame: opcode={opcode} bytes={len(payload)} head={head}")
+        if b"waterfall" in payload or b"attachWait" in payload:
+            print(payload.decode("utf-8", "replace"))
+        else:
+            print(f"frame: opcode={opcode} bytes={len(payload)} head={head}")
 
 
 main()
