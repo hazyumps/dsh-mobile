@@ -40,6 +40,13 @@ public struct InteractionRequest: Sendable, Hashable, Identifiable {
     public var generation: UInt64
     public var state: State
 
+    /// Whether this question is a **timed** one, which needs a foreground claim before it can
+    /// be answered (SPEC §8's `request.wait:{callId,timed:true}`).
+    ///
+    /// Public because the screen has to know to take the claim: the refusal without one is
+    /// `timedQuestionNeedsClaim`, which is not something a user can act on.
+    public var isTimed: Bool { InteractionStore.isTimed(request) }
+
     public init(
         id: String,
         sessionId: String,

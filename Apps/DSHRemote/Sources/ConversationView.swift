@@ -23,6 +23,8 @@ struct ConversationView: View {
     @State private var sendError: String?
     @State private var openError: String?
     @State private var isSubmittingAnswer = false
+    @State private var claimError: String?
+    @Environment(\.scenePhase) private var scenePhase
     @State private var followAttempt = 0
     @State private var didSendLaunchMessage = false
 
@@ -51,6 +53,44 @@ struct ConversationView: View {
         .task(id: FollowKey(connectionID: model.connectionID, attempt: followAttempt)) {
             guard let connectionID = model.connectionID else { return }
             await follow(connectionID: connectionID)
+        }
+        .task(id: timedQuestion?.id) {
+            guard let question = timedQuestion else { return }
+            claimError = await model.attachTimedClaim(
+                eventId: question.id,
+                agentId: question.sessionId,
+                callId: question.callId ?? ""
+            )
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // Released on the way out: a claim held through a background has nothing on screen
+            // to answer it, and the host would keep its timer paused for nobody.
+            if phase != .active { Task { await model.releaseTimedClaim() } }
+        }
+        .onDisappear {
+            Task { await model.releaseTimedClaim() }
+        }
+        .onChange(of: draft) { _, text in
+            // The visible countdown stops while the answer is being written, which is the
+            // local half of the pause SPEC §8 asks for.
+            Task {
+                if text.isEmpty {
+                    await model.resumeTimedClaim()
+                } else {
+                    await model.pauseTimedClaim()
+                }
+            }
+        }
+    }
+
+    /// The timed question this screen holds a foreground claim over, if any.
+    ///
+    /// SPEC §8: "the native UI owns the foreground claim's lifetime". Attaching pauses the
+    /// host's timer, so an unattached claim would let a question expire while its card is on
+    /// screen — and a held one with nothing behind it parks the question forever.
+    private var timedQuestion: InteractionRequest? {
+        model.decisions(for: sessionId).first {
+            $0.event == "user-questions/request" && $0.isTimed && $0.state.isActionable
         }
     }
 
@@ -150,6 +190,13 @@ struct ConversationView: View {
 
     private var composer: some View {
         VStack(spacing: DSHMetrics.spaceSmall) {
+            if let claimError {
+                Label(claimError, systemImage: "clock.badge.exclamationmark")
+                    .font(.dshMetadata)
+                    .foregroundStyle(DSHPalette.attention)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if let sendError {
                 Label(sendError, systemImage: "exclamationmark.triangle")
                     .font(.dshMetadata)

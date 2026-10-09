@@ -329,6 +329,11 @@ final class AppModel {
                 submit: submit,
                 answerContinued: { agentId, callId, body in
                     try await coordinator.answerContinued(agentId: agentId, callId: callId, body: body)
+                },
+                // A timed question is answerable only while this phone holds its claim, so the
+                // store asks the claim rather than trusting the caller (SPEC §8).
+                holdsTimedClaim: { [weak self] eventId in
+                    await self?.holdsTimedClaim(eventId) ?? false
                 }
             )
             interactionStore = store
@@ -404,6 +409,71 @@ final class AppModel {
         } catch {
             return Self.reason(for: error)
         }
+    }
+
+    // MARK: - The timed question's foreground claim
+
+    /// The live claim over one timed question, if this phone holds it.
+    ///
+    /// SPEC §8 gives the claim's lifetime to the native UI — the screen attaches it, pauses it
+    /// while the user is answering, and releases it when it goes away — while the *store* is
+    /// what has to consult it before answering. Holding it here is what lets both be true: the
+    /// screen drives, the store asks.
+    private var timedClaim: TimedQuestionClaim?
+
+    /// Why a claim could not be taken, or `nil` once the host has confirmed one.
+    func attachTimedClaim(eventId: String, agentId: String, callId: String) async -> String? {
+        guard let interactionStore, let coordinator else {
+            return "This phone is not connected to the harness."
+        }
+        guard let handle = await coordinator.activeStream() else {
+            return "The harness is not connected."
+        }
+        // One claim at a time: a second timed question replaces the first rather than parking
+        // two host waits behind one screen.
+        await releaseTimedClaim()
+
+        let claim = TimedQuestionClaim(
+            eventId: eventId,
+            agentId: agentId,
+            callId: callId,
+            store: interactionStore,
+            openStream: { endpoint, args in
+                try await handle.client.open(endpoint: endpoint, args: args)
+            },
+            clock: { try await Task.sleep(for: $0) }
+        )
+        timedClaim = claim
+        do {
+            try await claim.attach()
+            // The host's own `remainingMs` is what proves the claim; until it arrives there is
+            // nothing to answer against, so this waits rather than reporting a false success.
+            let held = await claim.waitUntilHeld()
+            return held ? nil : "The harness did not confirm the wait."
+        } catch {
+            timedClaim = nil
+            return Self.reason(for: error)
+        }
+    }
+
+    func releaseTimedClaim() async {
+        let claim = timedClaim
+        timedClaim = nil
+        await claim?.release()
+    }
+
+    /// Stops the countdown without giving up the claim, while the user is answering.
+    func pauseTimedClaim() async {
+        await timedClaim?.pause()
+    }
+
+    func resumeTimedClaim() async {
+        await timedClaim?.resume()
+    }
+
+    /// Whether a claim is held over an event, for the store's timed gate.
+    func holdsTimedClaim(_ eventId: String) async -> Bool {
+        await timedClaim?.holds(eventId) ?? false
     }
 
     /// What an unanswered submission means, in the user's terms.
@@ -675,6 +745,7 @@ final class AppModel {
     }
 
     func disconnect() {
+        Task { await releaseTimedClaim() }
         statusTask?.cancel()
         snapshotTask?.cancel()
         eventsTask?.cancel()
