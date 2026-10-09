@@ -43,6 +43,7 @@ struct HomeView: View {
                         hostRow
                         heading
                         workspaceControl
+                        modelModeControls
                         composer
                         continueSection
                     }
@@ -85,6 +86,10 @@ struct HomeView: View {
         }
         .sheet(isPresented: $isSettingsOpen) {
             SettingsView()
+        }
+        .task {
+            // The catalog is what the mode and model controls render, and it does not stream.
+            if model.catalog == nil { await model.loadModelCatalog() }
         }
         .task(id: model.selectedSessionId) {
             // Navigation is restored from the same value the store persists, so a cold
@@ -204,6 +209,26 @@ struct HomeView: View {
             .buttonStyle(.plain)
             .accessibilityHint("Chooses the workspace to work in")
         }
+    }
+
+    /// The mode and model a new session will start in (SPEC §6).
+    private var modelModeControls: some View {
+        ModelModeControls(
+            catalog: model.catalog,
+            isLoading: model.catalogState == .loading,
+            failure: {
+                if case .failed(let reason) = model.catalogState { return reason }
+                return nil
+            }(),
+            selectedMode: model.effectiveMode,
+            selectedModel: model.effectiveModel,
+            // The mark means "not the host's default", so a default selection carries none.
+            isModeStaged: model.stagedMode != nil,
+            isModelStaged: model.stagedModel != nil,
+            onSelectMode: { model.stageMode($0) },
+            onSelectModel: { model.stageModel($0) },
+            onRefresh: { Task { await model.loadModelCatalog() } }
+        )
     }
 
     /// Why Send is not available, or `nil` when it is.

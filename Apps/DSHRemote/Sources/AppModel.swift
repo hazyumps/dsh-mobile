@@ -25,6 +25,14 @@ final class AppModel {
     /// What the browse screens render, mapped from the host store's snapshot.
     private(set) var browse: BrowseState = .idle
 
+    /// The host's model, mode and permission catalog, once read.
+    private(set) var catalog: ModelModeCatalog?
+    private(set) var catalogState: ResourceState?
+    /// The mode staged for the next new session, as the host's preset id.
+    private(set) var stagedMode: String?
+    /// The model staged for the next new session.
+    private(set) var stagedModel: ModelSelection?
+
     /// The host's plugin inventory, once read. Nil until a read has happened, which is
     /// distinct from an inventory with no entries.
     private(set) var plugins: PluginInventory?
@@ -70,6 +78,7 @@ final class AppModel {
     private var recovery: ForegroundConnection?
     private var hostStore: HostSessionStore?
     private var secondaryStore: SecondaryReadStore?
+    private var modelModeStore: ModelModeCatalogStore?
     private var interactionStore: InteractionStore?
     private var statusTask: Task<Void, Never>?
     private var snapshotTask: Task<Void, Never>?
@@ -161,6 +170,30 @@ final class AppModel {
         #endif
     }
 
+    /// A model a launch should stage for the next new session, as `provider/model` or
+    /// `provider/model/effort`.
+    ///
+    /// Same reason as the other launch affordances: choosing a model needs a tap this machine
+    /// cannot make. Debug builds only.
+    var launchModel: String? {
+        #if DEBUG
+        ProcessInfo.processInfo.environment["DSH_MODEL"]
+        #else
+        nil
+        #endif
+    }
+
+    /// An agent preset a launch should stage for the next new session, by roster id.
+    ///
+    /// Debug builds only, like the model override.
+    var launchMode: String? {
+        #if DEBUG
+        ProcessInfo.processInfo.environment["DSH_MODE"]
+        #else
+        nil
+        #endif
+    }
+
     /// A first prompt for a *new* session, sent once a workspace is known.
     ///
     /// Same reason as the other launch affordances: creating a session needs a tap this
@@ -242,6 +275,11 @@ final class AppModel {
         pluginsReport = .unknown
         schedules = []
         schedulesReport = .unknown
+        modelModeStore = nil
+        catalog = nil
+        catalogState = nil
+        stagedMode = nil
+        stagedModel = nil
         // A decision belongs to the host that delivered it: switching hosts must not leave
         // another host's approval on screen, where it could be answered.
         interactionStore = nil
@@ -284,6 +322,7 @@ final class AppModel {
             // The capability ledger lives with the store, so a 404 learned on one screen
             // suppresses the request on the next (SPEC §10).
             self.secondaryStore = SecondaryReadStore(makeClient: makeClient)
+            self.modelModeStore = ModelModeCatalogStore(makeClient: makeClient)
             self.coordinator = coordinator
             self.hostStore = hostStore
             let recovery = ForegroundConnection(coordinator: coordinator)
@@ -528,13 +567,33 @@ final class AppModel {
         do {
             let outcome = try await coordinator.createSession(
                 sessionId: sessionId,
-                workspaceId: workspaceId
+                workspaceId: workspaceId,
+                // SPEC §6 stages the mode before creation, so the session starts in it
+                // rather than being switched afterwards. `nil` is the host's own default.
+                agentPreset: stagedMode
             )
             switch outcome {
             case .created(let created):
                 // Bound before anything else: the screen and the draft follow the identity
                 // the host confirmed, not the one that was proposed.
                 openSession(created.sessionId)
+
+                // The model goes on before the prompt, and a refusal stops the prompt:
+                // SPEC §6 is explicit that a failed selection must not be followed by a
+                // submission on a different model from the one the user chose.
+                if let staged = stagedModel {
+                    do {
+                        let applied = try await applyModel(staged, to: created.sessionId)
+                        stagedModel = applied
+                    } catch let refusal as SelectionRefusal {
+                        newSessionError = "The session was created, but the model could not be changed: \(Self.describe(refusal)) Nothing was sent."
+                        return created.sessionId
+                    } catch {
+                        newSessionError = "The session was created, but the model could not be changed: \(Self.reason(for: error)) Nothing was sent."
+                        return created.sessionId
+                    }
+                }
+
                 await send(first: trimmed, requestId: submission.requestId, to: created.sessionId, draft: draft, key: key)
                 return created.sessionId
 
@@ -550,6 +609,21 @@ final class AppModel {
             newSessionError = Self.reason(for: error)
             return nil
         }
+    }
+
+    /// Applies a model selection and returns the host's **normalized** answer.
+    ///
+    /// The host's answer is what is kept, not the request echoed back: SPEC §6 notes the host
+    /// resolves the request through its own call-config path, so only its response says what
+    /// is actually selected.
+    private func applyModel(_ selection: ModelSelection, to sessionId: String) async throws -> ModelSelection {
+        guard let modelModeStore else { throw SelectionRefusal.transport(reason: "no catalog is loaded") }
+        return try await modelModeStore.selectModel(
+            sessionId: sessionId,
+            provider: selection.provider,
+            model: selection.model,
+            reasoningEffort: selection.reasoningEffort
+        )
     }
 
     /// Sends the first prompt, clearing only the revision that was submitted.
@@ -627,6 +701,80 @@ final class AppModel {
         )
     }
 
+    // MARK: - Model and mode (SPEC §6)
+
+    /// Reads the model, mode and permission catalogs.
+    ///
+    /// The permission catalog is best-effort inside the store: a host without it is a missing
+    /// optional section, not a reason to fail the picker the user actually opened.
+    func loadModelCatalog() async {
+        guard let modelModeStore else { return }
+        catalogState = (catalogState ?? .loading).whileLoading
+        do {
+            catalog = try await modelModeStore.refresh()
+            catalogState = .current
+            applyLaunchModeOverride()
+            applyLaunchModelOverride()
+        } catch let refusal as SelectionRefusal {
+            catalogState = .failed(reason: Self.describe(refusal))
+        } catch {
+            catalogState = .failed(reason: Self.reason(for: error))
+        }
+    }
+
+    /// What a new session would run on if nothing were staged: the host's own default.
+    var effectiveMode: ModeOption? {
+        catalog?.modes.first { $0.id == stagedMode } ?? catalog?.defaultMode
+    }
+
+    var effectiveModel: ModelOption? {
+        let selection = stagedModel ?? catalog?.defaultSelection
+        guard let selection else { return nil }
+        return catalog?.option(for: selection)
+    }
+
+    /// Stages an agent preset for the next new session. Local only, like opening a draft.
+    func stageMode(_ presetId: String) {
+        stagedMode = presetId
+        persistStagedSelection()
+    }
+
+    /// Stages a model for the next new session.
+    func stageModel(_ selection: ModelSelection) {
+        stagedModel = selection
+        persistStagedSelection()
+    }
+
+    /// Writes the staged pair into the workspace's new-session draft.
+    ///
+    /// SPEC §5 keeps a draft's staged mode and model with the text, so a relaunch restores
+    /// what the user had chosen rather than silently reverting to the host default.
+    private func persistStagedSelection() {
+        guard let host = selectedHost, let workspaceId = selectedWorkspaceId else { return }
+        let draftId = newSessionDraftIds[workspaceId] ?? UUID()
+        newSessionDraftIds[workspaceId] = draftId
+        let key = DraftKey(hostId: host.id, owner: .newSession(draftId))
+        let selection = stagedModel ?? catalog?.defaultSelection
+        let drafts = self.drafts
+        Task {
+            _ = await drafts.setSelection(
+                agentPreset: stagedMode,
+                modelProvider: selection?.provider,
+                model: selection?.model,
+                reasoningEffort: selection?.reasoningEffort,
+                for: key
+            )
+            try? await drafts.flush()
+        }
+    }
+
+    /// An effort choice for a staged model, when the host advertises them.
+    func stageEffort(_ effort: String?) {
+        guard var selection = stagedModel ?? catalog?.defaultSelection else { return }
+        selection.reasoningEffort = effort
+        stageModel(selection)
+    }
+
     // MARK: - The timed question's foreground claim
 
     /// The live claim over one timed question, if this phone holds it.
@@ -690,6 +838,16 @@ final class AppModel {
     /// Whether a claim is held over an event, for the store's timed gate.
     func holdsTimedClaim(_ eventId: String) async -> Bool {
         await timedClaim?.holds(eventId) ?? false
+    }
+
+    /// What a refused selection means, in the user's terms (SPEC §6).
+    static func describe(_ refusal: SelectionRefusal) -> String {
+        switch refusal {
+        case .modeLocked: "This session has started, so its mode cannot change."
+        case .modelUnavailable(let message): "The harness cannot use that model: \(message)"
+        case .refused(let code, let message): "The harness refused that (\(code)): \(message)"
+        case .transport(let reason): reason
+        }
     }
 
     /// What an unanswered submission means, in the user's terms.
@@ -791,9 +949,40 @@ final class AppModel {
     /// chosose means the path has a single owner and the target is just state.
     private func applyLaunchSessionOverride() {
         #if DEBUG
+        // `DSH_DESTINATION=home` means "show Home, not the restored conversation" — a review
+        // affordance, since the app otherwise correctly reopens where the user left off.
+        if launchDestination == "home" {
+            selectedSessionId = nil
+            return
+        }
         guard shouldOpenFirstSessionOnLaunch, let sessionId = launchSessionId else { return }
         selectedSessionId = sessionId
         #endif
+    }
+
+    /// Debug builds only: stage a model for the next new session.
+    ///
+    /// Written against the *loaded* catalog, so an id the host does not advertise is dropped
+    /// rather than sent: the host would refuse it, and this affordance is for verification.
+    func applyLaunchModeOverride() {
+        guard let wanted = launchMode, let catalog,
+              catalog.modes.contains(where: { $0.id == wanted && $0.isSelectable })
+        else { return }
+        stagedMode = wanted
+    }
+
+    func applyLaunchModelOverride() {
+        guard let wanted = launchModel, let catalog else { return }
+        let parts = wanted.split(separator: "/").map(String.init)
+        guard parts.count >= 2,
+              let provider = catalog.providers.first(where: { $0.id == parts[0] }),
+              let model = provider.models.first(where: { $0.id == parts[1] })
+        else { return }
+        stagedModel = ModelSelection(
+            provider: provider.id,
+            model: model.id,
+            reasoningEffort: parts.count > 2 ? parts[2] : model.defaultEffort
+        )
     }
 
     private func persistNavigation() {
@@ -989,6 +1178,11 @@ final class AppModel {
         pluginsReport = .unknown
         schedules = []
         schedulesReport = .unknown
+        modelModeStore = nil
+        catalog = nil
+        catalogState = nil
+        stagedMode = nil
+        stagedModel = nil
         interactionStore = nil
         interactions = []
         selectedHost = nil
