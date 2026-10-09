@@ -168,6 +168,14 @@ struct DrawerView: View {
                             .foregroundStyle(DSHPalette.secondaryText)
                     }
                     .padding(.horizontal, DSHMetrics.spaceCard)
+                } else if browse.sessionIndexFailure != nil {
+                    // The tree below is the registry's membership, which is still true;
+                    // the session records behind it are not, and the drawer says so rather
+                    // than showing every row as an untitled session.
+                    Label("Session details didn’t load", systemImage: "exclamationmark.triangle")
+                        .font(.dshMetadata)
+                        .foregroundStyle(DSHPalette.attention)
+                        .padding(.horizontal, DSHMetrics.spaceCard)
                 } else if matches.isEmpty, !query.isEmpty {
                     Text("Nothing loaded matches “\(query)”.")
                         .font(.dshSupporting)

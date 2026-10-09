@@ -16,6 +16,13 @@ struct BrowseSession: Identifiable, Hashable {
     /// Set for a session the host reports under another session, which is not an
     /// ordinary session to open from the drawer's workspace tree.
     let isSubagent: Bool
+    /// Whether `session/list` supplied a record for this id.
+    ///
+    /// The workspace registry names sessions the index may not have delivered — and the
+    /// index can fail outright, which this host currently does for a corrupt session log.
+    /// A registry-only row is a real session whose details are unknown, which is a
+    /// different thing from a session that has no title, and the two must not look alike.
+    let isLoaded: Bool
 
     var lastActivity: String? {
         guard let updatedAt else { return nil }
@@ -84,9 +91,30 @@ struct BrowseState: Hashable {
 
     /// A reason to show beside the list, when a load failed.
     var failureReason: String? {
-        if case .failed(let reason) = sessionsState { return reason }
-        if case .failed(let reason) = workspacesState { return reason }
-        return nil
+        sessionIndexFailure ?? workspaceFailure
+    }
+
+    /// Why `session/list` failed, if it did.
+    ///
+    /// Its own accessor because the two failures look nothing alike on screen: a failed
+    /// session index still leaves the workspace tree standing, and this host currently
+    /// fails the index outright over one corrupt session log. Showing the hierarchy
+    /// without mentioning that would present registry ids as if they were loaded sessions.
+    var sessionIndexFailure: String? {
+        switch sessionsState {
+        case .failed(let reason): reason
+        case .stale(let reason): reason
+        case .empty, .loading, .current: nil
+        }
+    }
+
+    /// Why `workspace/follow` failed, if it did.
+    var workspaceFailure: String? {
+        switch workspacesState {
+        case .failed(let reason): reason
+        case .stale(let reason): reason
+        case .empty, .loading, .current: nil
+        }
     }
 
     /// Whether a refresh is in flight with nothing to show yet.
@@ -127,7 +155,8 @@ struct BrowseState: Hashable {
             title: record?.title ?? "Untitled session",
             running: record?.running ?? false,
             updatedAt: record?.updatedAt.map { Date(timeIntervalSince1970: Double($0) / 1000) },
-            isSubagent: record?.parentSessionId != nil
+            isSubagent: record?.parentSessionId != nil,
+            isLoaded: record != nil
         )
     }
 }

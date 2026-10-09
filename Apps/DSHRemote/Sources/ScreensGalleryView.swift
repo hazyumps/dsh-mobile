@@ -160,21 +160,24 @@ extension AppModel {
                         title: "Wire the workspace registry into Home",
                         running: true,
                         updatedAt: Date().addingTimeInterval(-90),
-                        isSubagent: false
+                        isSubagent: false,
+                        isLoaded: true
                     ),
                     BrowseSession(
                         id: "session-example-2",
                         title: "Conversation reducer: live deltas and the cursor seed",
                         running: false,
                         updatedAt: Date().addingTimeInterval(-3_600),
-                        isSubagent: false
+                        isSubagent: false,
+                        isLoaded: true
                     ),
                     BrowseSession(
                         id: "session-example-subagent",
                         title: "Subagent: fixture coverage sweep",
                         running: true,
                         updatedAt: Date().addingTimeInterval(-600),
-                        isSubagent: true
+                        isSubagent: true,
+                        isLoaded: true
                     ),
                 ]
             ),
@@ -188,7 +191,8 @@ extension AppModel {
                         title: "sync-dsh: render the home patch from models.yml",
                         running: false,
                         updatedAt: Date().addingTimeInterval(-86_400),
-                        isSubagent: false
+                        isSubagent: false,
+                        isLoaded: true
                     )
                 ]
             ),

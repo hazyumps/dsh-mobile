@@ -224,6 +224,29 @@ struct ChatSessionTests {
         }
     }
 
+    @Test("the follow baseline is bounded, so the snapshot can be received at all")
+    func followRequestsABoundedBaseline() async throws {
+        let (chat, socket) = makeSession()
+        try await chat.start()
+
+        // The open frame on the wire, not an inference: an unbounded follow asks the host
+        // for the whole transcript, and a real session's baseline then exceeds what
+        // URLSessionWebSocketTask will accept, killing the socket with EMSGSIZE.
+        let opened = await socket.sentTexts
+            .compactMap { text -> JSONValue? in
+                guard let value = try? JSONDecoder().decode(JSONValue.self, from: Data(text.utf8)),
+                      value["endpoint"]?.stringValue == "session/follow"
+                else { return nil }
+                return value
+            }
+            .first
+        let request = try #require(opened?["payload"]?["args"]?["request"])
+        #expect(request["maxMessages"]?.intValue == Int64(ChatSession.pageMessages))
+        #expect(request["assistantStream"]?.boolValue == true)
+        #expect(request["address"]?["sessionId"]?.stringValue == "session-1")
+        await chat.stop()
+    }
+
     @Test("a snapshot stream starts with the current state, not with nothing")
     func snapshotsStartFromTheCurrentState() async throws {
         let (chat, socket) = makeSession()
@@ -299,7 +322,7 @@ struct ChatSessionTests {
         #expect(requests.first?.sessionId == "session-1")
         #expect(requests.first?.throughSeq == 31)
         #expect(requests.first?.beforeSeq == 10)
-        #expect(requests.first?.maxMessages == 60)
+        #expect(requests.first?.maxMessages == ChatSession.pageMessages)
 
         let snapshot = await chat.snapshot()
         #expect(snapshot.messages.map(\.text) == ["older", "hello"])

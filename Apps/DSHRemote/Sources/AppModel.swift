@@ -227,6 +227,8 @@ final class AppModel {
             observeSnapshots(of: hostStore, selection: selection)
             try? store.saveSelection(HostSelection(hostId: host.id))
             await restoreNavigation(for: host)
+            // After the stored destination, so an explicit launch target wins over it.
+            applyLaunchSessionOverride()
             guard selection == selectionID else { return }
             recovery.setForeground(isForeground)
         } catch {
@@ -335,6 +337,20 @@ final class AppModel {
         let saved = await drafts.navigation(for: host.id)
         selectedWorkspaceId = saved.workspaceId
         selectedSessionId = saved.sessionId
+    }
+
+    /// Debug builds only: open the session a launch names.
+    ///
+    /// This belongs here rather than in a view. It used to be a `.task` on Home that
+    /// appended to the navigation path, and it silently did nothing — a launch target set
+    /// during the first render races the `.task(id:)` that owns the path, and the screen
+    /// stayed on Home with no error anywhere. Setting the selection once the host is
+    /// chosose means the path has a single owner and the target is just state.
+    private func applyLaunchSessionOverride() {
+        #if DEBUG
+        guard shouldOpenFirstSessionOnLaunch, let sessionId = launchSessionId else { return }
+        selectedSessionId = sessionId
+        #endif
     }
 
     private func persistNavigation() {

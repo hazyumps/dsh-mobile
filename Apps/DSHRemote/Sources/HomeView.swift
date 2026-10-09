@@ -94,25 +94,6 @@ struct HomeView: View {
         .onChange(of: isDrawerOpen) { _, open in
             if open { Task { await model.refreshSessions() } }
         }
-        .task {
-            // Verification affordance: open a session without a tap, so the conversation
-            // screen is reachable on a simulator with no GUI. Inert unless
-            // `DSH_OPEN_SESSION` is set.
-            guard model.shouldOpenFirstSessionOnLaunch else { return }
-            for _ in 0..<40 {
-                // A named session wins over "newest": verifying a specific conversation
-                // should not depend on list order.
-                if let wanted = model.launchSessionId {
-                    open(wanted)
-                    return
-                }
-                if let first = browse.recent(limit: 1).first {
-                    open(first.id)
-                    return
-                }
-                try? await Task.sleep(for: .milliseconds(250))
-            }
-        }
     }
 
     // MARK: - Toolbar
@@ -239,22 +220,44 @@ struct HomeView: View {
     @ViewBuilder
     private var recentBody: some View {
         let recent = browse.recent()
+
+        // The session index failing is said out loud even when rows are on screen. The
+        // workspace registry names sessions the index may never deliver — this host
+        // fails `session/list` outright over one corrupt session log — and a screen that
+        // showed those rows without the failure would present them as loaded sessions.
+        if let reason = browse.sessionIndexFailure {
+            VStack(alignment: .leading, spacing: DSHMetrics.space) {
+                Label("Couldn’t load sessions", systemImage: "exclamationmark.triangle")
+                    .font(.dshSupporting)
+                    .foregroundStyle(DSHPalette.error)
+                // The host's reason is kept, but behind a disclosure: it quotes full
+                // private paths, and the UX spec asks for "Retry the list; inspect error
+                // details" — details on request, not a wall of them over the sessions.
+                ErrorDetails(reason: reason)
+                Button("Try again") { Task { await model.refreshSessions() } }
+                    .font(.dshSupporting)
+                    .foregroundStyle(DSHPalette.primaryActionText)
+            }
+            .padding(DSHMetrics.spaceCard)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .dshCard()
+        }
+
         if browse.isLoadingFirstTime {
             HStack(spacing: DSHMetrics.space) {
                 ProgressView()
                 Text("Reading sessions…").foregroundStyle(DSHPalette.secondaryText)
             }
             .font(.dshSupporting)
-        } else if recent.isEmpty, let reason = browse.failureReason {
-            // A failed list and an empty one are different screens (SPEC §4), and this
-            // one keeps the connection usable while saying what went wrong.
+        } else if recent.isEmpty, let reason = browse.workspaceFailure {
             VStack(alignment: .leading, spacing: DSHMetrics.space) {
-                Label("Couldn’t load sessions", systemImage: "exclamationmark.triangle")
+                Label("Couldn’t load workspaces", systemImage: "exclamationmark.triangle")
                     .font(.dshSupporting)
                     .foregroundStyle(DSHPalette.error)
                 Text(reason)
                     .font(.dshMetadata)
                     .foregroundStyle(DSHPalette.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
                 Button("Try again") { Task { await model.refreshSessions() } }
                     .font(.dshSupporting)
                     .foregroundStyle(DSHPalette.primaryActionText)
@@ -272,8 +275,9 @@ struct HomeView: View {
                 ForEach(recent) { session in
                     SessionCard(
                         title: session.title,
+                        supportingLine: session.isLoaded ? nil : "Details didn’t load",
                         state: session.running ? .running : nil,
-                        lastActivity: session.running ? nil : session.lastActivity
+                        lastActivity: session.running || !session.isLoaded ? nil : session.lastActivity
                     ) {
                         open(session.id)
                     }
@@ -315,6 +319,45 @@ struct HomeView: View {
     private func open(_ sessionId: String) {
         model.openSession(sessionId)
         if path.last != .session(sessionId) { path.append(.session(sessionId)) }
+    }
+}
+
+/// The host's own failure text, on request.
+///
+/// It is kept verbatim — a paraphrase of a host error is a guess — but folded away,
+/// because the text quotes full private paths and belongs behind the "inspect error
+/// details" step of the UX spec's session-list row.
+struct ErrorDetails: View {
+    let reason: String
+    @State private var isExpanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DSHMetrics.spaceSmall) {
+            Button {
+                isExpanded.toggle()
+            } label: {
+                HStack(spacing: DSHMetrics.spaceSmall + 2) {
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.caption2)
+                        .accessibilityHidden(true)
+                    Text("Details")
+                        .font(.dshMetadata)
+                }
+                .foregroundStyle(DSHPalette.secondaryText)
+                .frame(minHeight: DSHMetrics.minimumHitTarget)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint(isExpanded ? "Hides the host's error" : "Shows the host's error")
+
+            if isExpanded {
+                Text(reason)
+                    .font(.dshMetadata)
+                    .foregroundStyle(DSHPalette.secondaryText)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 }
 

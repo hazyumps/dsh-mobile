@@ -81,7 +81,12 @@ public struct ConversationPageRequest: Sendable, Hashable {
     public var beforeSeq: Int64?
     public var maxMessages: Int
 
-    public init(sessionId: String, throughSeq: Int64, beforeSeq: Int64? = nil, maxMessages: Int = 60) {
+    public init(
+        sessionId: String,
+        throughSeq: Int64,
+        beforeSeq: Int64? = nil,
+        maxMessages: Int = ChatSession.pageMessages
+    ) {
         self.sessionId = sessionId
         self.throughSeq = throughSeq
         self.beforeSeq = beforeSeq
@@ -113,6 +118,30 @@ public struct ConversationPage: Sendable, Hashable {
 /// This type holds the first: it follows, folds, and pages. Sending a prompt stays
 /// with the coordinator, which is where the no-retry rule for writes lives.
 public actor ChatSession {
+    /// How many durable messages one follow baseline or older page asks for.
+    ///
+    /// **Measured, not chosen.** `URLSessionWebSocketTask` fails an inbound message it
+    /// cannot hold with `NSPOSIXErrorDomain 40` ("Message too long"), which presents as a
+    /// dead socket rather than as a large reply. Against the installed host on
+    /// 2026-10-09, one `session/follow` baseline measured:
+    ///
+    /// | `maxMessages` | snapshot frame |
+    /// | --- | --- |
+    /// | 5 | 262 KB |
+    /// | 10 | 366 KB |
+    /// | 20 | 619 KB — received |
+    /// | 60 | 1.28 MB — **rejected**, socket closed |
+    ///
+    /// So the spec's suggested 60 is a host-side figure this client cannot receive, and 20
+    /// is the largest measured value that arrives with room to spare. A longer
+    /// conversation is reached by paging, never by one enormous baseline.
+    ///
+    /// The residual risk is a *single* message larger than the limit — a tool result of
+    /// megabytes — which no `maxMessages` value can bound. That ends the stream and
+    /// surfaces as a failed follow rather than a truncated history, which is the honest
+    /// failure; a transport without this ceiling is the real fix if it ever bites.
+    public static let pageMessages = 20
+
     /// How an older page is fetched. Injected so this type can be exercised without a
     /// socket, and so the RPC path stays in one place.
     public typealias PageLoader = @Sendable (ConversationPageRequest) async throws -> ConversationPage
@@ -246,6 +275,10 @@ public actor ChatSession {
         // The captured shape, not a guess: a named `request` whose required
         // `address` is the session form, and `assistantStream` to get live
         // frames alongside the snapshot.
+        //
+        // `maxMessages` is what keeps the baseline receivable. It is optional on the
+        // wire, and leaving it out asks the host for the whole transcript — 1.28 MB for a
+        // real session here, which destroys the socket (see ``pageMessages``).
         let args = JSONValue.object([
             "request": .object([
                 "address": .object([
@@ -253,6 +286,7 @@ public actor ChatSession {
                     "sessionId": .string(sessionId),
                 ]),
                 "assistantStream": .bool(true),
+                "maxMessages": .int(Int64(Self.pageMessages)),
             ]),
         ])
 

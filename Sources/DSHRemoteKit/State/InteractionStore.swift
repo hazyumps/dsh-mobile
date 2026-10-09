@@ -115,13 +115,15 @@ public enum InteractionRefusal: Error, Sendable, Hashable {
 ///   answered first and the gateway ignores stale results while still acknowledging them.
 /// - Nothing is replayed on reconnect.
 ///
-/// Question batches are modelled but not yet answered here: the two live channels and the
-/// timed-wait claim are a separate unit, and pretending otherwise would be the half-built
-/// path this file is meant to avoid.
+/// Question batches are answered here too: the live channels, the continued channel, and
+/// the rule that selects between them. The timed-wait claim is the caller's, because SPEC
+/// §8 gives its lifetime to the UI that can see the user.
 public actor InteractionStore {
     private var requests: [String: InteractionRequest] = [:]
     /// Group membership, so a batch can be found by call rather than by question id.
     private var groups: [InteractionGroupKey: Set<String>] = [:]
+    /// Everything published so far, for the screens that render decisions.
+    private var subscribers: [UUID: AsyncStream<[InteractionRequest]>.Continuation] = [:]
 
     private let identity: @Sendable () async -> RemoteEventRouter.Identity?
     private let submit: @Sendable (EventResultRequest) async throws -> Void
@@ -186,6 +188,37 @@ public actor InteractionStore {
     /// `ask_user_question` tool call does not produce the badge by itself.
     public var needsInputCount: Int {
         actionable.count
+    }
+
+    // MARK: - Publishing
+
+    /// Every request from now on, starting with the current set.
+    ///
+    /// Buffered newest-only for the same reason ``ConversationSnapshot`` is: each value is
+    /// the whole set, so a screen that is slow to draw skips intermediate states rather
+    /// than falling behind, and it cannot miss a retirement by having skipped the frame
+    /// that announced it.
+    public func snapshots() -> AsyncStream<[InteractionRequest]> {
+        let id = UUID()
+        let (stream, continuation) = AsyncStream<[InteractionRequest]>.makeStream(
+            bufferingPolicy: .bufferingNewest(1)
+        )
+        subscribers[id] = continuation
+        continuation.yield(all)
+        continuation.onTermination = { [weak self] _ in
+            Task { await self?.removeSubscriber(id) }
+        }
+        return stream
+    }
+
+    private func removeSubscriber(_ id: UUID) {
+        subscribers.removeValue(forKey: id)
+    }
+
+    private func publish() {
+        guard !subscribers.isEmpty else { return }
+        let value = all
+        for continuation in subscribers.values { continuation.yield(value) }
     }
 
     // MARK: - Observing
