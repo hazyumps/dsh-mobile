@@ -342,6 +342,11 @@ On a committed end, associate the named durable event sequence/type with the pro
 
 Call `session/page` with `{request:{address,throughSeq:<opening snapshot cursor>,beforeSeq:<oldest loaded seq>,maxMessages:60}}`. `throughSeq` is fixed for that follow generation; `beforeSeq` is exclusive. The first page may omit `beforeSeq`. Merge `records` by sequence, use `hasMore`, prevent concurrent duplicate page loads, and reject a page completing after rebaseline/navigation. Do not substitute `session-log-deepseek/delivery-accepted.throughSeq` for the opening follow cursor.
 
+The host's `paginate` also accepts optional `turnWindow:{minMessages,minTurns}`, which the phone may pass to land the cut on a turn boundary. Two consequences of how it cuts, both read off that function:
+
+- It walks **backwards** from `min(throughSeq + 1, beforeSeq)` and cuts when the message count reaches `maxMessages` — so the returned window is `[cut, end)`, `hasMore` is exactly `cut > 0`, and `hasMore` is therefore the authority on whether older history exists rather than an inference from the page's size.
+- When a message carries `sourceEventSeqs`, the cut is pulled back to the smallest of them, so a message is never separated from the events it was derived from. A page therefore does not contain a uniform number of events per message, and merging by sequence is the only safe assumption.
+
 `session/cancel` takes `{request:{sessionId}}`, not a follow address. Installed source calls agent cancellation with `keepInbox:true`. Earlier live observations did not establish immediate interruption. Keep a stop control gated until tested with active tools and queued messages. If exposed, say “Stop requested” on acceptance and wait for host settlement before saying stopped; never imply the inbox was cleared.
 
 ## 8. Approval and question cards
