@@ -79,6 +79,21 @@ final class AppModel {
         #endif
     }
 
+    /// Whether a launch should show the design-system gallery instead of the
+    /// landing screen.
+    ///
+    /// The visual work has to be *looked at* to be reviewed, and this machine
+    /// has no Simulator GUI — the same reason ``shouldOpenFirstHostOnLaunch``
+    /// exists. Debug builds only, and it changes nothing unless the variable is
+    /// set, so the shipping app's normal flow is untouched.
+    var shouldShowDesignGalleryOnLaunch: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.environment["DSH_DESIGN_GALLERY"] != nil
+        #else
+        false
+        #endif
+    }
+
     /// A message to send once the conversation opens. Only ever set for
     /// verification, and only ever pointed at a scratch session: a duplicate or
     /// stray prompt costs real work, so this must not be aimed at a conversation
