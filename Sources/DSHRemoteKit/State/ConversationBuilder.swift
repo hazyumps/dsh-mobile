@@ -12,13 +12,27 @@ public struct ConversationMessage: Sendable, Hashable, Identifiable {
     public let isProvisional: Bool
     /// Reasoning is kept apart from the answer (SPEC §3.4).
     public let reasoning: String?
+    /// Files this message carried, by the name the host recorded.
+    ///
+    /// A durable `file` part stores `{attachmentId, name, bytes}` — the receipt is retired once
+    /// the prompt becomes a message — so this is what the user actually sent, and a transcript
+    /// that showed only the text would quietly drop it.
+    public let attachments: [String]
 
-    public init(id: String, role: Role, text: String, isProvisional: Bool, reasoning: String?) {
+    public init(
+        id: String,
+        role: Role,
+        text: String,
+        isProvisional: Bool,
+        reasoning: String?,
+        attachments: [String] = []
+    ) {
         self.id = id
         self.role = role
         self.text = text
         self.isProvisional = isProvisional
         self.reasoning = reasoning
+        self.attachments = attachments
     }
 }
 
@@ -368,10 +382,18 @@ public struct ConversationBuilder: Sendable {
             // Everything else stays as an unmodelled event, so it is still reachable behind
             // a restrained activity row rather than silently dropped.
             guard event.data["source"]?["kind"]?.stringValue == "user" else { return nil }
-            let text = textParts(event.data["content"])
-            guard !text.isEmpty else { return nil }
+            let content = event.data["content"]
+            let text = textParts(content)
+            let attachments = Self.fileNames(content)
+            // A prompt whose only content is a file is still a message.
+            guard !text.isEmpty || !attachments.isEmpty else { return nil }
             return ConversationMessage(
-                id: "seq:\(event.seq)", role: .user, text: text, isProvisional: false, reasoning: nil
+                id: "seq:\(event.seq)",
+                role: .user,
+                text: text,
+                isProvisional: false,
+                reasoning: nil,
+                attachments: attachments
             )
 
         case "assistant/message":
@@ -389,6 +411,19 @@ public struct ConversationBuilder: Sendable {
 
         default:
             return nil
+        }
+    }
+
+    /// The names of the `file` parts of a message.
+    ///
+    /// Skips a part with no name rather than inventing one: an unnamed attachment is one the
+    /// host would not let a prompt cite either.
+    static func fileNames(_ content: JSONValue?) -> [String] {
+        guard let parts = content?.arrayValue else { return [] }
+        return parts.compactMap { part in
+            guard part["type"]?.stringValue == "file" else { return nil }
+            // Either the durable form (`attachment.name`) or, before it settles, the receipt.
+            return part["attachment"]?["name"]?.stringValue ?? part["name"]?.stringValue
         }
     }
 

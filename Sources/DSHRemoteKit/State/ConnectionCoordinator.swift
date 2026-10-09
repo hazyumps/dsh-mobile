@@ -662,17 +662,31 @@ public actor ConnectionCoordinator {
     ///   the deduplication would never match, and the duplicate turn SPEC §3.4 forbids
     ///   would be created silently. So the identity comes from the caller, which is the
     ///   only place that can tell a retry from a new message.
-    public func prompt(requestId: String, sessionId: String, text: String) async throws {
+    public func prompt(
+        requestId: String,
+        sessionId: String,
+        text: String,
+        fileReceiptIds: [String] = []
+    ) async throws {
         let client = DshRpcClient(
             baseURL: origin.baseURL,
             authorization: origin.authorization,
             transport: makeTransport(origin)
         )
+        // SPEC §9: a staged file is cited by its **receipt**, not by an `attachmentId`, and
+        // an `attachmentId` is explicitly not a substitute. The parts go in as `file` content
+        // items beside the text, in the order the caller staged them.
+        var content: [SessionPromptRequestContentItem] = [
+            .text(SessionPromptRequestContentItemText(type: "text", text: text))
+        ]
+        content.append(contentsOf: fileReceiptIds.map {
+            .file(SessionPromptRequestContentItemFile(type: "file", receiptId: $0))
+        })
         let request = SessionPromptRequest(
             requestId: requestId,
             sessionId: sessionId,
             mode: .queue,
-            content: [.text(SessionPromptRequestContentItemText(type: "text", text: text))],
+            content: content,
             clientTimeZone: TimeZone.current.identifier
         )
         do {

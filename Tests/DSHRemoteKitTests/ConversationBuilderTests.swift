@@ -109,6 +109,32 @@ struct ConversationBuilderTests {
         #expect(builder.messages.map(\.text) == ["mine"])
     }
 
+    @Test("a message that carried a file shows the file, not just its text")
+    func filePartsSurviveTheFold() throws {
+        // The host stores a durable `file` part with `{attachmentId, name, bytes}` once the
+        // prompt becomes a message — the receipt is retired — so this is the only thing left
+        // that says what the user attached.
+        var builder = ConversationBuilder()
+        builder.apply(event: try event(
+            "user/message",
+            seq: 1,
+            data: #"{"content":[{"type":"text","text":"look at this"},{"type":"file","attachment":{"attachmentId":"sha256:abc","name":"probe.txt","bytes":28}}],"source":{"kind":"user"}}"#
+        ))
+        #expect(builder.messages.count == 1)
+        #expect(builder.messages.first?.text == "look at this")
+        #expect(builder.messages.first?.attachments == ["probe.txt"])
+
+        // A prompt whose only content is a file is still a message.
+        var onlyFile = ConversationBuilder()
+        onlyFile.apply(event: try event(
+            "user/message",
+            seq: 2,
+            data: #"{"content":[{"type":"file","attachment":{"attachmentId":"sha256:abc","name":"probe.txt","bytes":28}}],"source":{"kind":"user"}}"#
+        ))
+        #expect(onlyFile.messages.first?.attachments == ["probe.txt"])
+        #expect(onlyFile.messages.first?.text == "")
+    }
+
     @Test("a jump forward sets the gap flag")
     func gapSetsFlag() throws {
         var builder = ConversationBuilder()

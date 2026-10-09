@@ -416,6 +416,38 @@ func continuedAnswerPostsTheValidatedBody() async throws {
     #expect(arguments["answer"] == body)
 }
 
+@Test("a prompt cites staged files by receipt, beside the text")
+func promptCarriesFileReceipts() async throws {
+    let transport = StubRelayTransport(responsesByPath: [
+        "/api/session/prompt": .json(
+            status: 200,
+            Data(#"{"type":"server-response","rpcId":"t","result":{"ok":true,"value":{"accepted":true}}}"#.utf8)
+        ),
+    ])
+    let coordinator = ConnectionCoordinator(origin: origin(), makeTransport: { _ in transport })
+
+    try await coordinator.prompt(
+        requestId: "request-1",
+        sessionId: "session-1",
+        text: "look at this",
+        fileReceiptIds: ["receipt-a", "receipt-b"]
+    )
+
+    let requests = await transport.recordedRequests
+    let request = try #require(requests.first)
+    let envelope = try JSONDecoder().decode(JSONValue.self, from: #require(request.body))
+    let arguments = try #require(envelope["payload"]?["args"]?["request"])
+    let content = try #require(arguments["content"]?.arrayValue)
+    #expect(content.count == 3)
+    #expect(content[0]["type"]?.stringValue == "text")
+    #expect(content[0]["text"]?.stringValue == "look at this")
+    // SPEC §9: `{type:"file",receiptId}` — an `attachmentId` is not a substitute.
+    #expect(content[1]["type"]?.stringValue == "file")
+    #expect(content[1]["receiptId"]?.stringValue == "receipt-a")
+    #expect(content[2]["receiptId"]?.stringValue == "receipt-b")
+    #expect(content[1]["attachmentId"] == nil)
+}
+
 @Test("session/create sends the identity the phone chose, and adopts a partial success")
 func createSessionSendsTheCallersIdentity() async throws {
     let response = """
