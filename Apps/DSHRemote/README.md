@@ -171,6 +171,11 @@ either: an unanswered question's waterfall carries **no** `wait`, and a write ou
 workspace is refused by the sandbox outright rather than escalated to an approval. So SPEC
 §8's timed-claim path is implemented and unit-tested but has no live coverage here.
 
+**Attachments read back.** An image a message carried is drawn in the transcript from the
+host (`session/attachment` → `SessionImageCache`), with a placeholder at the attachment's own
+aspect ratio while it loads. Nothing is kept on the device: the phone may have been
+reinstalled since the message was sent, and the host is the only copy certain to exist.
+
 **Still to come:** physical-device validation (slice F), which is the only way to check the
 two pickers, background recovery, and the timed claim under a real lock.
 
