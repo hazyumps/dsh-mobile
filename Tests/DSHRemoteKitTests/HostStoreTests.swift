@@ -77,4 +77,59 @@ struct HostStoreTests {
         try store.save(store.load().filter { $0.id != drop.id })
         #expect(store.load() == [keep])
     }
+
+    @Test("the selected host round-trips, so a cold launch returns to its work")
+    func selectionRoundTrips() throws {
+        let store = HostStore(directory: try temporaryDirectory())
+        let host = sampleHost()
+        try store.save([host])
+        try store.saveSelection(HostSelection(hostId: host.id))
+
+        #expect(store.loadSelection()?.hostId == host.id)
+    }
+
+    @Test("no selection file reads as no selection, not as a failure")
+    func missingSelectionIsNil() throws {
+        let store = HostStore(directory: try temporaryDirectory())
+        #expect(store.loadSelection() == nil)
+    }
+
+    @Test("a selection file that cannot be read is discarded rather than thrown")
+    func corruptSelectionIsNil() throws {
+        let store = HostStore(directory: try temporaryDirectory())
+        try store.save([sampleHost()])
+        try FileManager.default.createDirectory(
+            at: store.selectionURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data("{".utf8).write(to: store.selectionURL)
+
+        #expect(store.loadSelection() == nil)
+    }
+
+    @Test("clearing the selection removes the file instead of writing a null")
+    func clearingSelectionRemovesTheFile() throws {
+        let store = HostStore(directory: try temporaryDirectory())
+        let host = sampleHost()
+        try store.save([host])
+        try store.saveSelection(HostSelection(hostId: host.id))
+        try store.saveSelection(nil)
+
+        #expect(store.loadSelection() == nil)
+        #expect(!FileManager.default.fileExists(atPath: store.selectionURL.path))
+    }
+
+    @Test("forgetting the selected host drops the selection with it")
+    func reconcileDropsAStaleSelection() throws {
+        let store = HostStore(directory: try temporaryDirectory())
+        let keep = sampleHost(name: "keep.local")
+        let drop = sampleHost(name: "drop.local")
+        try store.save([keep, drop])
+        try store.saveSelection(HostSelection(hostId: drop.id))
+
+        #expect(store.reconcileSelection(with: [keep, drop])?.hostId == drop.id)
+        #expect(store.reconcileSelection(with: [keep]) == nil)
+        // And it stays gone: the next launch must not chase a host the user forgot.
+        #expect(store.loadSelection() == nil)
+    }
 }
