@@ -94,6 +94,26 @@ the relay.
 The app connects to saved hosts, lists sessions, follows conversations, sends
 prompts, and answers questions. The status badge carries text and a symbol.
 
+The root is now the selected host's work, not the host list: **Home** (status row,
+workspace control, "Continue a session") with the **drawer** for switching
+workspace or conversation, and **Settings** for host selection, pairing, and the
+device name. `HostsView` remains the pairing introduction for a phone with no
+saved host. Grouping comes from the host's own workspace registry through
+`HostSessionStore`; the session list is read and refreshed by that store rather
+than by the connection, so a list failure never relabels a healthy connection.
+
+Two things are deliberately absent rather than decorative: **New session** and
+the Home composer cannot start a session yet — that is the create transaction of
+SPEC §5 — so both say so instead of offering a Send that could not work. Plugins,
+Scheduled tasks, MCP, and Usage are omitted until their capability-gated reads
+land (SPEC §10).
+
+A conversation renders from `ChatSession`'s snapshot stream (messages, reasoning,
+fenced code with Copy, non-message activity cards, older-history paging) and
+batches pending questions by `callId`. **Approvals, the timed-question claim, and
+the create transaction are not wired yet**; an approval arriving on `$events`
+currently produces no card.
+
 Returning from the background automatically opens a new connection with the
 stored credential and refreshes the session list and open conversation. Temporary
 failures retry while foregrounded with backoff; there is no reconnect approval.
@@ -103,8 +123,9 @@ changed certificate stops recovery and shows the reason.
 The open screen keeps its messages and draft during reconnection and waits for
 a fresh snapshot before enabling sends. It does not replay prompts or answers.
 This is in-memory retention, not draft/history restoration after iOS terminates
-the app. Session-list errors preserve the cached list and do not relabel a
-healthy connection as unavailable.
+the app; the selected host, workspace, and session *are* persisted, so a cold
+launch returns to the last conversation. Session-list errors preserve the cached
+list and do not relabel a healthy connection as unavailable.
 
 Recovery is covered by offline transport tests and an iOS simulator build.
 Physical-phone validation is still needed: open a conversation, type a draft,
@@ -134,24 +155,35 @@ the recovery behaviour described above. An installed runtime is not a phone.
 
 ## Debug affordances
 
-Two environment variables change what a **debug** build shows. Both are compiled
-out of a release build, and neither does anything unless it is set, so the
-shipping landing screen is what runs by default.
+These environment variables change what a **debug** build does. Every one is
+compiled out of a release build, and none does anything unless it is set, so the
+shipping app's normal flow is what runs by default.
 
 | variable | effect |
 | --- | --- |
 | `DSH_PAIRING_PAYLOAD` | Seeds pairing at launch with a relay pairing payload, running the ordinary `claim` path rather than a parallel one. For exercising the whole flow on a simulator with no keyboard. |
-| `DSH_DESIGN_GALLERY` | Shows the component gallery instead of the landing screen: every design-system component in each of its states, on the real tokens. |
+| `DSH_OPEN_HOST` | Selects the first saved host at launch. Home, the drawer, and the session list are otherwise unreachable on a simulator, which cannot be tapped. |
+| `DSH_OPEN_SESSION` | Opens a session once the list has loaded. Pair it with `DSH_SESSION_ID` to open a specific conversation rather than the newest. |
+| `DSH_SESSION_ID` | Names the session `DSH_OPEN_SESSION` should open. |
+| `DSH_SEND_MESSAGE` | Sends one message once a conversation is open. **Point it at a scratch session**: a duplicate or stray prompt costs real work, and this client never resends on its own. |
+| `DSH_DESIGN_GALLERY` | Shows the component gallery instead of the app: every design-system component in each of its states, on the real tokens. |
+| `DSH_SCREEN_GALLERY` | Shows the screens above the components from fixture data — `drawer` draws the drawer, `conversation` the conversation transcript, anything else Home. It renders the **real** screens against a seeded model, so the layout can be reviewed without a host. |
 
 A simulator launch passes them through `simctl`'s `SIMCTL_CHILD_` prefix, and the
 bundle identifier is generated from `bundleIdPrefix` in [project.yml](project.yml):
 
 ```sh
-SIMCTL_CHILD_DSH_DESIGN_GALLERY=1 \
-  xcrun simctl launch --console booted net.fernlabs.dshremote
+SIMCTL_CHILD_DSH_SCREEN_GALLERY=conversation \
+  xcrun simctl launch booted net.fernlabs.dshremote
+xcrun simctl io booted screenshot conversation.png
 ```
 
-The gallery exists because the visual foundation has to be *looked at* to be
-reviewed, and this machine has no Simulator GUI. It is a debug screen, not a
-shipping destination, and the components it renders take plain data and closures
-— no store or networking types — so it can exercise every state without a host.
+`simctl` cannot inject touches, so anything that would normally need a tap has a
+variable above; the galleries exist because the visual work has to be *looked at*
+to be reviewed, and this machine has no Simulator GUI. Both are debug screens, not
+shipping destinations.
+
+A **signed** simulator build is required for the Keychain.
+`CODE_SIGNING_ALLOWED=NO` builds install and run, but every credential read fails
+with `OSStatus -34018`, so a saved host cannot be reached from one — build with a
+concrete `-destination 'platform=iOS Simulator,id=<udid>'` instead.
