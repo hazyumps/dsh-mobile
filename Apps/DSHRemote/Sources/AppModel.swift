@@ -25,6 +25,11 @@ final class AppModel {
     /// What the browse screens render, mapped from the host store's snapshot.
     private(set) var browse: BrowseState = .idle
 
+    /// The commands the host advertises, per session (SPEC §9).
+    private(set) var commands: [String: [CommandEntry]] = [:]
+    /// What the last command said, when it had something to say.
+    private(set) var commandMessage: String?
+
     /// The host's model, mode and permission catalog, once read.
     private(set) var catalog: ModelModeCatalog?
     private(set) var catalogState: ResourceState?
@@ -79,6 +84,7 @@ final class AppModel {
     private var hostStore: HostSessionStore?
     private var secondaryStore: SecondaryReadStore?
     private var modelModeStore: ModelModeCatalogStore?
+    private var commandStore: CommandCatalogStore?
     private var interactionStore: InteractionStore?
     private var statusTask: Task<Void, Never>?
     private var snapshotTask: Task<Void, Never>?
@@ -276,6 +282,9 @@ final class AppModel {
         schedules = []
         schedulesReport = .unknown
         modelModeStore = nil
+        commandStore = nil
+        commands = [:]
+        commandMessage = nil
         catalog = nil
         catalogState = nil
         stagedMode = nil
@@ -323,6 +332,7 @@ final class AppModel {
             // suppresses the request on the next (SPEC §10).
             self.secondaryStore = SecondaryReadStore(makeClient: makeClient)
             self.modelModeStore = ModelModeCatalogStore(makeClient: makeClient)
+            self.commandStore = CommandCatalogStore(makeClient: makeClient)
             self.coordinator = coordinator
             self.hostStore = hostStore
             let recovery = ForegroundConnection(coordinator: coordinator)
@@ -773,6 +783,45 @@ final class AppModel {
         guard var selection = stagedModel ?? catalog?.defaultSelection else { return }
         selection.reasoningEffort = effort
         stageModel(selection)
+    }
+
+    // MARK: - Commands (SPEC §9)
+
+    /// Reads a session's commands. Cached until the session or preset changes.
+    func loadCommands(for sessionId: String) async {
+        guard let commandStore else { return }
+        if commands[sessionId] != nil { return }
+        commands[sessionId] = (try? await commandStore.commands(for: sessionId)) ?? []
+    }
+
+    /// The command a draft line names, if the host advertises one.
+    ///
+    /// SPEC §9: unknown slash input uses the ordinary prompt path, so this returning `nil` is
+    /// not an error — it is the answer that sends the text as a normal message.
+    func registeredCommand(for line: String, in sessionId: String) -> CommandEntry? {
+        commands[sessionId]?.first { $0.matches(line: line) }
+    }
+
+    /// Runs a registered command.
+    ///
+    /// A write, so nothing here retries it. A refusal keeps the text — the caller owns the
+    /// draft — and refreshes the list, which SPEC §9 names as the command-refused path.
+    @discardableResult
+    func runCommand(_ line: String, in sessionId: String) async -> CommandOutcome? {
+        guard let commandStore else { return nil }
+        commandMessage = nil
+        do {
+            let outcome = try await commandStore.execute(agentId: sessionId, line: line)
+            if case .refused = outcome {
+                await commandStore.invalidate(sessionId)
+                commands[sessionId] = (try? await commandStore.commands(for: sessionId)) ?? commands[sessionId]
+            }
+            commandMessage = outcome.text
+            return outcome
+        } catch {
+            commandMessage = Self.reason(for: error)
+            return nil
+        }
     }
 
     // MARK: - The timed question's foreground claim

@@ -81,6 +81,14 @@ struct ConversationView: View {
         .onDisappear {
             Task { await model.releaseTimedClaim() }
         }
+        .onAppear {
+            #if DEBUG
+            if draft.isEmpty,
+               let seeded = ProcessInfo.processInfo.environment["DSH_DRAFT"] {
+                draft = seeded
+            }
+            #endif
+        }
         .onChange(of: draft) { _, text in
             // The visible countdown stops while the answer is being written, which is the
             // local half of the pause SPEC §8 asks for.
@@ -199,8 +207,67 @@ struct ConversationView: View {
         }
     }
 
+    /// Commands whose name matches what has been typed after a `/`.
+    ///
+    /// SPEC §9: typing `/` filters suggestions, and the scope is the session's own list —
+    /// an unknown slash word is ordinary prompt text rather than a command to guess at.
+    private var commandSuggestions: [CommandEntry] {
+        let line = draft.trimmingCharacters(in: .whitespaces)
+        guard line.hasPrefix("/"), !line.contains(" ") else { return [] }
+        let typed = line.dropFirst()
+        return model.commands[sessionId]?
+            .filter { typed.isEmpty || $0.name.hasPrefix(typed) }
+            .sorted { $0.name < $1.name } ?? []
+    }
+
+    private var commandSuggestionsView: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(commandSuggestions) { command in
+                Button {
+                    // The command's own name goes in, with the space that separates it from
+                    // whatever the host's hint says it takes.
+                    draft = "/\(command.name) "
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: DSHMetrics.spaceSmall) {
+                            Text("/\(command.name)")
+                                .font(.dshSupporting)
+                                .foregroundStyle(DSHPalette.primaryText)
+                            if let hint = command.hint {
+                                Text(hint)
+                                    .font(.dshMetadata)
+                                    .foregroundStyle(DSHPalette.secondaryText)
+                            }
+                        }
+                        Text(command.description)
+                            .font(.dshMetadata)
+                            .foregroundStyle(DSHPalette.secondaryText)
+                            .lineLimit(2)
+                    }
+                    .padding(.horizontal, DSHMetrics.spaceCard)
+                    .padding(.vertical, DSHMetrics.spaceSmall + 2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .background(DSHPalette.card)
+        .clipShape(RoundedRectangle(cornerRadius: DSHMetrics.spaceCard, style: .continuous))
+        .padding(.horizontal, DSHMetrics.pageMargin)
+    }
+
     private var composer: some View {
         VStack(spacing: DSHMetrics.spaceSmall) {
+            if !commandSuggestions.isEmpty { commandSuggestionsView }
+            if let message = model.commandMessage {
+                Label(message, systemImage: "terminal")
+                    .font(.dshMetadata)
+                    .foregroundStyle(DSHPalette.secondaryText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, DSHMetrics.pageMargin)
+            }
             if let claimError {
                 Label(claimError, systemImage: "clock.badge.exclamationmark")
                     .font(.dshMetadata)
@@ -248,6 +315,7 @@ struct ConversationView: View {
                 openError = "The harness has not sent the conversation yet."
             }
         }
+        await model.loadCommands(for: sessionId)
         do {
             try await opened.start()
             for await value in await opened.snapshots() {
@@ -278,6 +346,27 @@ struct ConversationView: View {
         guard !trimmed.isEmpty, sendBlockedReason == nil else { return }
         isSending = true
         sendError = nil
+        defer { isSending = false }
+
+        // A registered slash command goes to `commands/execute`; anything else — including an
+        // unknown `/word` — is ordinary prompt text, which is what SPEC §9 asks for rather
+        // than silently executing something.
+        if model.registeredCommand(for: trimmed, in: sessionId) != nil {
+            let outcome = await model.runCommand(trimmed, in: sessionId)
+            switch outcome {
+            case .ran, .completed:
+                // A refusal keeps the line so it can be corrected and sent again; a success
+                // clears it. A result with a durable source event is rendered from the
+                // transcript, so nothing is echoed here.
+                draft = ""
+            case .refused:
+                sendError = model.commandMessage ?? "The harness refused that command."
+            case .none:
+                sendError = model.commandMessage ?? "That command did not run."
+            }
+            return
+        }
+
         do {
             try await model.sendPrompt(trimmed, to: sessionId)
             // Cleared only on acceptance: an uncertain send keeps the text so the user
@@ -286,7 +375,6 @@ struct ConversationView: View {
         } catch {
             sendError = "That message may not have been sent. It will not be resent."
         }
-        isSending = false
     }
 
     private func answer(_ answers: [DecisionCard.Answer]) async {
