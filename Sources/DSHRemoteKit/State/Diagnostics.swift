@@ -45,6 +45,39 @@ public enum ResourceState: Sendable, Hashable {
         case .current, .stale: true
         }
     }
+
+    // MARK: - Transitions
+    //
+    // The five states are only worth having if a store moves between them correctly, and
+    // the rule that matters is one SPEC §3 and §4 both state: **a failed or in-flight
+    // refresh must not throw away what is already on screen.** Writing that as three
+    // transitions rather than as a `switch` at each call site is what stops the next store
+    // from collapsing "failed with data" into "failed".
+
+    /// The state a completed load leaves.
+    ///
+    /// - Parameter itemCount: how many items the host returned. Zero is a *successful*
+    ///   empty result, which SPEC §4 keeps distinct from a load that has not happened.
+    public static func afterSuccess(itemCount: Int) -> ResourceState {
+        itemCount == 0 ? .empty : .current
+    }
+
+    /// The state a failed load leaves, keeping whatever was already showing.
+    ///
+    /// With data on screen the failure is a staleness mark, not a blank screen: the cached
+    /// list stays and only its freshness changes. Without data there is nothing to keep, so
+    /// it is a real failure.
+    public func afterFailure(reason: String) -> ResourceState {
+        hasData ? .stale(reason: reason) : .failed(reason: reason)
+    }
+
+    /// The state at the start of a refresh, keeping whatever was already showing.
+    ///
+    /// A refresh with data behind it is `stale` with no reason yet — nothing has gone
+    /// wrong, the data is simply not the newest. Without data it is a first load.
+    public var whileLoading: ResourceState {
+        hasData ? .stale(reason: nil) : .loading
+    }
 }
 
 /// One diagnosable event, built so that it cannot carry content.

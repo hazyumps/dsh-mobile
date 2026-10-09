@@ -46,6 +46,51 @@ struct DiagnosticsTests {
         #expect(ResourceState.stale(reason: nil).hasData)
     }
 
+    // MARK: - Transitions
+
+    @Test("a successful load is empty or current, never loading")
+    func afterSuccess() {
+        // A successful empty result and a load that has not happened are different
+        // screens, which is the whole reason `empty` exists.
+        #expect(ResourceState.afterSuccess(itemCount: 0) == .empty)
+        #expect(ResourceState.afterSuccess(itemCount: 3) == .current)
+    }
+
+    @Test("a failed refresh keeps what is on screen instead of blanking it")
+    func afterFailureKeepsData() {
+        // SPEC §3/§4: cached data survives a failed refresh. Collapsing this into
+        // `failed` is how a working list disappears because one refresh timed out.
+        let stale = ResourceState.current.afterFailure(reason: "offline")
+        #expect(stale == .stale(reason: "offline"))
+        #expect(stale.hasData)
+
+        // With nothing to keep, a failure is a real failure.
+        let failed = ResourceState.loading.afterFailure(reason: "offline")
+        #expect(failed == .failed(reason: "offline"))
+        #expect(failed.hasData == false)
+    }
+
+    @Test("refreshing keeps data visible and does not claim it is current")
+    func whileLoading() {
+        let refreshing = ResourceState.current.whileLoading
+        #expect(refreshing == .stale(reason: nil))
+        #expect(refreshing.hasData)
+
+        // A first load has nothing to show, so it is loading rather than stale.
+        #expect(ResourceState.loading.whileLoading == .loading)
+        #expect(ResourceState.empty.whileLoading == .loading)
+    }
+
+    @Test("a stale resource can fail again without losing its data")
+    func failureAfterStaleStaysStale() {
+        // The second failure of a flapping refresh must not escalate into a blank screen.
+        let twice = ResourceState.current
+            .afterFailure(reason: "dropped")
+            .afterFailure(reason: "dropped again")
+        #expect(twice == .stale(reason: "dropped again"))
+        #expect(twice.hasData)
+    }
+
     // MARK: - The one stringly field
 
     @Test("a code shaped like one is kept")
