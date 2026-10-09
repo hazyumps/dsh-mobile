@@ -186,6 +186,11 @@ stdout, readable with `xcrun simctl launch --console-pty`. It exists because a m
 looks like nothing at all, and nothing else shows whether the `$events` subscription was
 established. Debug builds only.
 
+**Usage** is a drawer destination, scoped to the selected session and read entirely from the
+harness's own projections (`tokenUsage`, `sessionStats`, `contextBreakdown`, `contextPressure`)
+— no host-wide totals, no estimates from the transcript. A field the harness did not report is
+absent rather than zero, and a rate with no denominator to divide by is absent too.
+
 **Diagnostics** live under Settings → Support. The kit's `DiagnosticLog` had a previewable
 export and nothing recorded to it; the app now records connection state changes (with the
 generation and the attempt's duration) and each resource's state change, and the preview *is*
