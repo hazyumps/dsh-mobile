@@ -54,6 +54,11 @@ struct ConversationView: View {
         }
     }
 
+    /// Pending approvals for this conversation.
+    private var approvalRequests: [InteractionRequest] {
+        model.decisions(for: sessionId).filter { $0.event == "approval/request" }
+    }
+
     private var title: String {
         model.browse.session(id: sessionId)?.title ?? "Conversation"
     }
@@ -119,7 +124,9 @@ struct ConversationView: View {
                         snapshot: snapshot,
                         isSubmitting: isSubmittingAnswer,
                         onLoadOlder: { Task { await session?.loadOlder() } },
-                        onAnswer: { answers in Task { await answer(answers) } }
+                        onAnswer: { answers in Task { await answer(answers) } },
+                        approvals: approvalRequests,
+                        onApproval: { eventId, isAllow in Task { await decide(eventId, isAllow: isAllow) } }
                     )
                     .id("transcript")
                 }
@@ -229,23 +236,47 @@ struct ConversationView: View {
         defer { isSubmittingAnswer = false }
         for answer in answers {
             guard let question = snapshot.pendingQuestions.first(where: { $0.id == answer.itemId }) else { continue }
-            do {
-                // The returned `Bool` is not a reliable applied signal: a live round-trip
-                // answered a question successfully while still reporting `false`. So an
-                // accepted call retires the card and the value is not shown, rather than
-                // being used to claim something untrue in either direction.
-                _ = try await model.answerQuestion(
-                    sessionId: sessionId,
-                    callId: question.callId,
-                    questionId: question.id,
-                    selected: answer.selected,
-                    custom: answer.custom
-                )
-                await session?.markAnswered(questionId: question.id)
-            } catch {
-                sendError = "That answer may not have been sent. It will not be resent."
+            let reply = QuestionAnswer(id: question.id, selected: answer.selected, custom: answer.custom)
+
+            if let live = model.liveQuestion(callId: question.callId) {
+                // SPEC §8's first channel: a current delivery is answered through
+                // `$events/result`, which is the only thing that can settle it. Going
+                // through `userQuestions/answer` here would queue a steer reply beside a
+                // still-open question.
+                if let failure = await model.answerLive(live.id, with: [reply]) {
+                    sendError = failure
+                    continue
+                }
+            } else {
+                do {
+                    // The returned `Bool` is not a reliable applied signal: a live
+                    // round-trip answered a question successfully while still reporting
+                    // `false`. So an accepted call retires the card and the value is not
+                    // shown, rather than being used to claim something untrue either way.
+                    _ = try await model.answerQuestion(
+                        sessionId: sessionId,
+                        callId: question.callId,
+                        questionId: question.id,
+                        selected: answer.selected,
+                        custom: answer.custom
+                    )
+                } catch {
+                    sendError = "That answer may not have been sent. It will not be resent."
+                    continue
+                }
             }
+            await session?.markAnswered(questionId: question.id)
         }
+    }
+
+    /// Allows or rejects one approval. The card retires on acknowledgement, and the screen
+    /// never claims the agent ran anything: another client may have settled it first, and
+    /// the host is the authority on what happened next (SPEC §8).
+    private func decide(_ eventId: String, isAllow: Bool) async {
+        isSubmittingAnswer = true
+        defer { isSubmittingAnswer = false }
+        let failure = isAllow ? await model.allowOnce(eventId) : await model.deny(eventId)
+        if let failure { sendError = failure }
     }
 
     /// Verification affordance, debug builds only: a launch can send one message.

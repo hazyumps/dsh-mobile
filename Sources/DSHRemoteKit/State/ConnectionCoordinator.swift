@@ -665,6 +665,53 @@ public actor ConnectionCoordinator {
 
     // MARK: - Streams
 
+    /// Answers a question the host parked in its `continued` state.
+    ///
+    /// The same endpoint as ``answer(agentId:callId:questionId:selected:custom:)``, but the
+    /// body is a whole batch that the caller has already validated — SPEC §8's third channel
+    /// row, where the questions came from a projection rather than from a live delivery, so
+    /// the caller holds the batch and this method only carries it.
+    ///
+    /// Retries are off for the same reason every other write's are.
+    ///
+    /// - Returns: whether the host accepted the reply. `false` means the question is no
+    ///   longer answerable, which is not success.
+    @discardableResult
+    public func answerContinued(
+        agentId: String,
+        callId: String,
+        body: JSONValue
+    ) async throws -> Bool {
+        let client = DshRpcClient(
+            baseURL: origin.baseURL,
+            authorization: origin.authorization,
+            transport: makeTransport(origin)
+        )
+        // A local shape rather than the generated `UserQuestionsAnswerArguments`, whose
+        // `answer` field is the generated DTO: this body is built and validated by
+        // `QuestionAnswerValidator`, and re-modelling it here would be a second opinion
+        // about the same wire object.
+        struct ContinuedAnswerArguments: Codable, Sendable {
+            var agentId: String
+            var callId: String
+            var answer: JSONValue
+        }
+        do {
+            let response = try await client.call(
+                Self.userQuestionsAnswerMethod,
+                args: ContinuedAnswerArguments(agentId: agentId, callId: callId, answer: body),
+                returning: UserQuestionsAnswerResult.self,
+                retryPolicy: RPCFailureRetryPolicy.none
+            )
+            return response.result.value ?? false
+        } catch {
+            let failure = Self.failure(from: error)
+            lastError = failure
+            applyCallFailure(failure)
+            throw failure
+        }
+    }
+
     /// The live mux and its generation, for the next slices (`session/follow`,
     /// `$events/result`, the workspace and control streams).
     ///

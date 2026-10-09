@@ -19,6 +19,11 @@ struct ConversationTranscript: View {
     var onLoadOlder: (() -> Void)?
     var onRetry: (() -> Void)?
     var onAnswer: (([DecisionCard.Answer]) -> Void)?
+    /// Pending approvals for this conversation, from the `$events` router rather than from
+    /// the transcript: a durable `tool/call` record says what happened, not what is still
+    /// waiting (SPEC §8). The closure is `(eventId, isAllow)`.
+    var approvals: [InteractionRequest] = []
+    var onApproval: ((String, Bool) -> Void)?
 
     /// One durable event that is not a message, in the order it arrived.
     private struct Activity: Identifiable {
@@ -156,6 +161,40 @@ struct ConversationTranscript: View {
                     onSubmit: onAnswer
                 )
             }
+        }
+
+        ForEach(approvals) { request in
+            DecisionCard(
+                content: .approval(Self.approval(from: request.request)),
+                isStale: !request.state.isActionable,
+                isSubmitting: isSubmitting,
+                footnote: Self.footnote(for: request),
+                onAllowOnce: { onApproval?(request.id, true) },
+                onReject: { onApproval?(request.id, false) }
+            )
+        }
+    }
+
+    /// The approval's own fields, read from the request rather than composed.
+    ///
+    /// SPEC §8: show "the supplied tool name/reason and available details"; never fabricate
+    /// a command that the request and the history do not both contain. This host sends
+    /// `{toolName, callId, reason}` and nothing else, so an absent field renders as absent.
+    static func approval(from request: JSONValue) -> DecisionCard.Approval {
+        DecisionCard.Approval(
+            reason: request["reason"]?.stringValue,
+            action: request["toolName"]?.stringValue ?? "An action",
+            scope: request["callId"]?.stringValue.map { "Call \($0)" },
+            details: request["command"]?.stringValue
+        )
+    }
+
+    private static func footnote(for request: InteractionRequest) -> String? {
+        switch request.state {
+        case .pending: nil
+        case .submitting: "Sending…"
+        case .uncertain: "That may not have been sent. It will not be retried."
+        case .settled: "This request is closed. The card is kept as history."
         }
     }
 

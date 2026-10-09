@@ -381,6 +381,41 @@ func sessionListUsesTheDescriptorArgumentName() async throws {
     #expect("/api/\(envelope.method)" == request.url.path)
 }
 
+@Test("userQuestions/answer carries the batch body and honours a false result")
+func continuedAnswerPostsTheValidatedBody() async throws {
+    // `false` means the host no longer considers the question answerable. It is not a
+    // transport failure, and conflating the two would tell the user an answer landed when
+    // it did not (SPEC §8).
+    let transport = StubRelayTransport(responsesByPath: [
+        "/api/userQuestions/answer": .json(
+            status: 200,
+            Data(#"{"type":"server-response","rpcId":"t","result":{"ok":true,"value":false}}"#.utf8)
+        ),
+    ])
+    let coordinator = ConnectionCoordinator(origin: origin(), makeTransport: { _ in transport })
+
+    let body = QuestionAnswerValidator.body([
+        QuestionAnswer(id: "colour", selected: ["Blue"])
+    ])
+    let accepted = try await coordinator.answerContinued(
+        agentId: "session-1",
+        callId: "call-1",
+        body: body
+    )
+    #expect(accepted == false)
+
+    let requests = await transport.recordedRequests
+    let request = try #require(requests.first)
+    #expect(request.url.path == "/api/userQuestions/answer")
+    let envelope = try JSONDecoder().decode(JSONValue.self, from: #require(request.body))
+    let arguments = try #require(envelope["payload"]?["args"])
+    #expect(arguments["agentId"]?.stringValue == "session-1")
+    #expect(arguments["callId"]?.stringValue == "call-1")
+    // The body is passed through unchanged rather than re-modelled: a second construction
+    // of the same wire object is a second opinion about its shape.
+    #expect(arguments["answer"] == body)
+}
+
 @Test("session/page carries the window's own cursor, and its hasMore is the answer")
 func sessionPageUsesTheWindowArguments() async throws {
     // Written here rather than added to `Fixtures/` because it is synthetic: the shape

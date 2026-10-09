@@ -25,6 +25,13 @@ final class AppModel {
     /// What the browse screens render, mapped from the host store's snapshot.
     private(set) var browse: BrowseState = .idle
 
+    /// Every decision this generation has delivered: approvals and questions.
+    ///
+    /// SPEC §8's routing is the only thing that can answer an approval, and a durable
+    /// `tool/call` record in the transcript cannot: the transcript says what happened, this
+    /// says what is still waiting.
+    private(set) var interactions: [InteractionRequest] = []
+
     /// Where the user is. Persisted per host, separately from any draft (SPEC §5).
     private(set) var selectedWorkspaceId: String?
     private(set) var selectedSessionId: String?
@@ -43,11 +50,17 @@ final class AppModel {
     private let store = HostStore()
     private let secrets = KeychainSecretStore()
     private let drafts: DraftStore
+    /// The origin the current host was connected with, kept so an interaction result can
+    /// be posted on the same trust policy and credential as everything else.
+    private var origin: ConnectionCoordinator.Origin?
     private var coordinator: ConnectionCoordinator?
     private var recovery: ForegroundConnection?
     private var hostStore: HostSessionStore?
+    private var interactionStore: InteractionStore?
     private var statusTask: Task<Void, Never>?
     private var snapshotTask: Task<Void, Never>?
+    private var eventsTask: Task<Void, Never>?
+    private var interactionsTask: Task<Void, Never>?
     private var selectionID = UUID()
     private var isForeground = false
 
@@ -180,9 +193,15 @@ final class AppModel {
         let previous = recovery
         statusTask?.cancel()
         snapshotTask?.cancel()
+        eventsTask?.cancel()
+        interactionsTask?.cancel()
         recovery = nil
         coordinator = nil
         hostStore = nil
+        // A decision belongs to the host that delivered it: switching hosts must not leave
+        // another host's approval on screen, where it could be answered.
+        interactionStore = nil
+        interactions = []
         browse = .idle
         selectedHost = host
         selectionID = UUID()
@@ -207,6 +226,7 @@ final class AppModel {
                 )
             )
             let coordinator = ConnectionCoordinator(origin: origin)
+            self.origin = origin
             // The session index is read through a client this store owns rather than
             // through the coordinator's own `sessions()`, which owns a status policy: a
             // list failure must not demote a healthy connection (SPEC §3).
@@ -272,11 +292,135 @@ final class AppModel {
 
     private func apply(status: ConnectionStatus, selection: UUID) async {
         guard selection == selectionID else { return }
-        guard status.isUsable, let hostStore else { return }
+        guard status.isUsable, let hostStore, let coordinator else { return }
         // Both calls are idempotent for a generation that is already open, so a status
         // stream that repeats `connected` cannot open a second pair of streams.
         _ = await hostStore.start()
         await hostStore.refreshSessions()
+        await subscribeToDecisions(of: coordinator, selection: selection)
+    }
+
+    /// Mounts the one `$events` consumer, and the store that turns its waterfalls into
+    /// decisions this phone can answer (SPEC §8).
+    ///
+    /// The store is built once per selected host and survives a reconnect: an event replayed
+    /// to a new generation overwrites the old request by `eventId`, and a submission from an
+    /// abandoned generation is refused by the store's own generation check. What must be
+    /// re-established on every ready connection is the *subscription*, because the router is
+    /// per generation and the old one is retired with its socket.
+    private func subscribeToDecisions(of coordinator: ConnectionCoordinator, selection: UUID) async {
+        guard let router = await coordinator.remoteEvents() else { return }
+
+        if interactionStore == nil {
+            let origin = self.origin
+            let submit: @Sendable (EventResultRequest) async throws -> Void = { request in
+                guard let origin else { throw ChatUnavailable.notConnected }
+                let client = DshBareEndpointClient(
+                    baseURL: origin.baseURL,
+                    authorization: origin.authorization,
+                    transport: URLSessionRelayTransport(pinning: origin.pinning)
+                )
+                // Never retried: two identical results for one event cost a second turn of
+                // the agent's work in the worst case (SPEC §8).
+                try await client.submitEventResult(request, retryPolicy: .none)
+            }
+            let store = InteractionStore(
+                identity: { await coordinator.remoteEvents()?.identity },
+                submit: submit,
+                answerContinued: { agentId, callId, body in
+                    try await coordinator.answerContinued(agentId: agentId, callId: callId, body: body)
+                }
+            )
+            interactionStore = store
+            observeDecisions(of: store, selection: selection)
+        }
+
+        eventsTask?.cancel()
+        eventsTask = Task { [weak self] in
+            for await event in await router.events() {
+                guard !Task.isCancelled else { return }
+                await self?.deliver(event)
+            }
+        }
+    }
+
+    private func deliver(_ event: RemoteEvent) async {
+        guard let interactionStore, let coordinator else { return }
+        // Read from the router rather than from the coordinator's status: the router *is*
+        // the generation, which is what makes a stale submission detectable at all.
+        guard let generation = await coordinator.remoteEvents()?.identity.generation else { return }
+        await interactionStore.observe(event, generation: generation)
+    }
+
+    private func observeDecisions(of store: InteractionStore, selection: UUID) {
+        interactionsTask?.cancel()
+        interactionsTask = Task { [weak self] in
+            for await requests in await store.snapshots() {
+                guard !Task.isCancelled else { return }
+                guard let self, selection == self.selectionID else { return }
+                self.interactions = requests
+            }
+        }
+    }
+
+    // MARK: - Decisions
+
+    /// The approvals and questions waiting on this user, for one session.
+    func decisions(for sessionId: String) -> [InteractionRequest] {
+        interactions.filter { $0.sessionId == sessionId }
+    }
+
+    /// The live question waterfall for a tool call, when one is still open.
+    ///
+    /// SPEC §8's channel table turns on this: a question with a current delivery is answered
+    /// through `$events/result`, and only one with no live channel uses
+    /// `userQuestions/answer`. The transcript cannot tell the two apart.
+    func liveQuestion(callId: String) -> InteractionRequest? {
+        interactions.first { $0.callId == callId && $0.state.isActionable }
+    }
+
+    /// Allows an approval once. Returns a message to show when it could not be sent.
+    func allowOnce(_ id: String) async -> String? {
+        await submit { try await $0.allowOnce(id) }
+    }
+
+    /// Rejects an approval. Returns a message to show when it could not be sent.
+    func deny(_ id: String) async -> String? {
+        await submit { try await $0.deny(id) }
+    }
+
+    /// Answers a live question delivery through `$events/result`.
+    func answerLive(_ id: String, with answers: [QuestionAnswer]) async -> String? {
+        await submit { try await $0.answerLiveQuestions(id, with: answers) }
+    }
+
+    private func submit(_ work: (InteractionStore) async throws -> Void) async -> String? {
+        guard let interactionStore else { return "This phone is not connected to the harness." }
+        do {
+            try await work(interactionStore)
+            return nil
+        } catch let refusal as InteractionRefusal {
+            return Self.describe(refusal)
+        } catch {
+            return Self.reason(for: error)
+        }
+    }
+
+    /// What an unanswered submission means, in the user's terms.
+    ///
+    /// A refusal is not a failure to report and forget: the request may have been settled by
+    /// another client, in which case the card is history rather than something to retry.
+    static func describe(_ refusal: InteractionRefusal) -> String {
+        switch refusal {
+        case .notActionable: "This request is no longer open."
+        case .staleGeneration: "The connection changed before that was sent. It was not sent."
+        case .timedQuestionNeedsClaim: "That question needs its wait claimed first."
+        case .notAQuestion: "That request is not a question."
+        case .invalidAnswer(let error): "That answer was refused before sending: \(error)"
+        case .continuedChannelUnavailable: "This build cannot answer that question yet."
+        case .refused(let code, let message): "The harness refused that (\(code)): \(message)"
+        case .uncertain: "That may not have been sent. It will not be retried."
+        }
     }
 
     private func observeSnapshots(of store: HostSessionStore, selection: UUID) {
@@ -533,10 +677,15 @@ final class AppModel {
     func disconnect() {
         statusTask?.cancel()
         snapshotTask?.cancel()
+        eventsTask?.cancel()
+        interactionsTask?.cancel()
         recovery?.setForeground(false)
         recovery = nil
         coordinator = nil
+        origin = nil
         hostStore = nil
+        interactionStore = nil
+        interactions = []
         selectedHost = nil
         selectedWorkspaceId = nil
         selectedSessionId = nil
