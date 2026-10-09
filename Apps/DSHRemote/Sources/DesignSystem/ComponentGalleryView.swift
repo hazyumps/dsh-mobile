@@ -33,7 +33,14 @@ struct ComponentGalleryView: View {
     @State private var expandedWorkspace = true
     @State private var log = "Nothing has been tapped yet."
 
-    init(appearance: Appearance = .dark) {
+    /// Defaults to following the system, not to forcing dark.
+    ///
+    /// A review screen should start in whatever appearance the device is actually in --
+    /// otherwise the gallery can only ever show dark on launch, and the one appearance
+    /// nobody has looked at is Light, which is also the one whose values were adjusted for
+    /// contrast. Following the system also makes the Light and Dark variants checkable from
+    /// a simulator or a device appearance switch rather than only by tapping the picker.
+    init(appearance: Appearance = .system) {
         _appearance = State(initialValue: appearance)
     }
 
