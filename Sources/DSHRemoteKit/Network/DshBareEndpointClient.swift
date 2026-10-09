@@ -53,6 +53,24 @@ public enum EventOutcome: Sendable, Hashable {
             .object(["kind": .string("rejected"), "error": error])
         }
     }
+
+    /// The approval result that allows the action once.
+    ///
+    /// These two constants exist because the host matches these strings exactly, and a
+    /// near-miss is refused rather than reported: `"allow-once"` or `"allowed"` looks
+    /// right, compiles, and is silently not an approval. The values are read from the
+    /// installed approval client, which keys them off the Enter and Escape handlers —
+    /// `answer(event.key === "Enter" ? "allowed-once" : "rejected")`.
+    ///
+    /// There is deliberately no "always allow": SPEC §8 excludes it from this design.
+    public static let allowOnce = EventOutcome.result(.string("allowed-once"))
+
+    /// The approval result that rejects the action.
+    ///
+    /// Not ``rejected(error:)``, which refuses the remote *continuation* with an error
+    /// instead of answering the request, and not ``next``, which hands the event to
+    /// another listener. SPEC §8 names both confusions.
+    public static let denyOnce = EventOutcome.result(.string("rejected"))
 }
 
 /// SPEC §6.7's event-result arguments: `clientId`, `eventId`, `outcome`, and

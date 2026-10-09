@@ -1740,3 +1740,22 @@ func sleeperRecords() async throws {
     #expect(slept == [1, 2.5])
     #expect(total == 3.5)
 }
+
+@Test("the approval outcomes are the two exact strings the host matches")
+func approvalOutcomeStrings() throws {
+    // SPEC §8 names these two and only these two. A near-miss such as "allow-once" or
+    // "allowed" compiles, reads correctly, and is silently not an approval, which is why
+    // they are constants rather than string literals at each call site.
+    let allow = EventOutcome.allowOnce.jsonValue
+    #expect(allow["kind"]?.stringValue == "result")
+    #expect(allow["value"]?.stringValue == "allowed-once")
+
+    let deny = EventOutcome.denyOnce.jsonValue
+    #expect(deny["kind"]?.stringValue == "result")
+    #expect(deny["value"]?.stringValue == "rejected")
+
+    // Neither is the rejected *outcome*, which refuses the remote continuation instead of
+    // answering the request, and neither is `next`, which delegates to another listener.
+    #expect(allow["kind"]?.stringValue != "rejected")
+    #expect(deny["kind"]?.stringValue != "rejected")
+}
