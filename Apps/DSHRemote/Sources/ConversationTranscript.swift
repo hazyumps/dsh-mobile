@@ -232,12 +232,25 @@ struct ConversationTranscript: View {
     }
 
     private static func title(for event: DurableEventEnvelope) -> String {
-        // The event type is a namespaced string. Readable-ise it without inventing a
-        // meaning: `turn/start` becomes "Turn start".
-        let words = event.type
+        // A `user/message` here is host-injected content — a human one would have become a
+        // message — so it is titled by the host's own `source.kind` ("agent-instructions",
+        // "runtime-context", "skill-catalog"). Calling that "User Message" would be the same
+        // misattribution, one layer down.
+        if event.type == "user/message",
+           let kind = event.data["source"]?["kind"]?.stringValue,
+           kind != "user" {
+            return readable(kind)
+        }
+        return readable(event.type)
+    }
+
+    /// A namespaced wire string, made readable without inventing a meaning:
+    /// `turn/start` becomes "Turn start", `agent-instructions` becomes "Agent instructions".
+    private static func readable(_ wire: String) -> String {
+        let words = wire
             .split(whereSeparator: { $0 == "/" || $0 == "-" || $0 == "_" })
             .map { $0.prefix(1).uppercased() + $0.dropFirst() }
-        return words.isEmpty ? event.type : words.joined(separator: " ")
+        return words.isEmpty ? wire : words.joined(separator: " ")
     }
 
     /// A bounded, exact rendering of the payload. It is the host's own JSON, so it is

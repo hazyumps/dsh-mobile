@@ -357,6 +357,17 @@ public struct ConversationBuilder: Sendable {
     private static func message(from event: DurableEventEnvelope) -> ConversationMessage? {
         switch event.type {
         case "user/message":
+            // Only what a person sent is a person's message. The host delivers its own
+            // injected content — workspace instructions, the runtime context snapshot, the
+            // skill catalog — through the same event type with the same `role: "user"`, and
+            // an app that rendered those as the user's own words would attribute five
+            // paragraphs of harness plumbing to whoever is holding the phone. SPEC §6.5
+            // records the discriminator: a human submission's `data.source` is
+            // `{kind:"user", rpcId:…}`.
+            //
+            // Everything else stays as an unmodelled event, so it is still reachable behind
+            // a restrained activity row rather than silently dropped.
+            guard event.data["source"]?["kind"]?.stringValue == "user" else { return nil }
             let text = textParts(event.data["content"])
             guard !text.isEmpty else { return nil }
             return ConversationMessage(

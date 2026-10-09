@@ -54,7 +54,7 @@ struct ConversationBuilderTests {
 
     /// One `event` record for a snapshot's `records` array.
     private func userRecord(seq: Int64, text: String) -> String {
-        #"{"type":"event","event":{"type":"user/message","seq":\#(seq),"time":1,"data":{"content":[{"type":"text","text":"\#(text)"}]}}}"#
+        #"{"type":"event","event":{"type":"user/message","seq":\#(seq),"time":1,"data":{"content":[{"type":"text","text":"\#(text)"}],"source":{"kind":"user"}}}}"#
     }
 
     @Test("the captured stream folds, and its one missing seq shows as a gap")
@@ -79,10 +79,34 @@ struct ConversationBuilderTests {
     @Test("a duplicate seq is ignored rather than rendered twice")
     func duplicateSeqIgnored() throws {
         var builder = ConversationBuilder()
-        let message = try event("user/message", seq: 7, data: #"{"content":[{"type":"text","text":"hi"}]}"#)
+        let message = try event("user/message", seq: 7, data: #"{"content":[{"type":"text","text":"hi"}],"source":{"kind":"user"}}"#)
         builder.apply(event: message)
         builder.apply(event: message)
         #expect(builder.messages.count == 1)
+    }
+
+    @Test("the host's injected content is not shown as the user's own words")
+    func injectedContentIsNotTheUsers() throws {
+        // The host delivers workspace instructions, the runtime-context snapshot and the
+        // skill catalog as `user/message` with `role: "user"`. Only `source.kind == "user"`
+        // is a person; anything else rendered as a user bubble would put the harness's
+        // plumbing in the user's mouth (SPEC §6.5 records the discriminator).
+        var builder = ConversationBuilder()
+        builder.apply(event: try event(
+            "user/message",
+            seq: 1,
+            data: #"{"content":[{"type":"text","text":"<system-reminder>…"}],"source":{"kind":"agent-instructions"}}"#
+        ))
+        #expect(builder.messages.isEmpty)
+        // Still reachable behind a restrained activity row rather than dropped.
+        #expect(builder.unmodelledEvents.count == 1)
+
+        builder.apply(event: try event(
+            "user/message",
+            seq: 2,
+            data: #"{"content":[{"type":"text","text":"mine"}],"source":{"kind":"user","rpcId":"r"}}"#
+        ))
+        #expect(builder.messages.map(\.text) == ["mine"])
     }
 
     @Test("a jump forward sets the gap flag")
@@ -134,7 +158,7 @@ struct ConversationBuilderTests {
     func pagingMergesWithoutDuplicates() throws {
         var builder = ConversationBuilder()
         let page = [
-            try event("user/message", seq: 2, data: #"{"content":[{"type":"text","text":"one"}]}"#),
+            try event("user/message", seq: 2, data: #"{"content":[{"type":"text","text":"one"}],"source":{"kind":"user"}}"#),
             try event("assistant/message", seq: 3, data: #"{"message":{"content":[{"type":"text","text":"two"}]}}"#),
         ]
         builder.merge(page: page, generation: builder.generation)
@@ -226,7 +250,7 @@ struct ConversationBuilderTests {
         var builder = ConversationBuilder()
         builder.apply(snapshot: try snapshot(cursor: 1, records: "[\(userRecord(seq: 1, text: "first"))]"))
         let staleGeneration = builder.generation
-        let page = [try event("user/message", seq: 0, data: #"{"content":[{"type":"text","text":"older"}]}"#)]
+        let page = [try event("user/message", seq: 0, data: #"{"content":[{"type":"text","text":"older"}],"source":{"kind":"user"}}"#)]
 
         builder.apply(snapshot: try snapshot(cursor: 9, records: "[\(userRecord(seq: 9, text: "second"))]"))
 

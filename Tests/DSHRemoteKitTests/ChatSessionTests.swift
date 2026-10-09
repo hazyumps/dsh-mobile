@@ -173,7 +173,12 @@ struct ChatSessionTests {
                 "type": .string("user/message"),
                 "seq": .int(message.seq),
                 "time": .int(1),
-                "data": .object(["content": content]),
+                "data": .object([
+                    "content": content,
+                    // A human message carries this discriminator; without it the fold
+                    // treats the event as host-injected content, which is correct.
+                    "source": .object(["kind": .string("user"), "rpcId": .string("test")]),
+                ]),
             ])
             return .object(["type": .string("event"), "event": event])
         }
@@ -298,7 +303,8 @@ struct ChatSessionTests {
             seq: 4,
             time: 1,
             data: .object([
-                "content": .array([.object(["type": .string("text"), "text": .string("older")])])
+                "content": .array([.object(["type": .string("text"), "text": .string("older")])]),
+                "source": .object(["kind": .string("user")]),
             ]),
             surfaceOp: nil
         )
