@@ -251,7 +251,7 @@ shipping app's normal flow is what runs by default.
 | `DSH_OPEN_HOST` | Selects the first saved host at launch. Home, the drawer, and the session list are otherwise unreachable on a simulator, which cannot be tapped. |
 | `DSH_OPEN_SESSION` | Opens a session once the list has loaded. Pair it with `DSH_SESSION_ID` to open a specific conversation rather than the newest. |
 | `DSH_SESSION_ID` | Names the session `DSH_OPEN_SESSION` should open. |
-| `DSH_DESTINATION` | Opens a drawer destination at launch: `plugins` or `schedules`. It wins over the restored conversation, which would otherwise always get there first. |
+| `DSH_DESTINATION` | Opens a drawer destination at launch: `usage`, `plugins` or `schedules`. It wins over the restored conversation, which would otherwise always get there first. Combine with `DSH_SESSION_ID` for a destination that reports on a session. |
 | `DSH_NEW_SESSION_MESSAGE` | Starts a **new** session once a workspace is known, with this text as the first prompt. It creates a real session and runs one real turn, so point it at a scratch workspace. |
 | `DSH_MODE` | Stages an agent preset for a launch-created session, by roster id (`minimal`, `ptc`, `cordis`). |
 | `DSH_MODEL` | Stages a model for a launch-created session, as `provider/model` or `provider/model/effort`. |
