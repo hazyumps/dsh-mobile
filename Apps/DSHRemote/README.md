@@ -145,11 +145,19 @@ with the host's own description and hint. A registered command goes to
 the exact name so `/nameplate` is not `/plan`. A refusal keeps the draft and refreshes
 the list.
 
-**Still to come:** attachments (SPEC §9) — the raw `session/uploadFileBinary` route
-with its base64 fallback, and image content parts against `imageLimits`; a live
-approval and timed-question round-trip from the phone (the routing and the timed claim
-are wired and tested offline, but no real approval has been answered from the phone);
-and physical-device validation (slice F).
+**Attachments** go up the raw `session/uploadFileBinary` route, streaming from disk, with
+the bounded base64 `fileUploads/upload` fallback reserved for a 404 that says the route is
+absent — never around an auth, size or admission refusal. Staged files appear as chips in
+the composer, and the next prompt cites them as `{type:"file",receiptId}`; the transcript
+shows the files a message carried, from the durable part the host stores once the receipt
+is retired. The importer is the system one, which a simulator cannot drive, so that one
+control is unverified here.
+
+**Still to come:** image content parts against the host's `imageLimits` (a prompt can cite
+an uploaded file, but not yet send a picture inline); a live approval and timed-question
+round-trip from the phone (the routing and the timed claim are wired and tested offline,
+but no real approval has been answered from the phone); and physical-device validation
+(slice F).
 
 Returning from the background automatically opens a new connection with the
 stored credential and refreshes the session list and open conversation. Temporary
@@ -208,6 +216,7 @@ shipping app's normal flow is what runs by default.
 | `DSH_MODEL` | Stages a model for a launch-created session, as `provider/model` or `provider/model/effort`. |
 | `DSH_DESTINATION=home` | Shows Home rather than the restored conversation, which the app otherwise correctly reopens. |
 | `DSH_DRAFT` | Prefills the conversation composer, so the `/` command suggestions can be seen on a machine that cannot type. |
+| `DSH_ATTACH` | Uploads this local path into the open conversation and stages its receipt, so the upload path can be exercised without a file importer. |
 | `DSH_SEND_MESSAGE` | Sends one message once a conversation is open. **Point it at a scratch session**: a duplicate or stray prompt costs real work, and this client never resends on its own. |
 | `DSH_DESIGN_GALLERY` | Shows the component gallery instead of the app: every design-system component in each of its states, on the real tokens. |
 | `DSH_SCREEN_GALLERY` | Shows the screens above the components from fixture data — `drawer` draws the drawer, `conversation` the conversation transcript, anything else Home. It renders the **real** screens against a seeded model, so the layout can be reviewed without a host. |
