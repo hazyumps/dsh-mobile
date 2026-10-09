@@ -150,4 +150,211 @@ struct ChatSessionTests {
         #expect(await !chat.hasSnapshot)
         await chat.stop()
     }
+
+    // MARK: - Snapshots
+
+    /// A follow baseline with durable message records, written here rather than loaded
+    /// from `Fixtures/`: the captured snapshot carries `hasMore: false` and no message
+    /// records at all, so it can exercise neither the rendered window nor paging.
+    ///
+    /// It is synthetic and says so — the shape is the capture's, the contents are not.
+    private func syntheticSnapshot(
+        cursor: Int64,
+        hasMore: Bool,
+        messages: [(seq: Int64, text: String)]
+    ) -> JSONValue {
+        // Assembled in explicitly typed steps: one nested literal of this size does not
+        // type-check in reasonable time.
+        let records: [JSONValue] = messages.map { message in
+            let content: JSONValue = .array([
+                .object(["type": .string("text"), "text": .string(message.text)])
+            ])
+            let event: JSONValue = .object([
+                "type": .string("user/message"),
+                "seq": .int(message.seq),
+                "time": .int(1),
+                "data": .object(["content": content]),
+            ])
+            return .object(["type": .string("event"), "event": event])
+        }
+        let header: JSONValue = .object(["version": .int(4)])
+        return .object([
+            "type": .string("snapshot"),
+            "header": header,
+            "cursor": .int(cursor),
+            "hasMore": .bool(hasMore),
+            "records": .array(records),
+        ])
+    }
+
+    private func push(_ value: JSONValue, to socket: StubRelaySocket) async throws {
+        try await socket.push(json: .object([
+            "type": .string("item"),
+            "streamId": .string(try await followStreamID(on: socket)),
+            "value": value,
+        ]))
+    }
+
+    private func makeClientAndSocket() -> (MuxClient, StubRelaySocket) {
+        let socket = StubRelaySocket()
+        let transport = StubRelayTransport(sockets: [socket])
+        let client = MuxClient(
+            baseURL: URL(string: "https://relay.test")!,
+            authorization: .bearer("test-token"),
+            transport: transport
+        )
+        return (client, socket)
+    }
+
+    /// Records what the page loader was asked for, and answers from a script.
+    private actor PageRecorder {
+        private(set) var requests: [ConversationPageRequest] = []
+        private var answers: [ConversationPage]
+
+        init(answers: [ConversationPage]) {
+            self.answers = answers
+        }
+
+        func load(_ request: ConversationPageRequest) -> ConversationPage {
+            requests.append(request)
+            // A loader whose script runs out keeps serving the last answer: a test that
+            // expects another call wants another answer, not a crash.
+            if answers.count > 1 { return answers.removeFirst() }
+            return answers.first ?? ConversationPage(events: [], hasMore: false)
+        }
+    }
+
+    @Test("a snapshot stream starts with the current state, not with nothing")
+    func snapshotsStartFromTheCurrentState() async throws {
+        let (chat, socket) = makeSession()
+        var iterator = await chat.snapshots().makeAsyncIterator()
+
+        let current = await iterator.next()
+        #expect(current?.hasSnapshot == false)
+        #expect(current?.messages.isEmpty == true)
+
+        try await chat.start()
+        try await push("event/user/message", to: socket)
+        #expect(await eventually { await !chat.messages.isEmpty })
+
+        // The fold provably happened, so a publish is buffered, and newest-only
+        // buffering means this returns rather than waiting for a later frame.
+        let published = await iterator.next()
+        #expect(published?.messages.count == 1)
+        // No baseline was pushed, so the window is still waiting for one — the
+        // distinction the screen needs in order to show loading rather than an empty
+        // conversation.
+        #expect(published?.hasSnapshot == false)
+        await chat.stop()
+    }
+
+    @Test("a host that says there is no older history is not asked for a page")
+    func noPageWhenTheHostSaysThereIsNone() async throws {
+        let (client, socket) = makeClientAndSocket()
+        let recorder = PageRecorder(answers: [ConversationPage(events: [], hasMore: false)])
+        let chat = ChatSession(
+            client: client,
+            sessionId: "session-1",
+            loadPage: { await recorder.load($0) }
+        )
+        try await chat.start()
+        try await push(syntheticSnapshot(cursor: 31, hasMore: false, messages: [(10, "hello")]), to: socket)
+        #expect(await eventually { await chat.hasSnapshot })
+        #expect(await chat.snapshot().canLoadOlder == false)
+
+        #expect(await chat.loadOlder() == false)
+        #expect(await recorder.requests.isEmpty)
+        await chat.stop()
+    }
+
+    @Test("an older page is asked for with the window's cursor and merges in front")
+    func loadOlderMergesThePage() async throws {
+        let (client, socket) = makeClientAndSocket()
+        let older = DurableEventEnvelope(
+            type: "user/message",
+            seq: 4,
+            time: 1,
+            data: .object([
+                "content": .array([.object(["type": .string("text"), "text": .string("older")])])
+            ]),
+            surfaceOp: nil
+        )
+        let recorder = PageRecorder(answers: [ConversationPage(events: [older], hasMore: false)])
+        let chat = ChatSession(
+            client: client,
+            sessionId: "session-1",
+            loadPage: { await recorder.load($0) }
+        )
+        try await chat.start()
+        try await push(syntheticSnapshot(cursor: 31, hasMore: true, messages: [(10, "hello")]), to: socket)
+        #expect(await eventually { await chat.hasSnapshot })
+        #expect(await chat.snapshot().canLoadOlder)
+
+        #expect(await chat.loadOlder())
+
+        // SPEC §7: `throughSeq` is the opening snapshot's cursor, and `beforeSeq` is
+        // exclusive — the oldest sequence already held.
+        let requests = await recorder.requests
+        #expect(requests.count == 1)
+        #expect(requests.first?.sessionId == "session-1")
+        #expect(requests.first?.throughSeq == 31)
+        #expect(requests.first?.beforeSeq == 10)
+        #expect(requests.first?.maxMessages == 60)
+
+        let snapshot = await chat.snapshot()
+        #expect(snapshot.messages.map(\.text) == ["older", "hello"])
+        // The page's own `hasMore` is the authority from then on.
+        #expect(snapshot.canLoadOlder == false)
+        #expect(snapshot.isLoadingOlder == false)
+        #expect(snapshot.pageError == nil)
+        await chat.stop()
+    }
+
+    @Test("a second older page is refused while the first is in flight")
+    func concurrentOlderLoadsAreRefused() async throws {
+        let (client, socket) = makeClientAndSocket()
+        let gate = AsyncGate()
+        let recorder = PageRecorder(answers: [ConversationPage(events: [], hasMore: true)])
+        let chat = ChatSession(
+            client: client,
+            sessionId: "session-1",
+            loadPage: { request in
+                await gate.wait()
+                return await recorder.load(request)
+            }
+        )
+        try await chat.start()
+        try await push(syntheticSnapshot(cursor: 31, hasMore: true, messages: [(10, "hello")]), to: socket)
+        #expect(await eventually { await chat.hasSnapshot })
+
+        async let first = chat.loadOlder()
+        // Let the first call reach the loader before the second is attempted, so this
+        // tests the guard rather than the scheduler.
+        try await Task.sleep(for: .milliseconds(50))
+        async let second = chat.loadOlder()
+        await gate.open()
+        _ = await (first, second)
+
+        #expect(await recorder.requests.count == 1)
+        await chat.stop()
+    }
+}
+
+/// A one-shot gate, so a test can hold a page load open and then release it.
+private actor AsyncGate {
+    private var isOpen = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        if isOpen { return }
+        await withCheckedContinuation { continuation in
+            waiters.append(continuation)
+        }
+    }
+
+    func open() {
+        isOpen = true
+        for waiter in waiters { waiter.resume() }
+        waiters.removeAll()
+    }
 }

@@ -381,6 +381,48 @@ func sessionListUsesTheDescriptorArgumentName() async throws {
     #expect("/api/\(envelope.method)" == request.url.path)
 }
 
+@Test("session/page carries the window's own cursor, and its hasMore is the answer")
+func sessionPageUsesTheWindowArguments() async throws {
+    // Written here rather than added to `Fixtures/` because it is synthetic: the shape
+    // is `SessionPage` from the descriptor, the contents are not a capture.
+    let response = """
+    {"type":"server-response","rpcId":"test","result":{"ok":true,"value":{
+      "records":[{"type":"event","event":{"type":"user/message","seq":12,"time":1,
+        "data":{"content":[{"type":"text","text":"older"}]}}}],
+      "hasMore":true}}}
+    """
+    let transport = StubRelayTransport(responsesByPath: [
+        "/api/session/page": .json(status: 200, Data(response.utf8)),
+    ])
+    let coordinator = ConnectionCoordinator(origin: origin(), makeTransport: { _ in transport })
+
+    let page = try await coordinator.page(
+        ConversationPageRequest(sessionId: "session-1", throughSeq: 40, beforeSeq: 20, maxMessages: 60)
+    )
+
+    let requests = await transport.recordedRequests
+    let request = try #require(requests.first)
+    #expect(request.url.path == "/api/session/page")
+    #expect(request.method == "POST")
+
+    let envelope = try JSONDecoder().decode(JSONValue.self, from: #require(request.body))
+    let arguments = try #require(envelope["payload"]?["args"]?["request"])
+    // SPEC §7: `throughSeq` is fixed for the follow generation and `beforeSeq` is
+    // exclusive; both come from the window rather than being derived here.
+    #expect(arguments["throughSeq"]?.intValue == 40)
+    #expect(arguments["beforeSeq"]?.intValue == 20)
+    #expect(arguments["maxMessages"]?.intValue == 60)
+    #expect(arguments["address"]?["kind"]?.stringValue == "session")
+    #expect(arguments["address"]?["sessionId"]?.stringValue == "session-1")
+    #expect(envelope["payload"]?["args"]?.objectValue?.keys.sorted() == ["request"])
+
+    // `hasMore` is the host's own statement about older history, not an inference from
+    // how many records the page held (SPEC §7).
+    #expect(page.hasMore)
+    #expect(page.events.map(\.seq) == [12])
+    #expect(page.events.first?.type == "user/message")
+}
+
 @Test("a business refusal from session/list is surfaced with the host's code")
 func sessionListBusinessRefusal() async throws {
     let transport = StubRelayTransport(responsesByPath: [

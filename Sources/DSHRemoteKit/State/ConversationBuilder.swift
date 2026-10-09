@@ -228,6 +228,12 @@ public struct ConversationBuilder: Sendable {
 
     public var isEmpty: Bool { events.isEmpty && open.isEmpty && held.isEmpty }
 
+    /// The oldest durable sequence held, or `nil` when nothing is.
+    ///
+    /// This is `session/page`'s exclusive `beforeSeq`: the window ends here, so the
+    /// next page is what came before it (SPEC §7).
+    public var oldestSeq: Int64? { events.keys.min() }
+
     /// Whether at least one reply is still arriving.
     public var isStreaming: Bool { open.values.contains { $0.chunks > 0 } }
 

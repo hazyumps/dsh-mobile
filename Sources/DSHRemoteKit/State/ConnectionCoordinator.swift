@@ -463,6 +463,58 @@ public actor ConnectionCoordinator {
 
     // MARK: - Sessions (SPEC §3.3)
 
+    /// One page of older history, decoded from `session/page`.
+    ///
+    /// A read, so it uses the ordinary read-retry policy rather than the mutation
+    /// policy — but note what SPEC §7 fixes about its arguments: `throughSeq` is the
+    /// *opening follow snapshot's* cursor for the generation the caller is showing, not
+    /// a delivery event's watermark, and `beforeSeq` is exclusive. Both come from the
+    /// conversation window, which is why the request carries them rather than this
+    /// method deriving them.
+    @discardableResult
+    public func page(_ request: ConversationPageRequest) async throws -> ConversationPage {
+        let client = DshRpcClient(
+            baseURL: origin.baseURL,
+            authorization: origin.authorization,
+            transport: makeTransport(origin)
+        )
+        let argument = SessionPageRequest(
+            address: .session(.init(kind: "session", sessionId: request.sessionId)),
+            throughSeq: request.throughSeq,
+            beforeSeq: request.beforeSeq,
+            maxMessages: Int64(request.maxMessages)
+        )
+        do {
+            let response = try await client.call(
+                Self.sessionPageMethod,
+                args: SessionPageArguments(request: argument),
+                returning: SessionPage.self
+            )
+            let value = response.result.value
+            let events = (value?.records ?? []).map(Self.envelope(from:))
+            // `hasMore` is the host's own answer about older history, and SPEC §7 makes
+            // it the authority rather than an inference from the page's size.
+            return ConversationPage(events: events, hasMore: value?.hasMore ?? false)
+        } catch {
+            let failure = Self.failure(from: error)
+            lastError = failure
+            applyCallFailure(failure)
+            throw failure
+        }
+    }
+
+    /// Maps one `session/page` record onto the durable envelope the rest of the app
+    /// already folds. The generated record type does the decoding; this is a rename.
+    private static func envelope(from record: SessionPageRecordsItem) -> DurableEventEnvelope {
+        DurableEventEnvelope(
+            type: record.event.type,
+            seq: record.event.seq,
+            time: record.event.time,
+            data: record.event.data,
+            surfaceOp: record.event.surfaceOp?.stringValue
+        )
+    }
+
     /// The host's session list, decoded from `session/list`.
     ///
     /// `session/list` takes its arguments in a field named **`_request`**, and the
@@ -852,6 +904,7 @@ public actor ConnectionCoordinator {
     public static let eventsEndpoint = "$events"
     /// The unary endpoint SPEC §3.3's session list comes from.
     public static let sessionListMethod = "session/list"
+    public static let sessionPageMethod = "session/page"
     public static let sessionPromptMethod = "session/prompt"
     public static let userQuestionsAnswerMethod = "userQuestions/answer"
 

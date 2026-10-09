@@ -1,5 +1,72 @@
 import Foundation
 
+/// Everything a conversation screen renders, as one value.
+///
+/// SPEC §2: "Expose immutable `Sendable` snapshots through `AsyncStream` and publish on
+/// the main actor." The screen observes this rather than polling the actor, which is what
+/// the first version of the chat screen had to do and what made a streamed answer update
+/// only as often as the poll.
+///
+/// It carries the *derived* state a screen would otherwise have to compute — whether
+/// there is a snapshot yet, whether the history has a hole, whether older pages remain —
+/// so the view makes no decisions about the wire.
+public struct ConversationSnapshot: Sendable, Hashable {
+    /// Which follow baseline this window belongs to. A screen can hold a snapshot
+    /// across a rebaseline and tell that it is looking at a different generation.
+    public var generation: Int
+    public var messages: [ConversationMessage]
+    /// Durable events with no message of their own: tool calls, plan updates,
+    /// permission changes. Kept so a card can show them instead of nothing.
+    public var unmodelledEvents: [DurableEventEnvelope]
+    /// False until the host has sent a baseline. The screen shows loading, not an
+    /// empty conversation, which SPEC §3 keeps distinct.
+    public var hasSnapshot: Bool
+    /// A durable sequence was skipped: the history has a hole and says so.
+    public var hasGap: Bool
+    public var isStreaming: Bool
+    /// Set when the follow stream itself failed, as opposed to a resource load.
+    public var followError: String?
+    /// Live questions waiting on this user.
+    public var pendingQuestions: [PendingQuestion]
+    /// The opening baseline's watermark, which paging must use.
+    public var cursor: Int64?
+    /// Whether the host says older history exists behind this window.
+    public var canLoadOlder: Bool
+    public var isLoadingOlder: Bool
+    /// Why the last older-history load failed, if it did.
+    public var pageError: String?
+}
+
+/// One older-history request, in the terms the screen and the store both use.
+///
+/// `throughSeq` is fixed for a follow generation and `beforeSeq` is exclusive
+/// (SPEC §7); both come from the window rather than from the caller.
+public struct ConversationPageRequest: Sendable, Hashable {
+    public var sessionId: String
+    public var throughSeq: Int64
+    public var beforeSeq: Int64?
+    public var maxMessages: Int
+
+    public init(sessionId: String, throughSeq: Int64, beforeSeq: Int64? = nil, maxMessages: Int = 60) {
+        self.sessionId = sessionId
+        self.throughSeq = throughSeq
+        self.beforeSeq = beforeSeq
+        self.maxMessages = maxMessages
+    }
+}
+
+/// One older-history page: durable events in sequence order, and whether the host
+/// says there are more behind them.
+public struct ConversationPage: Sendable, Hashable {
+    public var events: [DurableEventEnvelope]
+    public var hasMore: Bool
+
+    public init(events: [DurableEventEnvelope], hasMore: Bool) {
+        self.events = events
+        self.hasMore = hasMore
+    }
+}
+
 /// The logic half of the chat screen: follows one session and folds its frames
 /// into renderable messages. No UI, no view state.
 ///
@@ -8,13 +75,18 @@ import Foundation
 /// established, and taking it directly keeps this type testable with the stub
 /// transport (SPEC §6.5).
 ///
-/// It sends nothing yet. Prompting, paging older history, and the composer's
-/// draft handling are the next slice, and each needs its own arguments and its
-/// own tests.
+/// Reading a conversation and writing to one are separate capabilities (SPEC §4).
+/// This type holds the first: it follows, folds, and pages. Sending a prompt stays
+/// with the coordinator, which is where the no-retry rule for writes lives.
 public actor ChatSession {
+    /// How an older page is fetched. Injected so this type can be exercised without a
+    /// socket, and so the RPC path stays in one place.
+    public typealias PageLoader = @Sendable (ConversationPageRequest) async throws -> ConversationPage
+
     private let client: MuxClient
     private let sessionId: String
     private let streamId: String
+    private let loadPage: PageLoader?
     public private(set) var hasSnapshot = false
     public private(set) var followError: String?
 
@@ -24,36 +96,49 @@ public actor ChatSession {
     /// cannot ask the same id without one shadowing the other, which is the right
     /// failure for a UI that has to show one card per question anyway.
     private var questions: [String: PendingQuestion] = [:]
+    /// Whether the host says older history exists. Seeded from the baseline's own
+    /// `hasMore`, then governed by each page's answer — SPEC §7 makes that value the
+    /// authority rather than an inference from how many records a page held.
+    private var canLoadOlder = false
+    private var isLoadingOlder = false
+    private var pageError: String?
+    private var subscribers: [UUID: AsyncStream<ConversationSnapshot>.Continuation] = [:]
 
     /// - Parameters:
     ///   - client: the mux client for a connected host.
     ///   - sessionId: the session to follow, opaque.
-    public init(client: MuxClient, sessionId: String) {
+    ///   - loadPage: fetches older history. Optional because a session that is only
+    ///     being read does not need it, and a caller that never pages gets a
+    ///     ``snapshot`` with `canLoadOlder` false rather than a silent no-op.
+    public init(client: MuxClient, sessionId: String, loadPage: PageLoader? = nil) {
         self.client = client
         self.sessionId = sessionId
+        self.loadPage = loadPage
         // Generated, never reused: a cancelled stream's id must not be handed to
         // a later consumer, which is the leak rule the mux client tests assert.
         self.streamId = "follow-\(UUID().uuidString)"
     }
 
-    /// Builds a session on an already-connected coordinator's socket.
+    /// Builds a session on an already-connected coordinator's socket, with paging
+    /// wired to the same connection.
     ///
     /// Returns `nil` when there is no live connection, which is the honest answer:
     /// a screen should not construct a chat that cannot follow anything, and the
     /// coordinator's `status` is what explains why.
-    ///
-    /// **Known gap, deliberately left here rather than discovered later:** this
-    /// type follows a session over the mux stream, but *sending* a prompt goes
-    /// over the unary RPC path (`session/prompt`), which this type does not hold.
-    /// So the composer needs either the coordinator passed in alongside, or a
-    /// separate prompt-sending type. Reading a conversation and writing to one
-    /// are two capabilities, and this type currently has the first.
     public static func connected(
         to coordinator: ConnectionCoordinator,
         sessionId: String
     ) async -> ChatSession? {
         guard let handle = await coordinator.activeStream() else { return nil }
-        return ChatSession(client: handle.client, sessionId: sessionId)
+        return ChatSession(
+            client: handle.client,
+            sessionId: sessionId,
+            loadPage: { request in
+                // Through the coordinator, so a page inherits the connection's own
+                // status classification and the read path's retry policy.
+                try await coordinator.page(request)
+            }
+        )
     }
 
     // MARK: - Reading
@@ -67,6 +152,55 @@ public actor ChatSession {
     public var isStreaming: Bool { builder.isStreaming }
 
     public var unmodelledEvents: [DurableEventEnvelope] { builder.unmodelledEvents }
+
+    /// The current state as one value.
+    public func snapshot() -> ConversationSnapshot {
+        ConversationSnapshot(
+            generation: builder.generation,
+            messages: builder.messages,
+            unmodelledEvents: builder.unmodelledEvents,
+            hasSnapshot: hasSnapshot,
+            hasGap: builder.hasGap,
+            isStreaming: builder.isStreaming,
+            followError: followError,
+            pendingQuestions: pendingQuestions,
+            cursor: builder.cursor,
+            canLoadOlder: canLoadOlder && loadPage != nil,
+            isLoadingOlder: isLoadingOlder,
+            pageError: pageError
+        )
+    }
+
+    /// Every state from now on, starting with the current one.
+    ///
+    /// Buffered newest-only: a token-by-token stream would otherwise queue a snapshot
+    /// per frame, and a slow screen would fall further behind the reply it is drawing
+    /// (SPEC §2: "Coalesce rapid text updates for rendering, but deliver cancellation,
+    /// errors, settlement, and user-input events immediately"). Every snapshot is the
+    /// whole state, so a skipped intermediate one costs nothing but an intermediate
+    /// frame; errors and settlements are still present in the next value.
+    public func snapshots() -> AsyncStream<ConversationSnapshot> {
+        let id = UUID()
+        let (stream, continuation) = AsyncStream<ConversationSnapshot>.makeStream(
+            bufferingPolicy: .bufferingNewest(1)
+        )
+        subscribers[id] = continuation
+        continuation.yield(snapshot())
+        continuation.onTermination = { [weak self] _ in
+            Task { await self?.removeSubscriber(id) }
+        }
+        return stream
+    }
+
+    private func removeSubscriber(_ id: UUID) {
+        subscribers.removeValue(forKey: id)
+    }
+
+    private func publish() {
+        guard !subscribers.isEmpty else { return }
+        let value = snapshot()
+        for continuation in subscribers.values { continuation.yield(value) }
+    }
 
     // MARK: - Lifecycle
 
@@ -115,6 +249,45 @@ public actor ChatSession {
         pump?.cancel()
         pump = nil
         await client.cancel(streamId: streamId)
+        publish()
+    }
+
+    // MARK: - Older history
+
+    /// Loads one page of older history, if the host says there is any.
+    ///
+    /// The page is fetched against this window's generation, so one that raced a
+    /// rebaseline is dropped rather than spliced into a conversation it does not
+    /// describe (SPEC §7). Concurrent duplicate loads are refused here rather than
+    /// left to the caller.
+    @discardableResult
+    public func loadOlder() async -> Bool {
+        guard let loadPage, !isLoadingOlder, canLoadOlder, let throughSeq = builder.cursor else {
+            return false
+        }
+        let generation = builder.generation
+        let request = ConversationPageRequest(
+            sessionId: sessionId,
+            throughSeq: throughSeq,
+            beforeSeq: builder.oldestSeq
+        )
+        isLoadingOlder = true
+        pageError = nil
+        publish()
+        defer { isLoadingOlder = false }
+
+        do {
+            let page = try await loadPage(request)
+            // A page that completed after a rebaseline names an older generation and
+            // `merge` drops it; the `hasMore` answer is dropped with it.
+            guard generation == builder.generation else { return false }
+            builder.merge(page: page.events, generation: generation)
+            canLoadOlder = page.hasMore
+        } catch {
+            pageError = Self.reason(for: error)
+        }
+        publish()
+        return true
     }
 
     // MARK: - Internals
@@ -133,6 +306,9 @@ public actor ChatSession {
         }
         if let snapshot = frame.value?.snapshot {
             hasSnapshot = true
+            // The baseline's own `hasMore` is the opening answer; a later page's is
+            // authoritative from then on.
+            canLoadOlder = snapshot.hasMore
             for record in snapshot.records {
                 if let event = record.event {
                     collectQuestions(from: event)
@@ -140,6 +316,7 @@ public actor ChatSession {
             }
         }
         builder.apply(frame)
+        publish()
     }
 
     private func collectQuestions(from event: DurableEventEnvelope) {
@@ -159,13 +336,27 @@ public actor ChatSession {
     /// rather than the card lingering until a reconnect.
     public func markAnswered(questionId: String) {
         questions.removeValue(forKey: questionId)
+        publish()
     }
 
     private func clearPump() {
         pump = nil
+        publish()
     }
 
     private func recordFollowFailure() {
         followError = followError ?? "The conversation connection closed."
+        publish()
+    }
+
+    /// The user-facing reason for a failed page, from the error's own readable text.
+    static func reason(for error: any Error) -> String {
+        if let localized = error as? any LocalizedError, let description = localized.errorDescription {
+            return description
+        }
+        if let failure = error as? DshRPCError {
+            return failure.readableReason ?? "the host refused the request"
+        }
+        return String(describing: error)
     }
 }
