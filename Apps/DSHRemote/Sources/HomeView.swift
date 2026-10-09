@@ -86,11 +86,18 @@ struct HomeView: View {
             )
         }
         .sheet(isPresented: $isSettingsOpen) {
-            SettingsView()
+            // Debug builds can open straight to the diagnostics preview, which is otherwise
+            // two taps away and unreachable on a machine that cannot tap.
+            SettingsView(startsAtDiagnostics: ProcessInfo.processInfo.environment["DSH_DIAGNOSTICS"] != nil)
         }
         .task {
             // The catalog is what the mode and model controls render, and it does not stream.
             if model.catalog == nil { await model.loadModelCatalog() }
+            #if DEBUG
+            // Debug builds only: open Settings on launch, so a screen whose only door is a row
+            // in the drawer can be reviewed on a machine that cannot tap.
+            if ProcessInfo.processInfo.environment["DSH_SETTINGS"] != nil { isSettingsOpen = true }
+            #endif
         }
         .task(id: model.selectedSessionId) {
             // Navigation is restored from the same value the store persists, so a cold

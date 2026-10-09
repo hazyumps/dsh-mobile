@@ -27,6 +27,20 @@ final class AppModel {
 
     /// The host's snapshot, kept for the values the browse mapping does not carry — its image
     /// limits being the first of them.
+    /// The diagnostics this run has recorded, in memory only (SPEC §11).
+    ///
+    /// Nothing here writes to disk or to the system log on its own: the records exist until a
+    /// person asks for the text, which is the text they are shown.
+    private var diagnosticLog = DiagnosticLog()
+    /// One UUID per connection attempt, so the records of a single attempt read together.
+    private var connectionCorrelation = UUID()
+    /// The last value recorded per subject, so a diagnostic line marks a *change* rather than
+    /// repeating the same state on every status publish.
+    private var lastResourceStates: [String: String] = [:]
+    private var lastStatusName: String?
+    /// When the current connect attempt began, so its duration can be recorded.
+    private var connectStartedAt: Date?
+
     private var hostSnapshot: HostSessionStore.Snapshot?
     /// Projections read per session through `session/projections`, kept for the values the
     /// control stream does not carry — `imageLimits` being the one that mattered.
@@ -437,6 +451,9 @@ final class AppModel {
 
     private func apply(status: ConnectionStatus, selection: UUID) async {
         guard selection == selectionID else { return }
+        // Recorded before the usability guard: a connection that failed to become usable is
+        // exactly the thing a later diagnostic report is about.
+        record(status: status, generation: await coordinator?.remoteEvents()?.identity.generation)
         guard status.isUsable, let hostStore, let coordinator else { return }
         // Both calls are idempotent for a generation that is already open, so a status
         // stream that repeats `connected` cannot open a second pair of streams.
@@ -735,6 +752,7 @@ final class AppModel {
             endpoint: SecondaryReadStore.pluginInventoryMethod,
             store: secondaryStore
         )
+        recordResourceStates()
     }
 
     /// Turns a read's outcome into what the screen should say.
@@ -769,6 +787,7 @@ final class AppModel {
             endpoint: SecondaryReadStore.scheduleCatalogMethod,
             store: secondaryStore
         )
+        recordResourceStates()
     }
 
     // MARK: - Model and mode (SPEC §6)
@@ -1148,6 +1167,94 @@ final class AppModel {
         }
     }
 
+    // MARK: - Diagnostics (SPEC §11)
+
+    /// How many records are held, for the Settings row.
+    var diagnosticCount: Int { diagnosticLog.count }
+
+    /// The text a person would send: a preview of exactly what an export produces.
+    func diagnosticsText() -> String { diagnosticLog.export() }
+
+    func clearDiagnostics() {
+        diagnosticLog.removeAll()
+        lastResourceStates.removeAll()
+        lastStatusName = nil
+    }
+
+    /// Records a connection status change, with the generation that produced it.
+    ///
+    /// A change, not a heartbeat: a line per status publish would bury the one transition that
+    /// matters under a hundred identical ones.
+    private func record(status: ConnectionStatus, generation: UInt64?) {
+        let name = Self.diagnosticName(status)
+        guard name != lastStatusName else { return }
+        lastStatusName = name
+
+        // SPEC §11 asks for durations. The one this screen can measure honestly is how long the
+        // attempt took: from `connecting` to whatever it became. A state that arrives with no
+        // attempt behind it carries none, which is why the field is optional rather than zero.
+        var durationMilliseconds: Int?
+        if name == "connecting" {
+            connectionCorrelation = UUID()
+            connectStartedAt = Date()
+        } else if let started = connectStartedAt {
+            durationMilliseconds = Int(Date().timeIntervalSince(started) * 1000)
+            connectStartedAt = nil
+        }
+        // The status enum carries no failure detail — the reason lives on the error that
+        // produced it, which this screen never sees. Recording the state is what is actually
+        // known; deriving a code from the enum would be inventing one.
+        diagnosticLog.record(DiagnosticRecord(
+            correlation: connectionCorrelation,
+            subject: .stream("$events"),
+            generation: generation,
+            resource: "connection",
+            stateName: name,
+            durationMilliseconds: durationMilliseconds
+        ))
+    }
+
+    private static func diagnosticName(_ status: ConnectionStatus) -> String {
+        status.rawValue
+    }
+
+    /// Records each resource's state when it changes.
+    ///
+    /// The resource names are the endpoints, which is what makes a "the list is stale but the
+    /// connection is fine" report readable later.
+    private func recordResourceStates() {
+        // The two resource states the browse mapping owns are `ResourceState`s; the secondary
+        // screens have their own report kind, which is recorded by name for the same reason —
+        // a diagnostic line says *which* resource changed and to what, and nothing else.
+        var states: [(String, String)] = [
+            ("workspace/follow", browse.workspacesState.diagnosticName),
+            ("session/list", browse.sessionsState.diagnosticName),
+        ]
+        states.append(("pluginInventory/list", Self.diagnosticName(pluginsReport.kind)))
+        states.append(("schedule/catalog", Self.diagnosticName(schedulesReport.kind)))
+
+        for (resource, name) in states {
+            guard lastResourceStates[resource] != name else { continue }
+            lastResourceStates[resource] = name
+            diagnosticLog.record(DiagnosticRecord(
+                correlation: connectionCorrelation,
+                subject: .endpoint(resource),
+                resource: resource,
+                stateName: name
+            ))
+        }
+    }
+
+    private static func diagnosticName(_ kind: SecondaryReport.Kind) -> String {
+        switch kind {
+        case .unknown: "unknown"
+        case .loading: "loading"
+        case .available: "current"
+        case .unavailable: "unavailable"
+        case .failed: "failed"
+        }
+    }
+
     /// The sessions a live delivery is waiting on, which the projections do not know about.
     private var liveWaiters: Set<String> {
         Set(interactions.filter(\.state.isActionable).map(\.sessionId))
@@ -1162,6 +1269,7 @@ final class AppModel {
         let waiters = liveWaiters
         if !waiters.isEmpty { DSHBeacon.note("live waiters: \(waiters.sorted())") }
         browse = BrowseState.from(hostSnapshot, liveWaiters: waiters)
+        recordResourceStates()
     }
 
     private func apply(snapshot: HostSessionStore.Snapshot, selection: UUID) {
@@ -1169,6 +1277,7 @@ final class AppModel {
         hostSnapshot = snapshot
         let next = BrowseState.from(snapshot, liveWaiters: liveWaiters)
         browse = next
+        recordResourceStates()
         // A selected workspace that this host does not have — a host switch, a renamed
         // registry — falls back rather than leaving the screens pointing at nothing.
         if let workspaceId = selectedWorkspaceId, next.workspace(id: workspaceId) == nil {

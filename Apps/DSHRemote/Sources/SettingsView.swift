@@ -10,20 +10,32 @@ import SwiftUI
 /// here is the part that decides *which host* the rest of the app is about, which is a
 /// deliberate action per SPEC §11: switching closes the previous connection.
 struct SettingsView: View {
+    /// Opens with the diagnostics preview already shown. Debug affordance only: the screen is
+    /// reachable by hand, and a machine that cannot tap needs a way in.
+    var startsAtDiagnostics = false
+
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
 
     @State private var isPairing = false
     @State private var pendingForget: SavedHost?
+    @State private var path = NavigationPath()
 
     var body: some View {
         @Bindable var model = model
 
-        return NavigationStack {
+        return NavigationStack(path: $path) {
             Form {
                 hostSection
                 connectionSection
                 identitySection
+                diagnosticsSection
+            }
+            .navigationDestination(for: String.self) { _ in DiagnosticsView() }
+            .onAppear {
+                if startsAtDiagnostics, path.isEmpty {
+                    path.append("diagnostics")
+                }
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -122,6 +134,26 @@ struct SettingsView: View {
                         .foregroundStyle(DSHPalette.secondaryText)
                 }
             }
+        }
+    }
+
+    /// SPEC §11: diagnostics export is explicit and previewable.
+    ///
+    /// Explicit means nothing leaves this phone on its own: the text exists only when the
+    /// person opens this screen and asks for it, and what they see is exactly what a copy
+    /// produces. Previewable means the rows are the text, not a count of it.
+    private var diagnosticsSection: some View {
+        Section {
+            NavigationLink(value: "diagnostics") {
+                LabeledContent("Diagnostics") {
+                    Text(model.diagnosticCount == 1 ? "1 record" : "\(model.diagnosticCount) records")
+                        .foregroundStyle(DSHPalette.secondaryText)
+                }
+            }
+        } header: {
+            Text("Support")
+        } footer: {
+            Text("Connection and resource states, with no prompts, answers, credentials, or paths.")
         }
     }
 
