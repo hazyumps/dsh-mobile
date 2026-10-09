@@ -232,6 +232,12 @@ public actor InteractionStore {
 
     /// Applies one event from the `$events` router.
     ///
+    /// Every branch that changes the state publishes it. That is not a detail: a subscriber
+    /// that is never told about an arrival keeps rendering the state it was given when it
+    /// subscribed, which is how a session waiting on an answer went on looking "Running" in
+    /// the list. The store's own subscription hands over the current value once, so a missed
+    /// publication is invisible until the next one — the worst kind of quiet.
+    ///
     /// - Parameter generation: the ready generation that delivered it. Recorded on the
     ///   request so a later submission can prove it is answering the same connection, which
     ///   is what makes a stale answer impossible rather than merely unlikely.
@@ -253,6 +259,7 @@ public actor InteractionStore {
             requests[request.id] = request
             groups[InteractionGroupKey(sessionId: request.sessionId, callId: request.callId), default: []]
                 .insert(request.id)
+            publish()
 
         case .cancel(let eventId):
             // The same frame arrives on settlement as on abortion, so it retires a delivery
@@ -261,6 +268,7 @@ public actor InteractionStore {
             guard var request = requests[eventId] else { return }
             request.state = .settled
             requests[eventId] = request
+            publish()
 
         case .ready, .emit, .unknown:
             return

@@ -185,6 +185,48 @@ func framesBeforeReadyAreSkipped() async throws {
     #expect(await coordinator.status == .connected)
 }
 
+@Test("the events router exists by the time the status says connected")
+func theRouterIsPublishedBeforeTheStatus() async throws {
+    // The bug this guards: `status = .connected` was published *before* `eventRouter` was
+    // assigned, so a subscriber reacting to the status asked for `remoteEvents()`, got nil,
+    // and gave up — leaving a connected client holding no `$events` subscription and never
+    // retrying. Measured against the installed host, that is what kept a asked question from
+    // reaching the session list's "needs input".
+    let transport = StubRelayTransport()
+    let socket = StubRelaySocket()
+    let coordinator = await makeCoordinator(transport: transport, socket: socket)
+    let streamId = ConnectionCoordinator.eventsStreamID(for: 1)
+    try await socket.push(json: readyFrameJSON(streamId: streamId, clientId: "client-1"))
+
+    // The watcher has to react to the *status*, exactly as the app does. Reading both
+    // afterwards would pass either way: the assignment is done before `connect` returns no
+    // matter where it sits, and only the window in between is the bug.
+    let seen = RouterAtStatus()
+    let watcher = Task { @Sendable in
+        for await status in await coordinator.statusUpdates() {
+            guard status.isUsable else { continue }
+            // A suspension point before reading, so the check is not just "both values look
+            // right at the end" — it is the state a subscriber acts on.
+            await Task.yield()
+            await seen.record(routerExists: await coordinator.remoteEvents() != nil)
+        }
+    }
+
+    _ = try await coordinator.connect()
+
+    for _ in 0..<400 where await seen.value == nil {
+        try? await Task.sleep(for: .milliseconds(2))
+    }
+    #expect(await seen.value == true, "a subscriber reacting to connected found no router")
+    watcher.cancel()
+}
+
+/// Records whether the events router existed at the moment the status became usable.
+private actor RouterAtStatus {
+    private(set) var value: Bool?
+    func record(routerExists: Bool) { value = routerExists }
+}
+
 @Test("an error frame before ready fails the attempt with the host's own code")
 func streamErrorBeforeReadyFailsTheAttempt() async throws {
     let transport = StubRelayTransport()

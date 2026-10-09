@@ -433,7 +433,6 @@ public actor ConnectionCoordinator {
         guard generation == activeGeneration, !Task.isCancelled else { throw ConnectError.cancelled }
         let connection = Connection(generation: generation, clientId: ready.clientId, host: ready.host)
         self.connection = connection
-        status = .connected
 
         // Frames that arrive after the ready frame are still the socket's business — they
         // must be read or the connection stalls. They are no longer *discarded*: one
@@ -446,7 +445,15 @@ public actor ConnectionCoordinator {
                 await self?.streamEnded(generation: generation, error: error)
             }
         )
+        // Assigned **before** the status is published, and that order is the whole point: a
+        // subscriber that reacts to `connected` asks for ``remoteEvents()`` immediately, and
+        // publishing first left a window where it got nil and gave up — producing a client
+        // that was connected, held no `$events` subscription, and never retried. Measured
+        // against the installed host, that is what kept a session's question from reaching the
+        // session list. The router buffers what arrives before its first subscriber, so
+        // starting it here loses nothing.
         eventRouter = router
+        status = .connected
         await router.start(opened)
 
         return connection

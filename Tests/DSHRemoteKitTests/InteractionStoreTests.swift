@@ -40,8 +40,9 @@ struct InteractionStoreTests {
 
     /// A snapshot sink the collector task can append to without sending a closure across
     /// isolation boundaries.
+    /// A snapshot sink one test owns. Deliberately not a shared singleton: Swift Testing runs
+    /// tests in parallel, and two of them appending to one sink is a race between tests.
     private actor SettleSink {
-        static let shared = SettleSink()
         private(set) var last: [InteractionRequest]?
         func append(_ value: [InteractionRequest]) { last = value }
         func reset() { last = nil }
@@ -86,6 +87,28 @@ struct InteractionStoreTests {
         )
     }
 
+    @Test("an arriving waterfall is published, not just recorded")
+    func arrivalIsPublished() async throws {
+        // Measured against the live host: the store updated on arrival and told nobody, so a
+        // subscriber that had already been handed the empty list never learned about the
+        // request. The session list kept saying "Running" for a session that was waiting.
+        let store = store(submitter: Submitter())
+        let sink = SettleSink()
+        let stream = await store.snapshots()
+        let collector = Task { @Sendable in
+            for await value in stream { await sink.append(value) }
+        }
+
+        await store.observe(waterfall(eventId: "e1"), generation: 1)
+
+        for _ in 0..<200 where await sink.last?.isEmpty != false {
+            try? await Task.sleep(for: .milliseconds(2))
+        }
+        #expect(await sink.last?.count == 1)
+        #expect(await sink.last?.first?.id == "e1")
+        collector.cancel()
+    }
+
     @Test("answering publishes the settled state, so the card stops offering controls")
     func settlingIsPublished() async throws {
         // Measured against the live host: without this the store mutated a request to
@@ -93,10 +116,10 @@ struct InteractionStoreTests {
         // with a live Submit whose every press was refused as not-actionable.
         let submitter = Submitter()
         let store = store(submitter: submitter)
-        await SettleSink.shared.reset()
+        let sink = SettleSink()
         let stream = await store.snapshots()
         let collector = Task { @Sendable in
-            for await value in stream { await SettleSink.shared.append(value) }
+            for await value in stream { await sink.append(value) }
         }
 
         await store.observe(waterfall(eventId: "e1", event: "user-questions/request",
@@ -112,10 +135,10 @@ struct InteractionStoreTests {
         #expect(await store.actionable.isEmpty)
         #expect(await store.all.first?.state == .settled)
         // ...and a subscriber was told, which is what the screen renders from.
-        for _ in 0..<200 where await SettleSink.shared.last?.first?.state != .settled {
+        for _ in 0..<200 where await sink.last?.first?.state != .settled {
             try? await Task.sleep(for: .milliseconds(2))
         }
-        #expect(await SettleSink.shared.last?.first?.state == .settled)
+        #expect(await sink.last?.first?.state == .settled)
         collector.cancel()
     }
 
@@ -349,8 +372,9 @@ struct QuestionChannelTests {
 
     /// A snapshot sink the collector task can append to without sending a closure across
     /// isolation boundaries.
+    /// A snapshot sink one test owns. Deliberately not a shared singleton: Swift Testing runs
+    /// tests in parallel, and two of them appending to one sink is a race between tests.
     private actor SettleSink {
-        static let shared = SettleSink()
         private(set) var last: [InteractionRequest]?
         func append(_ value: [InteractionRequest]) { last = value }
         func reset() { last = nil }
