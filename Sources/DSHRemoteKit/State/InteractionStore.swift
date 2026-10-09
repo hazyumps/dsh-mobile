@@ -126,6 +126,7 @@ public actor InteractionStore {
     private let identity: @Sendable () async -> RemoteEventRouter.Identity?
     private let submit: @Sendable (EventResultRequest) async throws -> Void
     private let answerContinued: (@Sendable (String, String, JSONValue) async throws -> Bool)?
+    private let holdsTimedClaim: (@Sendable (String) async -> Bool)?
 
     /// - Parameters:
     ///   - identity: the current ready generation and `clientId`, read at submission time.
@@ -139,14 +140,22 @@ public actor InteractionStore {
     ///     questions with no live delivery, and a caller that never meets one need not wire
     ///     it — but a caller that does meet one gets ``InteractionRefusal/continuedChannelUnavailable``
     ///     rather than a silent no-op.
+    ///   - holdsTimedClaim: whether a live foreground claim over a timed question is currently
+    ///     held, keyed by the question's `eventId`. SPEC §8 answers a timed question only after
+    ///     `userQuestions/attachWait` has claimed it, so this is the one thing that can lift
+    ///     ``InteractionRefusal/timedQuestionNeedsClaim``. Optional for the same reason as
+    ///     `answerContinued`: a caller that never meets a timed question need not wire it, and
+    ///     one that does gets the refusal rather than an answer that races the host's deadline.
     public init(
         identity: @escaping @Sendable () async -> RemoteEventRouter.Identity?,
         submit: @escaping @Sendable (EventResultRequest) async throws -> Void,
-        answerContinued: (@Sendable (String, String, JSONValue) async throws -> Bool)? = nil
+        answerContinued: (@Sendable (String, String, JSONValue) async throws -> Bool)? = nil,
+        holdsTimedClaim: (@Sendable (String) async -> Bool)? = nil
     ) {
         self.identity = identity
         self.submit = submit
         self.answerContinued = answerContinued
+        self.holdsTimedClaim = holdsTimedClaim
     }
 
     // MARK: - Reading
@@ -328,8 +337,13 @@ public actor InteractionStore {
         }
         if Self.isTimed(request.request) {
             // Answering a timed question without holding its claim would race the host's own
-            // deadline, so the claim is required rather than optional.
-            throw InteractionRefusal.timedQuestionNeedsClaim
+            // deadline, so the claim is required rather than optional. A paused claim still
+            // counts: the host's timer is paused either way, which is what makes the question
+            // answerable at all.
+            let held = await holdsTimedClaim?(id) ?? false
+            guard held else {
+                throw InteractionRefusal.timedQuestionNeedsClaim
+            }
         }
         do {
             try QuestionAnswerValidator.validate(answers, against: batch)
