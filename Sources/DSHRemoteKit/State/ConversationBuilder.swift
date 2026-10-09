@@ -1,5 +1,41 @@
 import Foundation
 
+/// One attachment a message carried.
+///
+/// `attachmentId` is present once the host has resolved the part, and is what
+/// ``AttachmentReader`` needs to read the bytes back; before that a part may carry only a
+/// name, which is why nothing here treats the id as required.
+public struct MessageAttachment: Sendable, Hashable, Identifiable {
+    public var attachmentId: String?
+    public var name: String
+    public var mediaType: String?
+    public var byteCount: Int?
+    public var pixelWidth: Int?
+    public var pixelHeight: Int?
+
+    /// Whether this is something the transcript can draw. The media type is the host's, so an
+    /// attachment with no type is not assumed to be an image.
+    public var isImage: Bool { mediaType?.hasPrefix("image/") == true }
+
+    public var id: String { attachmentId ?? "\(name):\(mediaType ?? "")" }
+
+    public init(
+        attachmentId: String? = nil,
+        name: String,
+        mediaType: String? = nil,
+        byteCount: Int? = nil,
+        pixelWidth: Int? = nil,
+        pixelHeight: Int? = nil
+    ) {
+        self.attachmentId = attachmentId
+        self.name = name
+        self.mediaType = mediaType
+        self.byteCount = byteCount
+        self.pixelWidth = pixelWidth
+        self.pixelHeight = pixelHeight
+    }
+}
+
 /// One line of a conversation, durable or still arriving.
 public struct ConversationMessage: Sendable, Hashable, Identifiable {
     public enum Role: String, Sendable { case user, assistant }
@@ -12,12 +48,16 @@ public struct ConversationMessage: Sendable, Hashable, Identifiable {
     public let isProvisional: Bool
     /// Reasoning is kept apart from the answer (SPEC §3.4).
     public let reasoning: String?
-    /// Files this message carried, by the name the host recorded.
+    /// The files and images this message carried.
     ///
-    /// A durable `file` part stores `{attachmentId, name, bytes}` — the receipt is retired once
-    /// the prompt becomes a message — so this is what the user actually sent, and a transcript
-    /// that showed only the text would quietly drop it.
-    public let attachments: [String]
+    /// A durable part stores `{attachmentId, mediaType, width, height, bytes, name}` — the
+    /// receipt or the inline base64 is retired once the prompt becomes a message — so this is
+    /// what the user actually sent, and a transcript that showed only the text would quietly
+    /// drop it. Images keep their `attachmentId` because that is what reads the pixels back.
+    public let attachments: [MessageAttachment]
+
+    /// The names alone, for a caller that just needs to say what was attached.
+    public var attachmentNames: [String] { attachments.map(\.name) }
 
     public init(
         id: String,
@@ -25,7 +65,7 @@ public struct ConversationMessage: Sendable, Hashable, Identifiable {
         text: String,
         isProvisional: Bool,
         reasoning: String?,
-        attachments: [String] = []
+        attachments: [MessageAttachment] = []
     ) {
         self.id = id
         self.role = role
@@ -384,7 +424,7 @@ public struct ConversationBuilder: Sendable {
             guard event.data["source"]?["kind"]?.stringValue == "user" else { return nil }
             let content = event.data["content"]
             let text = textParts(content)
-            let attachments = Self.attachmentNames(content)
+            let attachments = Self.attachments(content)
             // A prompt whose only content is a file is still a message.
             guard !text.isEmpty || !attachments.isEmpty else { return nil }
             return ConversationMessage(
@@ -414,7 +454,7 @@ public struct ConversationBuilder: Sendable {
         }
     }
 
-    /// The names of the attached parts of a message — files and images alike.
+    /// The attached parts of a message — files and images alike.
     ///
     /// A durable `image` part looks like a `file` one once the host has resolved it
     /// (`{type:"image",attachment:{attachmentId,mediaType,width,height,bytes,name}}`), so both
@@ -422,18 +462,24 @@ public struct ConversationBuilder: Sendable {
     ///
     /// Skips a part with no name rather than inventing one: an unnamed attachment is one the
     /// host would not let a prompt cite either.
-    static func attachmentNames(_ content: JSONValue?) -> [String] {
+    static func attachments(_ content: JSONValue?) -> [MessageAttachment] {
         guard let parts = content?.arrayValue else { return [] }
         return parts.compactMap { part in
-            switch part["type"]?.stringValue {
-            case "file", "image":
-                // Either the durable form (`attachment.name`) or, before it settles, the receipt.
-                return part["attachment"]?["name"]?.stringValue
-                    ?? part["name"]?.stringValue
-                    ?? (part["type"]?.stringValue == "image" ? "Image" : nil)
-            default:
+            guard let type = part["type"]?.stringValue, type == "file" || type == "image" else {
                 return nil
             }
+            // Either the durable form (`attachment.name`) or, before it settles, the receipt.
+            let detail = part["attachment"] ?? part
+            let name = detail["name"]?.stringValue
+                ?? (type == "image" ? "Image" : "File")
+            return MessageAttachment(
+                attachmentId: detail["attachmentId"]?.stringValue,
+                name: name,
+                mediaType: detail["mediaType"]?.stringValue,
+                byteCount: detail["bytes"]?.intValue.map(Int.init),
+                pixelWidth: detail["width"]?.intValue.map(Int.init),
+                pixelHeight: detail["height"]?.intValue.map(Int.init)
+            )
         }
     }
 

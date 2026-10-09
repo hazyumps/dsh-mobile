@@ -122,7 +122,7 @@ struct ConversationBuilderTests {
         ))
         #expect(builder.messages.count == 1)
         #expect(builder.messages.first?.text == "look at this")
-        #expect(builder.messages.first?.attachments == ["probe.txt"])
+        #expect(builder.messages.first?.attachmentNames == ["probe.txt"])
 
         // A prompt whose only content is a file is still a message.
         var onlyFile = ConversationBuilder()
@@ -131,7 +131,7 @@ struct ConversationBuilderTests {
             seq: 2,
             data: #"{"content":[{"type":"file","attachment":{"attachmentId":"sha256:abc","name":"probe.txt","bytes":28}}],"source":{"kind":"user"}}"#
         ))
-        #expect(onlyFile.messages.first?.attachments == ["probe.txt"])
+        #expect(onlyFile.messages.first?.attachmentNames == ["probe.txt"])
         #expect(onlyFile.messages.first?.text == "")
 
         // An image resolves the same way, with the host's own metadata — captured from the
@@ -142,7 +142,7 @@ struct ConversationBuilderTests {
             seq: 3,
             data: #"{"content":[{"type":"text","text":"what is this"},{"type":"image","attachment":{"attachmentId":"sha256:64cf6b08","mediaType":"image/png","width":300,"height":200,"bytes":107407,"name":"probe.png"}}],"source":{"kind":"user"}}"#
         ))
-        #expect(withImage.messages.first?.attachments == ["probe.png"])
+        #expect(withImage.messages.first?.attachmentNames == ["probe.png"])
     }
 
     @Test("a jump forward sets the gap flag")
