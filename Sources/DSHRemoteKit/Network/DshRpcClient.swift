@@ -112,6 +112,47 @@ public struct DshRpcClient: Sendable {
         try await call(method, args: args, returning: JSONValue.self, retryPolicy: retryPolicy)
     }
 
+    // MARK: - Writes
+
+    /// Sends one write, which is never retried.
+    ///
+    /// SPEC §3: every write must pass ``RPCFailureRetryPolicy/none``, because
+    /// retrying a mutation whose outcome is unknown is how a prompt is submitted
+    /// twice. Reads may retry; a create, a model or preset change, a prompt, a
+    /// command, an answer, an event result and an upload may not.
+    ///
+    /// The reason this exists rather than callers passing the policy themselves is
+    /// a specific bug that has already happened here. The policy parameter is
+    /// `RPCFailureRetryPolicy?` with a default of `nil`, so a call site that writes
+    /// `.none` intending the policy is writing `Optional.none` — which Swift
+    /// resolves to the *default*, retrying policy, and the mutation is retried.
+    /// The failure is silent, compiles cleanly, and looks correct on review.
+    ///
+    /// So this pair takes no policy at all. There is no parameter to get wrong, and
+    /// a write that wants retries cannot be expressed.
+    @discardableResult
+    public func mutate<Args: Codable & Sendable, Value: Codable & Sendable>(
+        _ method: String,
+        args: Args,
+        returning _: Value.Type = Value.self
+    ) async throws -> RPCResponse<Value> {
+        try await call(
+            method,
+            args: args,
+            returning: Value.self,
+            retryPolicy: RPCFailureRetryPolicy.none
+        )
+    }
+
+    /// A write whose result the caller does not model.
+    @discardableResult
+    public func mutateVoid<Args: Codable & Sendable>(
+        _ method: String,
+        args: Args
+    ) async throws -> RPCResponse<JSONValue> {
+        try await mutate(method, args: args, returning: JSONValue.self)
+    }
+
     // MARK: - Internals
 
     private func perform<Args: Codable & Sendable>(

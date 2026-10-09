@@ -559,6 +559,53 @@ func retryPolicyNoneStopsAfterOneAttempt() async throws {
     #expect(slept.isEmpty)
 }
 
+@Test("a write through the mutation helper makes exactly one attempt")
+func mutationHelperNeverRetries() async throws {
+    // The same guarantee as the test above, but reached without a call site ever
+    // naming a policy. The hazard it removes is specific: the policy parameter is
+    // `RPCFailureRetryPolicy?` defaulting to nil, so a call site writing `.none`
+    // means `Optional.none` and gets the *retrying* default instead — silently,
+    // and it compiles cleanly. `mutate` has no policy parameter, so that mistake
+    // is not expressible.
+    let transport = StubRelayTransport(
+        responses: Array(
+            repeating: .json(status: 429, Data(), headers: ["Retry-After": "5"]),
+            count: 3
+        )
+    )
+    let sleeper = RecordingRelaySleeper()
+    let client = makeRPCClient(transport: transport, sleeper: sleeper)
+
+    let error = await #expect(throws: DshRPCError.self) {
+        try await client.mutateVoid("session/prompt", args: RPCEmptyRequest())
+    }
+    #expect(error == .rateLimited(retryAfterSeconds: 5, attempts: 1))
+
+    let attempts = await transport.recordedRequests.count
+    let slept = await sleeper.sleptSeconds
+    #expect(attempts == 1)
+    #expect(slept.isEmpty)
+}
+
+@Test("a read still retries, so the helper is not a blanket ban")
+func readsStillRetry() async throws {
+    // The other half of SPEC §3: safe reads keep the bounded read-retry policy.
+    // If the mutation policy had leaked into `call`, this is what would catch it.
+    let transport = StubRelayTransport(
+        responses: [
+            .json(status: 429, Data(), headers: ["Retry-After": "0"]),
+            .json(status: 200, json(#"{"type":"server-response","rpcId":"r","result":{"ok":true}}"#)),
+        ]
+    )
+    let sleeper = RecordingRelaySleeper()
+    let client = makeRPCClient(transport: transport, sleeper: sleeper)
+
+    try await client.callVoid("session/list", args: RPCEmptyRequest())
+
+    let attempts = await transport.recordedRequests.count
+    #expect(attempts == 2)
+}
+
 @Test("an unlisted status is carried whole")
 func status500MapsToUnexpectedStatus() async throws {
     let transport = StubRelayTransport()
