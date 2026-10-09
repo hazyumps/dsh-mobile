@@ -20,13 +20,56 @@ struct ConversationBuilderTests {
         try frame(#"{"type":"item","streamId":"1","value":{"type":"assistant-stream","frame":\#(json)}}"#)
     }
 
+    /// A `chunk` frame carrying one delta. **Synthetic**: no live
+    /// `session/follow` frame carrying a delta was ever captured — the only
+    /// captured live chunk is a `block-start` — so this shape comes from
+    /// installed source and `SPEC §7`.
+    private func deltaFrame(
+        _ attempt: String,
+        revision: Int64,
+        outerIndex: Int64,
+        type: String,
+        blockIndex: Int,
+        text: String
+    ) -> String {
+        let chunk = #"{"type":"\#(type)","index":\#(blockIndex),"text":"\#(text)"}"#
+        return #"{"type":"chunk","attemptId":"\#(attempt)","revision":\#(revision),"index":\#(outerIndex),"chunk":\#(chunk)}"#
+    }
+
+    /// A snapshot baseline. The `{header, cursor, records, hasMore}` envelope is
+    /// **captured** (`Fixtures/mux-stream-frames.json`); the `assistantStream`
+    /// baseline is **synthetic**, because no capture holds an `activeAttempt`.
+    private func snapshot(
+        cursor: Int64,
+        records: String = "[]",
+        assistantStream: String? = nil
+    ) throws -> MuxSnapshot {
+        var json = #"{"header":{"version":4},"cursor":\#(cursor),"records":\#(records),"hasMore":false"#
+        if let assistantStream {
+            json += #","assistantStream":\#(assistantStream)"#
+        }
+        json += "}"
+        return try JSONDecoder().decode(MuxSnapshot.self, from: Data(json.utf8))
+    }
+
+    /// One `event` record for a snapshot's `records` array.
+    private func userRecord(seq: Int64, text: String) -> String {
+        #"{"type":"event","event":{"type":"user/message","seq":\#(seq),"time":1,"data":{"content":[{"type":"text","text":"\#(text)"}]}}}"#
+    }
+
     @Test("the captured stream folds, and its one missing seq shows as a gap")
     func capturedFixtureFolds() throws {
         // The fixture holds one frame per kind by construction, so seq 34 is
         // absent and the gap flag is the correct reading, not a defect.
         let frames = try #require(Fixtures.object(.muxStreamFrames)["frames"]?.objectValue)
+        // The baseline goes first, as it does on the wire. A snapshot now replaces
+        // the window, so applying it last — which this test did while the builder
+        // merged — would wipe the very history the fold is checking.
+        let keys = frames.keys.sorted().filter { $0 == "snapshot" }
+            + frames.keys.sorted().filter { $0 != "snapshot" }
         var builder = ConversationBuilder()
-        for (_, json) in frames.sorted(by: { $0.key < $1.key }) {
+        for key in keys {
+            guard let json = frames[key] else { continue }
             builder.apply(try JSONDecoder().decode(MuxFrame.self, from: JSONEncoder().encode(json)))
         }
         #expect(!builder.isEmpty)
@@ -94,9 +137,9 @@ struct ConversationBuilderTests {
             try event("user/message", seq: 2, data: #"{"content":[{"type":"text","text":"one"}]}"#),
             try event("assistant/message", seq: 3, data: #"{"message":{"content":[{"type":"text","text":"two"}]}}"#),
         ]
-        builder.merge(page: page)
+        builder.merge(page: page, generation: builder.generation)
         let first = builder.messages.map(\.id)
-        builder.merge(page: page)
+        builder.merge(page: page, generation: builder.generation)
         #expect(builder.messages.map(\.id) == first)
         #expect(builder.messages.count == 2)
     }
@@ -140,5 +183,188 @@ struct ConversationBuilderTests {
         #expect(builder.messages.count == 1)
         #expect(builder.messages.first?.text == "done")
         #expect(builder.messages.first?.isProvisional == false)
+    }
+
+    // MARK: - A snapshot replaces the window
+
+    @Test("a second snapshot replaces the transcript instead of merging into it")
+    func secondSnapshotReplacesTheTranscript() throws {
+        var builder = ConversationBuilder()
+        builder.apply(snapshot: try snapshot(cursor: 1, records: "[\(userRecord(seq: 1, text: "first"))]"))
+        // A preview from the first generation must not survive the second either.
+        builder.apply(try streamFrame(#"{"type":"start","attemptId":"a1","revision":1}"#))
+        builder.apply(try streamFrame(deltaFrame(
+            "a1", revision: 2, outerIndex: 0, type: "text-delta", blockIndex: 0, text: "draft"
+        )))
+        #expect(builder.messages.map(\.text) == ["first", "draft"])
+
+        builder.apply(snapshot: try snapshot(cursor: 9, records: "[\(userRecord(seq: 9, text: "second"))]"))
+
+        #expect(builder.messages.map(\.text) == ["second"])
+        #expect(builder.messages.allSatisfy { !$0.isProvisional })
+        #expect(!builder.isStreaming)
+        #expect(!builder.hasGap)
+    }
+
+    @Test("the snapshot cursor is exposed for paging and the generation advances")
+    func cursorAndGenerationExposed() throws {
+        var builder = ConversationBuilder()
+        #expect(builder.cursor == nil)
+        #expect(builder.generation == 0)
+
+        builder.apply(snapshot: try snapshot(cursor: 48))
+        #expect(builder.cursor == 48)
+        #expect(builder.generation == 1)
+
+        builder.apply(snapshot: try snapshot(cursor: 50))
+        #expect(builder.cursor == 50)
+        #expect(builder.generation == 2)
+    }
+
+    @Test("a page fetched for an older generation is dropped")
+    func stalePageFromAnOlderGenerationIsDropped() throws {
+        var builder = ConversationBuilder()
+        builder.apply(snapshot: try snapshot(cursor: 1, records: "[\(userRecord(seq: 1, text: "first"))]"))
+        let staleGeneration = builder.generation
+        let page = [try event("user/message", seq: 0, data: #"{"content":[{"type":"text","text":"older"}]}"#)]
+
+        builder.apply(snapshot: try snapshot(cursor: 9, records: "[\(userRecord(seq: 9, text: "second"))]"))
+
+        // The page was requested against the previous baseline; merging it would
+        // splice another generation's history into this one.
+        builder.merge(page: page, generation: staleGeneration)
+        #expect(builder.messages.map(\.text) == ["second"])
+
+        // The current generation's page still merges, in seq order.
+        builder.merge(page: page, generation: builder.generation)
+        #expect(builder.messages.map(\.text) == ["older", "second"])
+    }
+
+    // MARK: - The expected live sequence comes from the cursor
+
+    @Test("an empty baseline seeds the expected sequence from the cursor, not from a record")
+    func emptyBaselineSeedsExpectedSequence() throws {
+        var skipped = ConversationBuilder()
+        skipped.apply(snapshot: try snapshot(cursor: 7))
+        skipped.apply(event: try event("turn/start", seq: 9))
+        #expect(skipped.hasGap)
+
+        var contiguous = ConversationBuilder()
+        contiguous.apply(snapshot: try snapshot(cursor: 7))
+        contiguous.apply(event: try event("turn/start", seq: 8))
+        #expect(!contiguous.hasGap)
+
+        // `-1` is the host's "before the first event", so the expectation is 0
+        // and the event at 0 is contiguous rather than a gap.
+        var fromZero = ConversationBuilder()
+        fromZero.apply(snapshot: try snapshot(cursor: -1))
+        fromZero.apply(event: try event("turn/start", seq: 0))
+        #expect(!fromZero.hasGap)
+
+        // A cursor at the top of the range wraps; a corrupt value must not trap.
+        var overflowing = ConversationBuilder()
+        overflowing.apply(snapshot: try snapshot(cursor: .max))
+        overflowing.apply(event: try event("turn/start", seq: 0))
+        #expect(overflowing.hasGap)
+    }
+
+    @Test("a settlement the window has already passed is missing, not held")
+    func settlementBehindTheWindowIsMissing() throws {
+        var builder = ConversationBuilder()
+        builder.apply(snapshot: try snapshot(cursor: 4))
+        builder.apply(try streamFrame(#"{"type":"start","attemptId":"a1","revision":1}"#))
+        builder.apply(try streamFrame(deltaFrame(
+            "a1", revision: 2, outerIndex: 0, type: "text-delta", blockIndex: 0, text: "half"
+        )))
+        builder.apply(try streamFrame(#"{"type":"end","attemptId":"a1","revision":3,"index":1,"outcome":{"kind":"committed","eventType":"assistant/message","seq":6}}"#))
+        #expect(builder.messages.count == 1)
+
+        // Seq 7 lands without seq 6, so the record the end named is not late — it
+        // is missing, and holding the preview would promise a reply forever.
+        builder.apply(event: try event("turn/start", seq: 7))
+        #expect(builder.messages.isEmpty)
+        #expect(builder.hasGap)
+    }
+
+    // MARK: - Provisional text from the stream
+
+    @Test("text accumulates per block index and reasoning never merges into it (synthetic deltas)")
+    func textAccumulatesAcrossBlockIndices() throws {
+        var builder = ConversationBuilder()
+        builder.apply(try streamFrame(#"{"type":"start","attemptId":"a1","revision":1}"#))
+        builder.apply(try streamFrame(deltaFrame(
+            "a1", revision: 2, outerIndex: 0, type: "reasoning-delta", blockIndex: 0, text: "why "
+        )))
+        builder.apply(try streamFrame(deltaFrame(
+            "a1", revision: 3, outerIndex: 1, type: "text-delta", blockIndex: 0, text: "Hel"
+        )))
+        builder.apply(try streamFrame(deltaFrame(
+            "a1", revision: 4, outerIndex: 2, type: "text-delta", blockIndex: 0, text: "lo"
+        )))
+        builder.apply(try streamFrame(deltaFrame(
+            "a1", revision: 5, outerIndex: 3, type: "text-delta", blockIndex: 1, text: " world"
+        )))
+        builder.apply(try streamFrame(deltaFrame(
+            "a1", revision: 6, outerIndex: 4, type: "reasoning-delta", blockIndex: 1, text: "more"
+        )))
+
+        let preview = try #require(builder.messages.first { $0.isProvisional })
+        #expect(preview.text == "Hello world")
+        #expect(preview.reasoning == "why more")
+        #expect(builder.isStreaming)
+    }
+
+    @Test("a duplicate and an out-of-order chunk neither double nor reorder the text (synthetic deltas)")
+    func duplicateAndOutOfOrderChunksDoNotDoubleText() throws {
+        var builder = ConversationBuilder()
+        builder.apply(try streamFrame(#"{"type":"start","attemptId":"a1","revision":1}"#))
+        builder.apply(try streamFrame(deltaFrame(
+            "a1", revision: 2, outerIndex: 0, type: "text-delta", blockIndex: 0, text: "ab"
+        )))
+        // The same frame replayed: same revision, same outer index.
+        builder.apply(try streamFrame(deltaFrame(
+            "a1", revision: 2, outerIndex: 0, type: "text-delta", blockIndex: 0, text: "ab"
+        )))
+        #expect(builder.messages.first?.text == "ab")
+
+        builder.apply(try streamFrame(deltaFrame(
+            "a1", revision: 3, outerIndex: 1, type: "text-delta", blockIndex: 0, text: "cd"
+        )))
+        #expect(builder.messages.first?.text == "abcd")
+
+        // A late frame carries a lower outer index; its fragment must not land
+        // after "cd" and must not be appended at all.
+        builder.apply(try streamFrame(deltaFrame(
+            "a1", revision: 2, outerIndex: 0, type: "text-delta", blockIndex: 0, text: "XX"
+        )))
+        #expect(builder.messages.first?.text == "abcd")
+    }
+
+    @Test("a reconnect baseline's compact prefix becomes provisional text (synthetic)")
+    func reconnectBaselineBecomesProvisionalText() throws {
+        // A run of n fragments carries n - 1 gaps, which is the expander's rule.
+        let textRun = #"{"type":"text-chunks","time0":1,"index":0,"dt":[1],"texts":["Hel","lo"]}"#
+        let reasoningRun = #"{"type":"reasoning-chunks","time0":9,"index":0,"dt":[],"texts":["why "]}"#
+        let baseline = #"{"revision":19,"activeAttempt":{"attemptId":"a1","startedAfterSeq":36,"nextIndex":3,"stream":[\#(textRun),\#(reasoningRun)]}}"#
+
+        var builder = ConversationBuilder()
+        builder.apply(snapshot: try snapshot(cursor: 36, assistantStream: baseline))
+        let preview = try #require(builder.messages.first { $0.isProvisional })
+        #expect(preview.text == "Hello")
+        #expect(preview.reasoning == "why ")
+        #expect(builder.isStreaming)
+
+        // `nextIndex` is 3, so a frame at index 2 is already inside the prefix and
+        // must not be appended twice.
+        builder.apply(try streamFrame(deltaFrame(
+            "a1", revision: 20, outerIndex: 2, type: "text-delta", blockIndex: 0, text: "Hello"
+        )))
+        #expect(builder.messages.first?.text == "Hello")
+
+        // The next frame, index 3, continues the same block.
+        builder.apply(try streamFrame(deltaFrame(
+            "a1", revision: 21, outerIndex: 3, type: "text-delta", blockIndex: 0, text: "!"
+        )))
+        #expect(builder.messages.first?.text == "Hello!")
     }
 }
