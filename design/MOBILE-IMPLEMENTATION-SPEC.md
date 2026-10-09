@@ -300,6 +300,36 @@ The installed LLM source encodes visible text chunks as `{type:"text-delta",inde
 
 Reconnect `activeAttempt.stream` is a compact prefix, not an array of identical live frames. Implement and fixture-test expansion of `chunk`, `text-chunks`, `reasoning-chunks`, and `tool-call-chunks` records, including their timing arrays. Restore `nextIndex` and do not append an already included prefix again. Reference `dsh-llm/lib/types/assistant-stream.js::expandAssistantStream` and the host/web folds listed in §13.
 
+The exact compact shapes, read from `validateRecord` in that file, which validates them at a durable boundary by requiring **exactly** these keys:
+
+| Record | Keys | Members |
+| --- | --- | --- |
+| `text-chunks` | `type`, `time0`, `index`, `dt`, `texts` | `texts`, non-empty |
+| `reasoning-chunks` | `type`, `time0`, `index`, `dt`, `texts` | `texts`, non-empty |
+| `tool-call-chunks` | `type`, `time0`, `index`, `dt`, `id`, `args`, plus `name` only when the run carried one | `args`, non-empty |
+| `chunk` | `type`, `time`, `chunk` | one raw chunk, verbatim |
+
+`dt` holds the inter-member gaps and therefore has exactly `members.count - 1` entries. Expansion is cumulative from the run's start, not relative to the previous member:
+
+```js
+let time = record.time0;
+for (let i = 0; i < members.length; i += 1) {
+    if (i > 0) time += record.dt[i - 1];
+    // text-chunks      -> { type: "text-delta",      index: record.index, text: members[i] }
+    // reasoning-chunks -> { type: "reasoning-delta", index: record.index, text: members[i] }
+    // tool-call-chunks -> { type: "tool-call-delta", index: record.index, id: record.id,
+    //                       ...(has name ? { name: record.name } : {}), argumentsDelta: members[i] }
+}
+```
+
+Three consequences worth stating, because each is easy to get wrong:
+
+- A run's `index` is the **content-block** index. It is not the outer assistant-stream frame's `index`, which advances per frame.
+- A `tool-call-chunks` run requires non-empty `id` and `name`; the accumulator falls back to a raw `chunk` record when either is empty, so a tool call can arrive either way and both must expand.
+- The host's accumulator keeps an internal `lastTime` while merging runs, and strips it when publishing the durable form. The wire records above carry no `lastTime`, and a decoder that requires one will reject every real record.
+
+`chunk` records are the fallback for everything that does not compact — including the other model chunk kinds, `block-start`, `block-end`, `usage`, and `finish` — so the expander must pass an unrecognised raw chunk through rather than drop it.
+
 Duplicate/older frames must not duplicate text; gaps, contradictory baselines, or unsupported structural changes cause a fresh follow. Never require a new live `start` after reconnect when a valid active baseline already supplies it.
 
 On a committed end, associate the named durable event sequence/type with the provisional attempt. Render the final answer once. Test both settlement arrival orders, and missing settlement recovery. On abandonment, retire the provisional attempt. Preserve any valid durable failure/interruption content. The source web fold is the reference for settlement identity; the native view need not reproduce its fractional presentation sequence numbers.
