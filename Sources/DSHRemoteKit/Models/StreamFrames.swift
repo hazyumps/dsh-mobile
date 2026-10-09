@@ -437,6 +437,21 @@ public struct DurableEventEnvelope: Codable, Sendable, Hashable {
     /// unverified: only those two show it, and it is redacted there, so whether other event
     /// types carry it and what its values mean is unknown. Opaque string.
     public var surfaceOp: String?
+
+    /// Explicit so a fixture or a preview can build one. On the wire this is decoded.
+    public init(
+        type: String,
+        seq: Int64,
+        time: Int64? = nil,
+        data: JSONValue,
+        surfaceOp: String? = nil
+    ) {
+        self.type = type
+        self.seq = seq
+        self.time = time
+        self.data = data
+        self.surfaceOp = surfaceOp
+    }
 }
 
 // MARK: - Live assistant stream

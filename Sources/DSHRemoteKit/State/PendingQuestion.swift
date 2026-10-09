@@ -25,10 +25,34 @@ public struct PendingQuestion: Sendable, Hashable, Identifiable {
     /// Whether more than one option may be selected.
     public let allowsMultiple: Bool
 
+    /// Explicit so a fixture or a preview can build one. This type is normally decoded
+    /// from a `tool/call` event, and a decision card that can only be seen with a live
+    /// host is a decision card nobody can review.
+    public init(
+        id: String,
+        callId: String,
+        header: String? = nil,
+        question: String,
+        options: [Option],
+        allowsMultiple: Bool = false
+    ) {
+        self.id = id
+        self.callId = callId
+        self.header = header
+        self.question = question
+        self.options = options
+        self.allowsMultiple = allowsMultiple
+    }
+
     public struct Option: Sendable, Hashable, Identifiable {
         public var id: String { label }
         public let label: String
         public let detail: String?
+
+        public init(label: String, detail: String? = nil) {
+            self.label = label
+            self.detail = detail
+        }
     }
 
     /// The tool name the harness uses to ask.

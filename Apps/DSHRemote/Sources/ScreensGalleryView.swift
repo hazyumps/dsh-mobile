@@ -25,11 +25,105 @@ struct ScreensGalleryView: View {
         Group {
             if screen == "drawer" {
                 drawer
+            } else if screen == "conversation" {
+                conversation
             } else {
                 HomeView()
             }
         }
         .task { model.seedForScreensGallery() }
+    }
+
+    /// A conversation with the constructs a real one carries: prose, a fenced block,
+    /// collapsed reasoning, an activity card, a gap, older history, and a batch of
+    /// questions. The values are invented; the *shapes* are the ones the client folds
+    /// out of the wire.
+    private var conversation: some View {
+        ScrollView {
+            ConversationTranscript(snapshot: Self.conversationFixture)
+                .padding(.horizontal, DSHMetrics.pageMargin)
+                .padding(.vertical, DSHMetrics.cardCornerRadius)
+        }
+        .background(DSHPalette.canvas)
+    }
+
+    private static var conversationFixture: ConversationSnapshot {
+        ConversationSnapshot(
+            generation: 1,
+            messages: [
+                ConversationMessage(
+                    id: "seq:10",
+                    role: .user,
+                    text: "Why did the feed stop mid-turn?",
+                    isProvisional: false,
+                    reasoning: nil
+                ),
+                ConversationMessage(
+                    id: "seq:11",
+                    role: .assistant,
+                    text: """
+                    The step ended without a matching durable record, so the window kept \
+                    the preview until it could prove what happened.
+
+                    ```sh
+                    swift test --disable-sandbox --filter ChatSessionTests
+                    ```
+
+                    Then the next `$events` frame carried the committed sequence.
+                    """,
+                    isProvisional: false,
+                    reasoning: "Check the sequence expectation first: cursor + 1, not one past the highest record."
+                ),
+                ConversationMessage(
+                    id: "attempt:live",
+                    role: .assistant,
+                    text: "Checking whether the settlement arrived out of order…",
+                    isProvisional: true,
+                    reasoning: nil
+                ),
+            ],
+            unmodelledEvents: [
+                DurableEventEnvelope(
+                    type: "agent/inbox/spliced",
+                    seq: 12,
+                    time: 1,
+                    data: .object(["name": .string("inbox")]),
+                    surfaceOp: nil
+                )
+            ],
+            hasSnapshot: true,
+            hasGap: true,
+            isStreaming: true,
+            followError: nil,
+            pendingQuestions: [
+                PendingQuestion(
+                    id: "q-1",
+                    callId: "call-1",
+                    header: "Recovery",
+                    question: "Re-run the suite against the captured frames?",
+                    options: [
+                        .init(label: "Re-run the tests", detail: "swift test, offline"),
+                        .init(label: "Skip for now", detail: nil),
+                    ],
+                    allowsMultiple: false
+                ),
+                PendingQuestion(
+                    id: "q-2",
+                    callId: "call-1",
+                    header: "Recovery",
+                    question: "Which baseline should the next check use?",
+                    options: [
+                        .init(label: "The captured snapshot", detail: nil),
+                        .init(label: "A scratch session", detail: nil),
+                    ],
+                    allowsMultiple: true
+                ),
+            ],
+            cursor: 31,
+            canLoadOlder: true,
+            isLoadingOlder: false,
+            pageError: nil
+        )
     }
 
     /// The drawer stands alone here because that is how it is presented: Home's own

@@ -35,6 +35,40 @@ public struct ConversationSnapshot: Sendable, Hashable {
     public var isLoadingOlder: Bool
     /// Why the last older-history load failed, if it did.
     public var pageError: String?
+
+    /// Explicit rather than the memberwise default, so a fixture or a preview can build
+    /// one: the properties are public, and a screen that cannot be rendered without a
+    /// host is a screen that cannot be reviewed on a machine with no Simulator GUI.
+    public init(
+        generation: Int = 0,
+        messages: [ConversationMessage] = [],
+        unmodelledEvents: [DurableEventEnvelope] = [],
+        hasSnapshot: Bool = false,
+        hasGap: Bool = false,
+        isStreaming: Bool = false,
+        followError: String? = nil,
+        pendingQuestions: [PendingQuestion] = [],
+        cursor: Int64? = nil,
+        canLoadOlder: Bool = false,
+        isLoadingOlder: Bool = false,
+        pageError: String? = nil
+    ) {
+        self.generation = generation
+        self.messages = messages
+        self.unmodelledEvents = unmodelledEvents
+        self.hasSnapshot = hasSnapshot
+        self.hasGap = hasGap
+        self.isStreaming = isStreaming
+        self.followError = followError
+        self.pendingQuestions = pendingQuestions
+        self.cursor = cursor
+        self.canLoadOlder = canLoadOlder
+        self.isLoadingOlder = isLoadingOlder
+        self.pageError = pageError
+    }
+
+    /// Nothing loaded yet: what the screen shows before the first publish.
+    public static let idle = ConversationSnapshot()
 }
 
 /// One older-history request, in the terms the screen and the store both use.

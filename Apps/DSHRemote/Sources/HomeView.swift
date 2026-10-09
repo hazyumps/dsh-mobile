@@ -57,7 +57,7 @@ struct HomeView: View {
             .navigationDestination(for: Route.self) { route in
                 switch route {
                 case .session(let sessionId):
-                    ChatView(sessionId: sessionId)
+                    ConversationView(sessionId: sessionId)
                 case .sessions(let workspaceId):
                     SessionBrowserView(workspaceId: workspaceId)
                 }

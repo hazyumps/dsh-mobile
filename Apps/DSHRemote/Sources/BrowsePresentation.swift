@@ -72,6 +72,14 @@ struct BrowseState: Hashable {
         return workspaces.first { $0.id == id }
     }
 
+    /// One session by id, wherever the host filed it. Used for a conversation's title.
+    func session(id: String) -> BrowseSession? {
+        for workspace in workspaces {
+            if let match = workspace.sessions.first(where: { $0.id == id }) { return match }
+        }
+        return nil
+    }
+
     var sessionCount: Int { workspaces.reduce(0) { $0 + $1.sessions.count } }
 
     /// A reason to show beside the list, when a load failed.
