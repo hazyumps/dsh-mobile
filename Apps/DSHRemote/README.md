@@ -110,9 +110,22 @@ land (SPEC §10).
 
 A conversation renders from `ChatSession`'s snapshot stream (messages, reasoning,
 fenced code with Copy, non-message activity cards, older-history paging) and
-batches pending questions by `callId`. **Approvals, the timed-question claim, and
-the create transaction are not wired yet**; an approval arriving on `$events`
-currently produces no card.
+batches pending questions by `callId`. The follow and the pager ask for a bounded
+page — `ChatSession.pageMessages`, measured against the socket's inbound limit,
+because an unbounded baseline destroys the connection (see that constant).
+
+Approvals and live questions are answered through the `$events` router:
+`AppModel` composes one `InteractionStore` per selected host, mounts one router
+subscription per ready generation, and publishes the decisions a screen renders.
+A question with a current delivery goes through `$events/result`; only one with no
+live channel uses `userQuestions/answer`. The timed question's foreground claim is
+attached, paused and released by the conversation screen, which is where SPEC §8
+puts its lifetime.
+
+**Still to come:** the create transaction (SPEC §5) and the model/mode pickers,
+attachments and commands (SPEC §6, §9) — so New session and the Home composer
+remain disabled with their reason — and the capability-gated secondary screens
+(SPEC §10).
 
 Returning from the background automatically opens a new connection with the
 stored credential and refreshes the session list and open conversation. Temporary
