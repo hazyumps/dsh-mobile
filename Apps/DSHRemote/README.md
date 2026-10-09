@@ -176,6 +176,16 @@ host (`session/attachment` → `SessionImageCache`), with a placeholder at the a
 aspect ratio while it loads. Nothing is kept on the device: the phone may have been
 reinstalled since the message was sent, and the host is the only copy certain to exist.
 
+**Session cards** carry SPEC §4's "Needs your input" state, from the host's *current* channels
+— the `inbox`/`userQuestions.active` projections and a live `$events` delivery — never from a
+historical `ask_user_question` tool call. The recent list refreshes on foreground, on opening
+the drawer, on pull-to-refresh, and every 15 seconds while it is visible.
+
+**`DSH_TRACE=1`** prints a one-line decisions trace (subscription, waterfall, live waiters) to
+stdout, readable with `xcrun simctl launch --console-pty`. It exists because a missing badge
+looks like nothing at all, and nothing else shows whether the `$events` subscription was
+established. Debug builds only.
+
 **Still to come:** physical-device validation (slice F), which is the only way to check the
 two pickers, background recovery, and the timed claim under a real lock.
 
