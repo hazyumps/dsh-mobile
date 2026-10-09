@@ -1,7 +1,7 @@
 # dsh-mobile
 
-An iPhone client for a [DeepSeek Harness](https://github.com/hazyumps) relay: pair with the
-harness running on your computer, then read and drive your sessions from the phone.
+An iPhone client for a DeepSeek Harness relay: pair with the harness running on your computer,
+then read and drive your sessions from the phone.
 
 Native SwiftUI, iOS 18+, no third-party dependencies. The transport, state and persistence live
 in a Swift package (`DSHRemoteKit`) that is testable on its own; the app target is the UI.
