@@ -448,6 +448,10 @@ These destinations should become useful read-only surfaces first. A drawer label
 
 Schedule catalog entries include `sessionId`, `status`, schedule kind/parameters, and optional `lastDelivery`. Honor their actual time zone and timestamps. Do not assume there is a schedule stream; refresh on entry, pull-to-refresh, and foreground return while that screen is visible.
 
+Two shape details that decide whether the decode works at all. `schedule/catalog` returns a **bare array**, not an object with an `items` key, so a client that assumes the list envelope of `session/list` finds nothing. And the entry is a `kind` union of three schedule forms with different parameter fields — `after` carries `afterSeconds`, `every` carries `everySeconds`, and `at` carries neither, all three sharing `id`, `title`, `prompt`, `scheduledAt`, `sessionId`, `status`, and optional `lastDelivery`. Decode the union rather than reading a parameter that only one arm has.
+
+`pluginInventory/list` returns `managementAvailable` (optional), `entries`, and `agentPresets`. Each entry carries `entryId`, `moduleName`, `enabled`, `fiberPhase`, and an optional `meta`. Two of `meta`'s fields are **not plain strings**: `title` and `description` are each a union of a string and a localized map (`{"en": "…"}`, or any `Record<string, string>`). A client that decodes them as `String` renders nothing for a plugin that supplies translations, so the localized form has to be modelled or tolerated rather than treated as malformed.
+
 Maintain a small capability state per host/version: `unknown`, `available`, `unavailable(reason)`, or `failed(error)`. Start from known descriptors for this build and actual read results. A transport 404 or unknown-method response needs endpoint-specific interpretation; 401/403, timeout, and host-data failure are not proof that a capability is absent. Do not probe destructive methods to discover support. There is no invented universal `/capabilities` endpoint.
 
 ## 11. Remote identity, address changes, and diagnostics
