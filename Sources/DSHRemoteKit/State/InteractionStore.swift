@@ -356,13 +356,19 @@ public actor InteractionStore {
         guard let channel = answerContinued else {
             throw InteractionRefusal.continuedChannelUnavailable
         }
-        // Validation needs the batch, which lives on the waterfall that asked. A continued
-        // row arrives from a projection rather than a waterfall, so the caller supplies the
-        // questions it is answering when there is no waterfall to read them from.
-        guard let ready = await identity() else {
+        // There is no waterfall here, so no delivery generation to compare against: the
+        // question arrived from a projection rather than the event stream. What still has to
+        // be true is that a connection exists at all — without one the answer has nowhere to
+        // go, and reporting that as a transport failure is more honest than letting the
+        // channel fail with whatever the caller's own error happens to be.
+        //
+        // Validation is the caller's here for the same reason: the questions live on a
+        // waterfall this store may never have seen, so it cannot check the answer against
+        // them. Callers that do hold the batch should validate with
+        // ``QuestionAnswerValidator`` before reaching this point.
+        guard await identity() != nil else {
             throw InteractionRefusal.staleGeneration
         }
-        _ = ready
         return try await channel(agentId, callId, QuestionAnswerValidator.body(answers))
     }
 }
