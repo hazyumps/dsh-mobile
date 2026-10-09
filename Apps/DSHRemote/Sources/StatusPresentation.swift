@@ -23,13 +23,17 @@ extension ConnectionStatus {
     var isUsable: Bool { self == .connected }
 }
 
+/// The transport state, in the same chip the host row and the cards use.
+///
+/// It used to be a bare `Label`, which a navigation bar squeezes into a single
+/// letter — "Offline" became a clipped circle. The chip carries the same words, its
+/// state colour, and a symbol, and `fixedSize` stops the bar from compressing it.
 struct StatusBadge: View {
     let status: ConnectionStatus
 
     var body: some View {
-        Label(status.label, systemImage: status.symbol)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .labelStyle(.titleAndIcon)
+        let state = DSHHostState(status)
+        DSHStatusChip(state.text, tone: state.tone, symbol: state.symbol)
+            .fixedSize()
     }
 }

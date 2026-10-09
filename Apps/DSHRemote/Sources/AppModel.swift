@@ -4,6 +4,11 @@ import Observation
 import UIKit
 
 /// Pairing, the selected host, and the state shared by the phone's screens.
+///
+/// Ownership follows SPEC §2: this is the composition root. It builds one coordinator
+/// and one ``HostSessionStore`` per selected host, observes their snapshots on the main
+/// actor, and publishes values the screens render. Views send intents and never create
+/// sockets or interpret wire payloads.
 @MainActor
 @Observable
 final class AppModel {
@@ -12,10 +17,17 @@ final class AppModel {
     var connectionID: UUID? { recovery?.connectionID }
     var connectionError: String? { recovery?.error?.description }
     var hosts: [SavedHost] = []
-    var sessions: [SessionSummary] = []
-    var sessionListError: String?
-    private var isRefreshingSessions = false
-    var isLoadingSessions: Bool { isRefreshingSessions || status == .connecting }
+
+    /// The host whose work is on screen. Nil means there is nothing to show but the
+    /// pairing introduction; the shell switches on it.
+    private(set) var selectedHost: SavedHost?
+
+    /// What the browse screens render, mapped from the host store's snapshot.
+    private(set) var browse: BrowseState = .idle
+
+    /// Where the user is. Persisted per host, separately from any draft (SPEC §5).
+    private(set) var selectedWorkspaceId: String?
+    private(set) var selectedSessionId: String?
 
     /// Result of reading a pasted pairing payload, shown beside the field.
     var pairingOutcome: PairingOutcome?
@@ -30,11 +42,13 @@ final class AppModel {
     private let clock: any EpochClock = SystemEpochClock()
     private let store = HostStore()
     private let secrets = KeychainSecretStore()
+    private let drafts: DraftStore
     private var coordinator: ConnectionCoordinator?
     private var recovery: ForegroundConnection?
-    private var selectedHostID: UUID?
+    private var hostStore: HostSessionStore?
+    private var statusTask: Task<Void, Never>?
+    private var snapshotTask: Task<Void, Never>?
     private var selectionID = UUID()
-    private var refreshID = UUID()
     private var isForeground = false
 
     /// Raised when a chat action is attempted with no live connection. The
@@ -94,6 +108,20 @@ final class AppModel {
         #endif
     }
 
+    /// Whether a launch should render the browse screens from fixture data instead of
+    /// a host.
+    ///
+    /// Same reason as the gallery, one level up: Home and the drawer only exist once a
+    /// host has been paired and has answered, and a screenshot is the only way to review
+    /// them on a machine with no Simulator GUI. Debug builds only.
+    var shouldShowScreenGalleryOnLaunch: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.environment["DSH_SCREEN_GALLERY"] != nil
+        #else
+        false
+        #endif
+    }
+
     /// A message to send once the conversation opens. Only ever set for
     /// verification, and only ever pointed at a scratch session: a duplicate or
     /// stray prompt costs real work, so this must not be aimed at a conversation
@@ -106,8 +134,223 @@ final class AppModel {
         #endif
     }
 
-    /// The chat session for one conversation, or `nil` when there is no live
-    /// connection.
+    init(draftsDirectory: URL? = nil) {
+        hosts = store.load()
+        drafts = DraftStore(directory: draftsDirectory ?? Self.defaultDraftsDirectory)
+        if !hosts.isEmpty { idleStatus = .offline }
+        // A host the user forgot must not stay selected on disk.
+        store.reconcileSelection(with: hosts)
+    }
+
+    private static var defaultDraftsDirectory: URL {
+        FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appending(path: "DSHRemote/Drafts", directoryHint: .isDirectory)
+    }
+
+    // MARK: - Host selection
+
+    /// Opens the host the app was last using, so a cold launch lands on work rather
+    /// than on the host list (UX spec, "Navigation and returning to work").
+    ///
+    /// Does nothing when a host is already selected: returning from the background is
+    /// ``setForeground(_:)``'s job, not a second selection.
+    func restoreLastHost() async {
+        guard selectedHost == nil else { return }
+        if shouldOpenFirstHostOnLaunch, let first = hosts.first {
+            await select(first)
+            return
+        }
+        guard let selection = store.loadSelection(),
+              let host = hosts.first(where: { $0.id == selection.hostId })
+        else { return }
+        await select(host)
+    }
+
+    /// Makes a saved host current: one coordinator, one host store, one set of streams.
+    func select(_ host: SavedHost) async {
+        // Re-selecting the current host is a refresh, not a new connection: tearing a
+        // live socket down to reconnect to the same host would drop the follow stream
+        // and the streams the store has already opened, for nothing.
+        if host.id == selectedHost?.id, coordinator != nil {
+            await refreshSessions()
+            return
+        }
+
+        let previous = recovery
+        statusTask?.cancel()
+        snapshotTask?.cancel()
+        recovery = nil
+        coordinator = nil
+        hostStore = nil
+        browse = .idle
+        selectedHost = host
+        selectionID = UUID()
+        let selection = selectionID
+        idleStatus = .connecting
+        // Take the previous host's streams down before building the next one's, so the
+        // two hosts never share a generation (SPEC §2, "one connection owner per host").
+        await previous?.stop()
+        guard selection == selectionID else { return }
+
+        do {
+            let token = try await secrets.secret(for: RelayDeviceCredential.account(hostUUID: host.id))
+            guard selection == selectionID else { return }
+            guard let token else { throw HostConnectionError.missingCredential }
+
+            let origin = ConnectionCoordinator.Origin(
+                baseURL: host.origin,
+                authorization: .bearer(token),
+                pinning: RelayPinningPolicy(
+                    expectedSPKIPin: host.pinnedFingerprint,
+                    requiresPlatformTrust: host.pinnedFingerprint == nil
+                )
+            )
+            let coordinator = ConnectionCoordinator(origin: origin)
+            // The session index is read through a client this store owns rather than
+            // through the coordinator's own `sessions()`, which owns a status policy: a
+            // list failure must not demote a healthy connection (SPEC §3).
+            let makeClient: @Sendable () -> DshRpcClient = {
+                DshRpcClient(
+                    baseURL: origin.baseURL,
+                    authorization: origin.authorization,
+                    transport: URLSessionRelayTransport(pinning: origin.pinning)
+                )
+            }
+            let hostStore = HostSessionStore(coordinator: coordinator, makeRPCClient: makeClient)
+            self.coordinator = coordinator
+            self.hostStore = hostStore
+            let recovery = ForegroundConnection(coordinator: coordinator)
+            self.recovery = recovery
+
+            observeStatus(of: coordinator, selection: selection)
+            observeSnapshots(of: hostStore, selection: selection)
+            try? store.saveSelection(HostSelection(hostId: host.id))
+            await restoreNavigation(for: host)
+            guard selection == selectionID else { return }
+            recovery.setForeground(isForeground)
+        } catch {
+            guard selection == selectionID else { return }
+            claimError = nil
+            let reason = Self.reason(for: error)
+            browse = BrowseState(
+                workspaces: [],
+                workspacesState: .failed(reason: reason),
+                sessionsState: .failed(reason: reason)
+            )
+            idleStatus = .pairingRequired
+        }
+    }
+
+    /// What to show the user for a failed selection.
+    ///
+    /// `String(describing:)` on a `LocalizedError` prints the case name — a missing
+    /// credential read as "missingCredential" on screen. The readable form is the point
+    /// of conformance, so use it when it exists.
+    static func reason(for error: any Error) -> String {
+        if let localized = error as? any LocalizedError, let description = localized.errorDescription {
+            return description
+        }
+        return String(describing: error)
+    }
+
+    /// The host store opens its streams the moment the connection is ready, and drops
+    /// them when it is not. Reading `statusUpdates()` rather than polling `status` is
+    /// what makes "an event arriving immediately after ready is not lost" true: the
+    /// subscription is live before the first refresh runs.
+    private func observeStatus(of coordinator: ConnectionCoordinator, selection: UUID) {
+        statusTask?.cancel()
+        statusTask = Task { [weak self] in
+            for await status in await coordinator.statusUpdates() {
+                guard !Task.isCancelled else { return }
+                await self?.apply(status: status, selection: selection)
+            }
+        }
+    }
+
+    private func apply(status: ConnectionStatus, selection: UUID) async {
+        guard selection == selectionID else { return }
+        guard status.isUsable, let hostStore else { return }
+        // Both calls are idempotent for a generation that is already open, so a status
+        // stream that repeats `connected` cannot open a second pair of streams.
+        _ = await hostStore.start()
+        await hostStore.refreshSessions()
+    }
+
+    private func observeSnapshots(of store: HostSessionStore, selection: UUID) {
+        snapshotTask?.cancel()
+        snapshotTask = Task { [weak self] in
+            for await snapshot in await store.snapshots() {
+                guard !Task.isCancelled else { return }
+                self?.apply(snapshot: snapshot, selection: selection)
+            }
+        }
+    }
+
+    private func apply(snapshot: HostSessionStore.Snapshot, selection: UUID) {
+        guard selection == selectionID else { return }
+        let next = BrowseState.from(snapshot)
+        browse = next
+        // A selected workspace that this host does not have — a host switch, a renamed
+        // registry — falls back rather than leaving the screens pointing at nothing.
+        if let workspaceId = selectedWorkspaceId, next.workspace(id: workspaceId) == nil {
+            selectedWorkspaceId = nil
+        }
+        if selectedWorkspaceId == nil {
+            selectedWorkspaceId = next.workspaces.first?.id
+            persistNavigation()
+        }
+    }
+
+    /// Re-reads the session index. The host is not paginated, so one call is the index.
+    func refreshSessions() async {
+        await hostStore?.refreshSessions()
+    }
+
+    func setForeground(_ active: Bool) {
+        isForeground = active
+        recovery?.setForeground(active)
+    }
+
+    // MARK: - Navigation
+
+    func selectWorkspace(_ workspaceId: String) {
+        guard selectedWorkspaceId != workspaceId else { return }
+        selectedWorkspaceId = workspaceId
+        persistNavigation()
+    }
+
+    func openSession(_ sessionId: String) {
+        selectedSessionId = sessionId
+        persistNavigation()
+    }
+
+    func closeSession() {
+        guard selectedSessionId != nil else { return }
+        selectedSessionId = nil
+        persistNavigation()
+    }
+
+    private func restoreNavigation(for host: SavedHost) async {
+        let saved = await drafts.navigation(for: host.id)
+        selectedWorkspaceId = saved.workspaceId
+        selectedSessionId = saved.sessionId
+    }
+
+    private func persistNavigation() {
+        guard let host = selectedHost else { return }
+        let value = DraftNavigation(
+            workspaceId: selectedWorkspaceId,
+            sessionId: selectedSessionId,
+            scrollAnchor: nil
+        )
+        let drafts = self.drafts
+        Task { try? await drafts.setNavigation(value, for: host.id) }
+    }
+
+    // MARK: - Chat plumbing (until the conversation store owns it)
+
+    /// The chat session for one conversation, or `nil` when there is no live connection.
     ///
     /// The screen cannot reach the coordinator itself: reading a conversation and
     /// writing to one are different capabilities (SPEC §4), and this is the seam
@@ -155,11 +398,6 @@ final class AppModel {
             selected: selected,
             custom: custom
         )
-    }
-
-    init() {
-        hosts = store.load()
-        if !hosts.isEmpty { idleStatus = .offline }
     }
 
     // MARK: - Pairing
@@ -251,6 +489,8 @@ final class AppModel {
             try store.save(hosts)
             pairingOutcome = nil
             idleStatus = .offline
+            // Pairing is a deliberate act: land on the host that was just paired.
+            await select(host)
         } catch let error as PairingError {
             claimError = error.readableReason ?? String(describing: error)
             idleStatus = hosts.isEmpty ? .pairingRequired : .offline
@@ -261,124 +501,55 @@ final class AppModel {
     }
 
     func forget(_ host: SavedHost) {
-        if selectedHostID == host.id { disconnect() }
+        let wasSelected = selectedHost?.id == host.id
         hosts.removeAll { $0.id == host.id }
         Task {
             try? await secrets.deleteRelayDeviceToken(forHostUUID: host.id)
         }
-        try? store.save(hosts)
+        Task {
+            await drafts.remove(hostId: host.id)
+        }
+        try? store.reconcileSelection(with: hosts)
+        if wasSelected { disconnect() }
         if hosts.isEmpty { idleStatus = .pairingRequired }
     }
 
-    // MARK: - Sessions
-
-    /// Connect to a saved host and read its sessions. The token comes from the
-    /// keychain, so this works after a relaunch without re-pairing.
-    func loadSessions(for host: SavedHost) async {
-        if selectedHostID == host.id, recovery != nil {
-            if status.isUsable { await refreshSessions() }
-            return
-        }
-        await select(host)
-    }
-
-    /// The app calls this once for every fresh ready connection, including after
-    /// returning from the background. A host data error keeps the cached list.
-    func refreshSessions() async {
-        refreshID = UUID()
-        let refresh = refreshID
-        guard let coordinator, let connectionID else {
-            isRefreshingSessions = false
-            return
-        }
-        let selection = selectionID
-        isRefreshingSessions = true
-        sessionListError = nil
-        defer {
-            if refresh == refreshID {
-                isRefreshingSessions = false
-            }
-        }
-        do {
-            let latest = try await coordinator.sessions()
-            guard refresh == refreshID, selection == selectionID,
-                  connectionID == self.connectionID else { return }
-            sessions = latest
-        } catch {
-            guard !Task.isCancelled, refresh == refreshID, selection == selectionID,
-                  connectionID == self.connectionID else { return }
-            sessionListError = String(describing: error)
-        }
-    }
-
-    func setForeground(_ active: Bool) {
-        isForeground = active
-        if !active { isRefreshingSessions = false }
-        recovery?.setForeground(active)
-    }
-
-    /// SPEC §3.3 groups by the host's workspace registry. The session row carries
-    /// `cwd` and the projections carry a title, so that is what this groups on
-    /// until the workspace stream is wired.
-    var sessionGroups: [(key: String, sessions: [SessionSummary])] {
-        let groups = Dictionary(grouping: sessions) { $0.cwd ?? "No directory" }
-        return groups
-            .map { (key: $0.key, sessions: $0.value.sorted { ($0.updatedAt ?? 0) > ($1.updatedAt ?? 0) }) }
-            .sorted { $0.key < $1.key }
-    }
-
-    func lastActivity(_ session: SessionSummary) -> Date? {
-        session.updatedAt.map { Date(timeIntervalSince1970: Double($0) / 1000) }
-    }
-
-    private func select(_ host: SavedHost) async {
-        let previous = recovery
-        previous?.setForeground(false)
-        recovery = nil
-        coordinator = nil
-        selectedHostID = host.id
-        selectionID = UUID()
-        let selection = selectionID
-        sessions = []
-        sessionListError = nil
-        isRefreshingSessions = false
-        idleStatus = .connecting
-        await previous?.stop()
-        guard selection == selectionID else { return }
-        do {
-            let token = try await secrets.secret(for: RelayDeviceCredential.account(hostUUID: host.id))
-            guard selection == selectionID else { return }
-            guard let token else { throw HostConnectionError.missingCredential }
-            let origin = ConnectionCoordinator.Origin(
-                baseURL: host.origin,
-                authorization: .bearer(token),
-                pinning: RelayPinningPolicy(
-                    expectedSPKIPin: host.pinnedFingerprint,
-                    requiresPlatformTrust: host.pinnedFingerprint == nil
-                )
-            )
-            let coordinator = ConnectionCoordinator(origin: origin)
-            self.coordinator = coordinator
-            let recovery = ForegroundConnection(coordinator: coordinator)
-            self.recovery = recovery
-            recovery.setForeground(isForeground)
-        } catch {
-            guard selection == selectionID else { return }
-            sessionListError = String(describing: error)
-            idleStatus = .pairingRequired
-        }
-    }
-
     func disconnect() {
+        statusTask?.cancel()
+        snapshotTask?.cancel()
         recovery?.setForeground(false)
         recovery = nil
         coordinator = nil
-        selectedHostID = nil
+        hostStore = nil
+        selectedHost = nil
+        selectedWorkspaceId = nil
+        selectedSessionId = nil
+        browse = .idle
         selectionID = UUID()
-        isRefreshingSessions = false
-        sessions = []
-        sessionListError = nil
         idleStatus = hosts.isEmpty ? .pairingRequired : .offline
+    }
+
+    // MARK: - Fixture seeding
+
+    /// Sets the published state directly, for the screens gallery only.
+    ///
+    /// The setters of these properties are private to this file, which is what keeps a
+    /// host store the only thing that can move them in the running app. The gallery
+    /// exists because this machine has no Simulator GUI and Home is unreachable without a
+    /// paired host, so it needs one narrow door — an explicit method, not loosened access.
+    ///
+    /// The only caller is `ScreensGalleryView`, and it is reached only through
+    /// ``shouldShowScreenGalleryOnLaunch``.
+    func seedForGallery(
+        host: SavedHost,
+        status: ConnectionStatus,
+        browse: BrowseState,
+        workspaceId: String?
+    ) {
+        selectedHost = host
+        idleStatus = status
+        self.browse = browse
+        selectedWorkspaceId = workspaceId
     }
 }
 

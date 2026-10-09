@@ -1,17 +1,21 @@
 import DSHRemoteKit
 import SwiftUI
 
-/// V1's landing screen. Sessions live under a host, so nothing else can be
-/// reached until one is paired — which is why the empty state is an invitation
-/// rather than a placeholder.
+/// Where a phone that has not chosen a harness starts: pairing, and the hosts it
+/// already knows.
+///
+/// UX spec "Navigation and returning to work": with no saved host this is the pairing
+/// introduction; a cold launch with a valid saved selection goes straight to ``HomeView``
+/// instead. Host administration also lives in Settings once a host is current, so this
+/// screen is the one you see before there is one — it keeps the pairing flow and the
+/// explanation of what pairing does and does not do.
 struct HostsView: View {
     @Environment(AppModel.self) private var model
     @State private var isPairing = false
     @State private var pendingForget: SavedHost?
-    @State private var path = NavigationPath()
 
     var body: some View {
-        NavigationStack(path: $path) {
+        NavigationStack {
             Group {
                 if model.hosts.isEmpty {
                     emptyState
@@ -19,20 +23,7 @@ struct HostsView: View {
                     hostList
                 }
             }
-            .navigationTitle("Hosts")
-            .navigationDestination(for: SavedHost.self) { host in
-                SessionsView(host: host)
-            }
-            .task {
-                // Verification affordance: open the first host when asked, so the
-                // session list and the chat screen can be checked on a simulator
-                // where nothing can be tapped. Inert without the variable.
-                guard model.shouldOpenFirstHostOnLaunch,
-                      path.isEmpty,
-                      let first = model.hosts.first
-                else { return }
-                path.append(first)
-            }
+            .navigationTitle("Harness")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     StatusBadge(status: model.status)
@@ -93,23 +84,35 @@ struct HostsView: View {
                     .foregroundStyle(.secondary)
             }
             ForEach(model.hosts) { host in
-                NavigationLink(value: host) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(host.displayName)
-                            .font(.headline)
-                        Text(host.origin.absoluteString)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        if let pin = host.pinnedFingerprint {
-                            Label(pin, systemImage: "lock")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
+                Button {
+                    Task { await model.select(host) }
+                } label: {
+                    HStack(spacing: DSHMetrics.space) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(host.displayName)
+                                .font(.headline)
+                                .foregroundStyle(DSHPalette.primaryText)
+                            Text(host.origin.absoluteString)
+                                .font(.caption)
+                                .foregroundStyle(DSHPalette.secondaryText)
+                            if let pin = host.pinnedFingerprint {
+                                Label(pin, systemImage: "lock")
+                                    .font(.caption2)
+                                    .foregroundStyle(DSHPalette.secondaryText)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            }
                         }
+                        Spacer(minLength: DSHMetrics.space)
+                        Image(systemName: "chevron.right")
+                            .font(.footnote)
+                            .foregroundStyle(DSHPalette.secondaryText)
+                            .accessibilityHidden(true)
                     }
                     .padding(.vertical, 2)
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
             }
             .onDelete { offsets in
                 pendingForget = offsets.map { model.hosts[$0] }.first
