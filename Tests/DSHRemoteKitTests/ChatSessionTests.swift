@@ -221,7 +221,19 @@ struct ChatSessionTests {
         }
 
         func load(_ request: ConversationPageRequest) -> ConversationPage {
+            note(request)
+            return answer()
+        }
+
+        /// Records a request without answering it, for a test that holds the load open.
+        ///
+        /// Split out so "the load is in flight" can be *observed* rather than guessed at with
+        /// a sleep — which is what made this test flaky under load.
+        func note(_ request: ConversationPageRequest) {
             requests.append(request)
+        }
+
+        func answer() -> ConversationPage {
             // A loader whose script runs out keeps serving the last answer: a test that
             // expects another call wants another answer, not a crash.
             if answers.count > 1 { return answers.removeFirst() }
@@ -348,8 +360,9 @@ struct ChatSessionTests {
             client: client,
             sessionId: "session-1",
             loadPage: { request in
+                await recorder.note(request)
                 await gate.wait()
-                return await recorder.load(request)
+                return await recorder.answer()
             }
         )
         try await chat.start()
@@ -357,10 +370,20 @@ struct ChatSessionTests {
         #expect(await eventually { await chat.hasSnapshot })
 
         async let first = chat.loadOlder()
-        // Let the first call reach the loader before the second is attempted, so this
-        // tests the guard rather than the scheduler.
-        try await Task.sleep(for: .milliseconds(50))
+        // Wait for the loader to have been *entered*, rather than assuming a sleep is long
+        // enough: under load the first call could still be unscheduled when the second was
+        // attempted, and both then ran after the gate opened — two requests, and a test that
+        // failed for its own timing rather than for the guard it means to check.
+        var waited = 0
+        while await recorder.requests.isEmpty, waited < 400 {
+            try? await Task.sleep(for: .milliseconds(5))
+            waited += 1
+        }
+        #expect(await recorder.requests.count == 1, "the first page never reached the loader")
+
         async let second = chat.loadOlder()
+        // The guard is what this asserts, so the second call gets time to be wrong.
+        try? await Task.sleep(for: .milliseconds(50))
         await gate.open()
         _ = await (first, second)
 
