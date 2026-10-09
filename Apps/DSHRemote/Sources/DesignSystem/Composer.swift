@@ -22,6 +22,9 @@ struct Composer: View {
     var isSending = false
     /// Non-nil only when a real attachment action exists.
     var onAttach: (() -> Void)?
+    /// Non-nil only when images can actually be sent: a photo control with nowhere to go is
+    /// absent, not greyed.
+    var onAddImage: (() -> Void)?
     var attachmentLabel = "Add an attachment"
     /// Non-nil only when the host's model catalog actually backs the control.
     /// A read-only `modelName` renders as a label, which the spec requires to be
@@ -53,6 +56,9 @@ struct Composer: View {
             HStack(alignment: .bottom, spacing: DSHMetrics.space) {
                 if let onAttach {
                     DSHIconAction(label: attachmentLabel, symbol: "plus", action: onAttach)
+                }
+                if let onAddImage {
+                    DSHIconAction(label: "Add a photo", symbol: "photo", action: onAddImage)
                 }
                 TextField(placeholder, text: $text, axis: .vertical)
                     .font(.body)

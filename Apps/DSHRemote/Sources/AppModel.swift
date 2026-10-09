@@ -25,6 +25,18 @@ final class AppModel {
     /// What the browse screens render, mapped from the host store's snapshot.
     private(set) var browse: BrowseState = .idle
 
+    /// The host's snapshot, kept for the values the browse mapping does not carry — its image
+    /// limits being the first of them.
+    private var hostSnapshot: HostSessionStore.Snapshot?
+    /// Projections read per session through `session/projections`, kept for the values the
+    /// control stream does not carry — `imageLimits` being the one that mattered.
+    private var sessionProjections: [String: SessionProjectionsValue] = [:]
+    /// Images prepared for a session, waiting to ride the next prompt inline.
+    private(set) var stagedImages: [String: [PromptImage]] = [:]
+    /// What went wrong with the most recent image, in the user's terms.
+    private(set) var imageError: String?
+    private(set) var isPreparingImage = false
+
     /// Files uploaded for a session, waiting to be cited by the next prompt.
     ///
     /// Kept per session: SPEC §9 binds every upload to its draft, session, host and attachment
@@ -296,6 +308,10 @@ final class AppModel {
         attachmentUploader = nil
         stagedAttachments = [:]
         attachmentError = nil
+        stagedImages = [:]
+        imageError = nil
+        hostSnapshot = nil
+        sessionProjections = [:]
         commands = [:]
         commandMessage = nil
         catalog = nil
@@ -902,6 +918,93 @@ final class AppModel {
         attachmentError = nil
     }
 
+    // MARK: - Inline images (SPEC §9)
+
+    /// The image limits the host advertises for a session.
+    ///
+    /// Nil when the host has not projected them, and nil means *no image sending* rather than
+    /// a guessed limit: the whole point of reading them is that they are the host's numbers.
+    func imageLimits(for sessionId: String) -> ImageLimits? {
+        if let projected = sessionProjections[sessionId]?.values.imageLimits {
+            return ImageLimits(projected)
+        }
+        // The control stream's copy, when it has one. It is the fallback rather than the
+        // source because the installed host's baseline carried `modelSelection` but not
+        // `imageLimits` for the sessions seen on 2026-10-09.
+        return hostSnapshot?.projections[sessionId]?["imageLimits"].flatMap { ImageLimits(json: $0.value) }
+    }
+
+    /// Reads a session's projections, which is where its image limits live.
+    func loadProjections(for sessionId: String) async {
+        guard let coordinator, status.isUsable else { return }
+        if let value = try? await coordinator.sessionProjections(sessionId: sessionId) {
+            sessionProjections[sessionId] = value
+        }
+    }
+
+    /// Prepares a picked image against the host's limits and stages it for the next prompt.
+    ///
+    /// Conversion happens here, before Send, because SPEC §9 asks for conversion errors up
+    /// front: an image that cannot be made to fit should say so while the user is still looking
+    /// at it, not fail a prompt.
+    @discardableResult
+    func stageImage(data: Data, name: String?, for sessionId: String) async -> PromptImage? {
+        isPreparingImage = true
+        imageError = nil
+        defer { isPreparingImage = false }
+
+        // The limits arrive with the projections, which are read when the conversation opens.
+        // A picture picked in that first moment would otherwise be refused for a limit the host
+        // was about to report, so this waits for them rather than guessing or refusing.
+        if imageLimits(for: sessionId) == nil {
+            await loadProjections(for: sessionId)
+        }
+        guard let limits = imageLimits(for: sessionId) else {
+            imageError = "The harness has not reported what images it accepts, so none can be sent."
+            return nil
+        }
+        do {
+            let prepared = try ImagePreparation.prepare(data: data, name: name, limits: limits)
+            // Validated against the whole batch, not just the new one: the total is a limit of
+            // its own and only the batch can breach it.
+            let batch = (stagedImages[sessionId] ?? []) + [prepared]
+            try ImageAttachmentValidator.validate(batch, against: limits)
+            stagedImages[sessionId] = batch
+            return prepared
+        } catch let refusal as ImageAttachmentRefusal {
+            imageError = ImageAttachmentValidator.describe(refusal)
+            return nil
+        } catch let failure as ImagePreparationError {
+            imageError = Self.describe(failure)
+            return nil
+        } catch {
+            imageError = Self.reason(for: error)
+            return nil
+        }
+    }
+
+    static func describe(_ failure: ImagePreparationError) -> String {
+        switch failure {
+        case .notAnImage:
+            "That file is not an image this phone can read."
+        case .encodingFailed:
+            "That image could not be re-encoded for the harness."
+        case .stillTooLarge(let refusal):
+            ImageAttachmentValidator.describe(refusal)
+        }
+    }
+
+    /// Replaces the staged images for a session — how one of several is removed.
+    func replaceImages(_ images: [PromptImage], for sessionId: String) {
+        stagedImages[sessionId] = images.isEmpty ? nil : images
+        imageError = nil
+    }
+
+    func clearImages(for sessionId: String) {
+        stagedImages[sessionId] = nil
+        imageError = nil
+    }
+
     // MARK: - The timed question's foreground claim
 
     /// The live claim over one timed question, if this phone holds it.
@@ -1006,6 +1109,7 @@ final class AppModel {
 
     private func apply(snapshot: HostSessionStore.Snapshot, selection: UUID) {
         guard selection == selectionID else { return }
+        hostSnapshot = snapshot
         let next = BrowseState.from(snapshot)
         browse = next
         // A selected workspace that this host does not have — a host switch, a renamed
@@ -1148,13 +1252,16 @@ final class AppModel {
         // The staged receipts ride along, and are cleared only if the host accepts the prompt:
         // an uncertain send keeps them so the same files can be cited again deliberately.
         let receipts = (stagedAttachments[sessionId] ?? []).map(\.receiptId)
+        let images = stagedImages[sessionId] ?? []
         try await coordinator.prompt(
             requestId: UUID().uuidString,
             sessionId: sessionId,
             text: text,
-            fileReceiptIds: receipts
+            fileReceiptIds: receipts,
+            images: images
         )
         if !receipts.isEmpty { clearAttachments(for: sessionId) }
+        if !images.isEmpty { clearImages(for: sessionId) }
     }
 
     /// Answers a question the harness asked, so a session that needs a decision

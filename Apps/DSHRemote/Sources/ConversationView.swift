@@ -1,4 +1,5 @@
 import DSHRemoteKit
+import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -26,6 +27,9 @@ struct ConversationView: View {
     @State private var isSubmittingAnswer = false
     @State private var claimError: String?
     @State private var isImportingFile = false
+    @State private var isImportingImage = false
+    @State private var photoSelection: PhotosPickerItem?
+    @State private var isPickingPhoto = false
     @Environment(\.scenePhase) private var scenePhase
     @State private var followAttempt = 0
     @State private var didSendLaunchMessage = false
@@ -91,6 +95,22 @@ struct ConversationView: View {
             }
             seedAttachmentIfAsked()
             #endif
+        }
+        .photosPicker(
+            isPresented: $isPickingPhoto,
+            selection: $photoSelection,
+            matching: .images
+        )
+        .onChange(of: photoSelection) { _, item in
+            guard let item else { return }
+            Task {
+                // Loaded as data rather than as a `UIImage`, because preparing needs the
+                // original bytes to decide whether they can be passed through unchanged.
+                if let data = try? await item.loadTransferable(type: Data.self) {
+                    _ = await model.stageImage(data: data, name: nil, for: sessionId)
+                }
+                photoSelection = nil
+            }
         }
         .fileImporter(
             isPresented: $isImportingFile,
@@ -234,6 +254,56 @@ struct ConversationView: View {
         model.stagedAttachments[sessionId] ?? []
     }
 
+    /// Images prepared for this session, shown as thumbnails so it is obvious *which* picture
+    /// is about to go, not merely how many.
+    private var imageChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: DSHMetrics.space) {
+                ForEach(Array(stagedImages.enumerated()), id: \.offset) { index, image in
+                    ZStack(alignment: .topTrailing) {
+                        if let thumbnail = UIImage(data: image.data) {
+                            Image(uiImage: thumbnail)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 56, height: 56)
+                                .clipShape(RoundedRectangle(cornerRadius: DSHMetrics.spaceSmall, style: .continuous))
+                                .accessibilityLabel(image.name ?? "Staged image")
+                        } else {
+                            RoundedRectangle(cornerRadius: DSHMetrics.spaceSmall)
+                                .fill(DSHPalette.elevatedSurface)
+                                .frame(width: 56, height: 56)
+                                .accessibilityLabel("Staged image")
+                        }
+                        Button {
+                            removeImage(at: index)
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.footnote)
+                                .foregroundStyle(DSHPalette.secondaryText)
+                                .background(Circle().fill(DSHPalette.card))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Remove \(image.name ?? "image")")
+                    }
+                }
+            }
+            .padding(.horizontal, DSHMetrics.pageMargin)
+        }
+    }
+
+    /// Removing one of several is not `clearImages`: a user who staged three pictures and
+    /// changed their mind about one should not lose the other two.
+    private func removeImage(at index: Int) {
+        var remaining = stagedImages
+        guard remaining.indices.contains(index) else { return }
+        remaining.remove(at: index)
+        model.replaceImages(remaining, for: sessionId)
+    }
+
+    private var stagedImages: [PromptImage] {
+        model.stagedImages[sessionId] ?? []
+    }
+
     /// The staged files, each removable before the prompt goes out.
     private var attachmentChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -351,6 +421,17 @@ struct ConversationView: View {
             if !stagedAttachments.isEmpty {
                 attachmentChips
             }
+            if !stagedImages.isEmpty {
+                imageChips
+            }
+            if let imageError = model.imageError {
+                Label(imageError, systemImage: "photo.badge.exclamationmark")
+                    .font(.dshMetadata)
+                    .foregroundStyle(DSHPalette.attention)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, DSHMetrics.pageMargin)
+            }
             if let attachmentError = model.attachmentError {
                 Label(attachmentError, systemImage: "exclamationmark.triangle")
                     .font(.dshMetadata)
@@ -365,6 +446,7 @@ struct ConversationView: View {
                 sendBlockedReason: sendBlockedReason,
                 isSending: isSending,
                 onAttach: { isImportingFile = true },
+                onAddImage: { isPickingPhoto = true },
                 attachmentLabel: "Add a file",
                 placeholder: "Message",
                 onSend: { text in Task { await send(text) } }
@@ -395,6 +477,12 @@ struct ConversationView: View {
             }
         }
         await model.loadCommands(for: sessionId)
+        // The projections carry the image limits, and they are read before anything is staged
+        // so the photo control can refuse locally rather than after a failed prompt.
+        await model.loadProjections(for: sessionId)
+        #if DEBUG
+        await seedImageIfAsked()
+        #endif
         do {
             try await opened.start()
             for await value in await opened.snapshots() {
@@ -495,6 +583,17 @@ struct ConversationView: View {
     }
 
     #if DEBUG
+    /// Debug builds only: stage an image a launch named, so the inline-image path can be
+    /// exercised on a machine that cannot drive a photo picker.
+    private func seedImageIfAsked() async {
+        guard stagedImages.isEmpty,
+              let path = ProcessInfo.processInfo.environment["DSH_IMAGE"],
+              !path.isEmpty,
+              let data = try? Data(contentsOf: URL(fileURLWithPath: path))
+        else { return }
+        _ = await model.stageImage(data: data, name: URL(fileURLWithPath: path).lastPathComponent, for: sessionId)
+    }
+
     /// Debug builds only: upload a file a launch named, so the receipt path can be exercised
     /// on a machine that cannot drive a file importer.
     private func seedAttachmentIfAsked() {
@@ -528,6 +627,13 @@ struct ConversationView: View {
         // is that the prompt cites it, and a race here would send the text without the file.
         if ProcessInfo.processInfo.environment["DSH_ATTACH"] != nil {
             for _ in 0..<60 where stagedAttachments.isEmpty && model.attachmentError == nil {
+                try? await Task.sleep(for: .milliseconds(250))
+            }
+        }
+        // Preparation is synchronous, so an image is either staged or refused by now; the
+        // wait is for the *staging* to have run at all before the prompt goes out.
+        if ProcessInfo.processInfo.environment["DSH_IMAGE"] != nil {
+            for _ in 0..<60 where stagedImages.isEmpty && model.imageError == nil {
                 try? await Task.sleep(for: .milliseconds(250))
             }
         }
