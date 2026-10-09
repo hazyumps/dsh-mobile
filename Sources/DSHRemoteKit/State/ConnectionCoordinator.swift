@@ -513,14 +513,27 @@ public actor ConnectionCoordinator {
     ///
     /// Acceptance is not completion: the turn itself arrives over the session's
     /// follow stream, which is ``ChatSession``'s job to fold.
-    public func prompt(sessionId: String, text: String) async throws {
+    /// Sends a prompt as one human submission.
+    ///
+    /// - Parameter requestId: The persisted identity of *this* submission, which the
+    ///   caller owns. It is a required argument rather than minted here on purpose.
+    ///
+    ///   SPEC §5 requires a retry of an uncertain send to reuse the original request ID
+    ///   with the same content, and the host deduplicates on exactly that value:
+    ///   `hasPromptRequest(agent, request.requestId)` returns the earlier acceptance
+    ///   rather than admitting a second turn. A method that generated the ID itself would
+    ///   make that impossible to satisfy — every retry would look like a new submission,
+    ///   the deduplication would never match, and the duplicate turn SPEC §3.4 forbids
+    ///   would be created silently. So the identity comes from the caller, which is the
+    ///   only place that can tell a retry from a new message.
+    public func prompt(requestId: String, sessionId: String, text: String) async throws {
         let client = DshRpcClient(
             baseURL: origin.baseURL,
             authorization: origin.authorization,
             transport: makeTransport(origin)
         )
         let request = SessionPromptRequest(
-            requestId: UUID().uuidString,
+            requestId: requestId,
             sessionId: sessionId,
             mode: .queue,
             content: [.text(SessionPromptRequestContentItemText(type: "text", text: text))],

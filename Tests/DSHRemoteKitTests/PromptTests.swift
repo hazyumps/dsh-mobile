@@ -40,7 +40,7 @@ struct PromptTests {
         let coordinator = makeCoordinator(transport)
 
         let thrown = await failure {
-            try await coordinator.prompt(sessionId: "session-1", text: "hello")
+            try await coordinator.prompt(requestId: "submission-1", sessionId: "session-1", text: "hello")
         }
         #expect(thrown != nil, "a refusal should surface as a failure")
 
@@ -54,8 +54,44 @@ struct PromptTests {
         )
     }
 
-    @Test("an uncertain answer is not repeated", arguments: [429, 502])
-    func answerIsNotRetried(status: Int) async throws {
+    @Test("the submission identity reaches the wire and can be reused on a retry")
+    func requestIdIsCarriedAndReusable() async throws {
+        // SPEC §5: a retry of an uncertain send reuses the original request ID with the
+        // same content, because the host deduplicates on exactly that value --
+        // `hasPromptRequest(agent, request.requestId)` returns the earlier acceptance
+        // rather than admitting a second turn. So the identity has to come from the
+        // caller: a method that minted its own would make every retry look like a new
+        // submission, the deduplication would never match, and the duplicate turn
+        // SPEC §3.4 forbids would be created silently.
+        let accepted = Data(
+            #"{"type":"server-response","rpcId":"r","result":{"ok":true,"value":{"accepted":true}}}"#.utf8
+        )
+        let transport = StubRelayTransport(responses: [
+            .json(status: 200, accepted),
+            .json(status: 200, accepted),
+        ])
+        let coordinator = makeCoordinator(transport)
+
+        try await coordinator.prompt(requestId: "submission-1", sessionId: "session-1", text: "hello")
+        // The same human submission, deliberately retried. The host is expected to answer
+        // `accepted: true` from its deduplication rather than start a second turn.
+        try await coordinator.prompt(requestId: "submission-1", sessionId: "session-1", text: "hello")
+
+        let sent = await transport.recordedRequests
+        #expect(sent.count == 2)
+        for request in sent {
+            let body = try #require(request.body)
+            let envelope = try JSONDecoder().decode(JSONValue.self, from: body)
+            #expect(envelope["method"]?.stringValue == "session/prompt")
+            // `session/prompt` names its argument object `request`.
+            let args = envelope["payload"]?["args"]
+            #expect(args?["request"]?["requestId"]?.stringValue == "submission-1")
+            #expect(args?["request"]?["sessionId"]?.stringValue == "session-1")
+            #expect(args?["request"]?["content"]?[0]?["text"]?.stringValue == "hello")
+        }
+    }
+
+    @Test("an uncertain answer is not repeated", arguments: [429, 502])    func answerIsNotRetried(status: Int) async throws {
         let transport = StubRelayTransport(responses: [.json(status: status, Data("{}".utf8))])
         let coordinator = makeCoordinator(transport)
         let thrown = await failure {
@@ -79,7 +115,7 @@ struct PromptTests {
         let transport = StubRelayTransport(responses: [.json(status: 200, Data(#"{"ok":true}"#.utf8))])
         let coordinator = makeCoordinator(transport)
 
-        _ = await failure { try await coordinator.prompt(sessionId: "session-1", text: "hello") }
+        _ = await failure { try await coordinator.prompt(requestId: "submission-1", sessionId: "session-1", text: "hello") }
 
         let header = await transport.authorizationHeader(at: 0)
         #expect(header?.hasPrefix("Bearer ") == true, "expected a bearer header, got \(String(describing: header))")

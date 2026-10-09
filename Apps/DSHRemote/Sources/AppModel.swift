@@ -104,9 +104,19 @@ final class AppModel {
 
     /// Sends a prompt. Never retried — an uncertain send is reported, not
     /// repeated, because a duplicate turn costs real work (SPEC §3.4).
+    ///
+    /// The submission identity is minted here, once, because this is the only place
+    /// that knows a send is a *new* message rather than a retry of an uncertain one.
+    /// When the draft store's send transaction lands (SPEC §5) it will capture this
+    /// ID and hand it back unchanged on a retry, which is what lets the host
+    /// deduplicate instead of admitting a second turn.
     func sendPrompt(_ text: String, to sessionId: String) async throws {
         guard status.isUsable, let coordinator else { throw ChatUnavailable.notConnected }
-        try await coordinator.prompt(sessionId: sessionId, text: text)
+        try await coordinator.prompt(
+            requestId: UUID().uuidString,
+            sessionId: sessionId,
+            text: text
+        )
     }
 
     /// Answers a question the harness asked, so a session that needs a decision
