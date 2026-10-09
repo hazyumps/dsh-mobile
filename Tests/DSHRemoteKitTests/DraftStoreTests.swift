@@ -83,6 +83,22 @@ struct DraftStoreTests {
         #expect(await second.navigation(for: hostB) == DraftNavigation())
     }
 
+    @Test("a new-session identity survives a relaunch, so a retry adopts instead of duplicating")
+    func proposedSessionIdentitySurvivesRelaunch() async throws {
+        // SPEC §5: the phone supplies the identity, and reusing it is what makes an unknown
+        // create outcome recoverable. An identity that only lived in memory would leave the
+        // first session orphaned on the host and make a second one.
+        let directory = try scratch()
+        let store = DraftStore(directory: directory)
+        let key = DraftKey(hostId: hostA, owner: .newSession(UUID()))
+        await store.setWorkspace("w1", for: key)
+        await store.setProposedSessionId("session-abc", for: key)
+        try await store.flush()
+
+        let reloaded = DraftStore(directory: directory)
+        #expect(await reloaded.draft(for: key).proposedSessionId == "session-abc")
+    }
+
     // MARK: - Identity
 
     @Test("two new-session drafts in one workspace do not overwrite each other")

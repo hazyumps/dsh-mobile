@@ -85,6 +85,13 @@ public struct Draft: Sendable, Hashable, Codable {
     public var attachments: [DraftAttachment]
     /// Present while a submission is unresolved. Cleared once it is settled.
     public var submission: DraftSubmission?
+    /// The identity this new-session draft will be created with.
+    ///
+    /// SPEC §5 makes the *phone* supply the session identity, and makes reusing it the thing
+    /// that turns an unknown create outcome into a recoverable one — so it has to outlive the
+    /// attempt. A relaunch that minted a fresh identity would leave the first session behind
+    /// and make a second one, which is exactly the duplicate the rule exists to prevent.
+    public var proposedSessionId: String?
 
     public init(
         workspaceId: String? = nil,
@@ -95,7 +102,8 @@ public struct Draft: Sendable, Hashable, Codable {
         model: String? = nil,
         reasoningEffort: String? = nil,
         attachments: [DraftAttachment] = [],
-        submission: DraftSubmission? = nil
+        submission: DraftSubmission? = nil,
+        proposedSessionId: String? = nil
     ) {
         self.workspaceId = workspaceId
         self.text = text
@@ -106,6 +114,7 @@ public struct Draft: Sendable, Hashable, Codable {
         self.reasoningEffort = reasoningEffort
         self.attachments = attachments
         self.submission = submission
+        self.proposedSessionId = proposedSessionId
     }
 
     public var isEmpty: Bool {
@@ -306,6 +315,19 @@ public actor DraftStore {
         return draft
     }
 
+    /// Records the identity a new-session draft will be created with.
+    ///
+    /// Written **before** the create request goes out, so a crash or a lost response leaves
+    /// the identity on disk rather than only in memory.
+    @discardableResult
+    public func setProposedSessionId(_ sessionId: String, for key: DraftKey) -> Draft {
+        var draft = draft(for: key)
+        draft.proposedSessionId = sessionId
+        drafts[key] = draft
+        scheduleWrite()
+        return draft
+    }
+
     /// Records the workspace a new-session draft belongs to.
     @discardableResult
     public func setWorkspace(_ workspaceId: String, for key: DraftKey) -> Draft {
@@ -465,7 +487,12 @@ public actor DraftStore {
 
     private func encodedDrafts() -> [String: Draft] {
         var encoded: [String: Draft] = [:]
-        for (key, draft) in drafts where !draft.isEmpty || draft.submission != nil {
+        // An otherwise-empty draft is still worth writing when it holds a submission or a
+        // proposed session identity. The identity in particular: it is the only record that
+        // a session may already exist on the host, so dropping it on relaunch is precisely
+        // how a retry becomes a duplicate.
+        for (key, draft) in drafts
+        where !draft.isEmpty || draft.submission != nil || draft.proposedSessionId != nil {
             encoded["\(key.hostId.uuidString)/\(key.owner.storageKey)"] = draft
         }
         return encoded

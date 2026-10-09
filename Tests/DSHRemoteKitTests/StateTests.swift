@@ -416,6 +416,68 @@ func continuedAnswerPostsTheValidatedBody() async throws {
     #expect(arguments["answer"] == body)
 }
 
+@Test("session/create sends the identity the phone chose, and adopts a partial success")
+func createSessionSendsTheCallersIdentity() async throws {
+    let response = """
+    {"type":"server-response","rpcId":"t","result":{"ok":true,"value":{
+      "sessionId":"session-abc","agentPreset":"standard"}}}
+    """
+    let transport = StubRelayTransport(responsesByPath: [
+        "/api/session/create": .json(status: 200, Data(response.utf8)),
+    ])
+    let coordinator = ConnectionCoordinator(origin: origin(), makeTransport: { _ in transport })
+
+    let outcome = try await coordinator.createSession(
+        sessionId: "session-abc",
+        workspaceId: "workspace-1",
+        agentPreset: "standard"
+    )
+
+    let requests = await transport.recordedRequests
+    let request = try #require(requests.first)
+    #expect(request.url.path == "/api/session/create")
+    let envelope = try JSONDecoder().decode(JSONValue.self, from: #require(request.body))
+    let arguments = try #require(envelope["payload"]?["args"]?["request"])
+    // SPEC §5: the phone supplies the identity; `workspaceId` and `cwd` are mutually
+    // exclusive, and this name is `request`, not `session/list`'s `_request`.
+    #expect(arguments["sessionId"]?.stringValue == "session-abc")
+    #expect(arguments["workspaceId"]?.stringValue == "workspace-1")
+    #expect(arguments["cwd"] == nil)
+    #expect(arguments["agentPreset"]?.stringValue == "standard")
+    #expect(envelope["payload"]?["args"]?.objectValue?.keys.sorted() == ["request"])
+
+    guard case .created(let created) = outcome else {
+        Issue.record("expected a created session, got \(outcome)")
+        return
+    }
+    #expect(created.sessionId == "session-abc")
+    #expect(created.agentPreset == "standard")
+}
+
+@Test("a workspace-attach failure is a partial success, not a lost session")
+func createSessionCarriesTheAttachFailureIdentity() async throws {
+    // SPEC §5: the session may already exist, so the identity has to come back with the
+    // failure — creating another one would leave a duplicate on the host.
+    let response = """
+    {"type":"server-response","rpcId":"t","result":{"ok":false,"error":{
+      "code":"session/workspace-attach-failed","message":"could not attach the workspace",
+      "details":{"sessionId":"session-xyz"}}}}
+    """
+    let transport = StubRelayTransport(responsesByPath: [
+        "/api/session/create": .json(status: 200, Data(response.utf8)),
+    ])
+    let coordinator = ConnectionCoordinator(origin: origin(), makeTransport: { _ in transport })
+
+    let outcome = try await coordinator.createSession(sessionId: "session-xyz", workspaceId: "workspace-1")
+
+    guard case .attachmentFailed(let sessionId, let reason) = outcome else {
+        Issue.record("expected an attachment failure, got \(outcome)")
+        return
+    }
+    #expect(sessionId == "session-xyz")
+    #expect(reason == "could not attach the workspace")
+}
+
 @Test("session/page carries the window's own cursor, and its hasMore is the answer")
 func sessionPageUsesTheWindowArguments() async throws {
     // Written here rather than added to `Fixtures/` because it is synthetic: the shape

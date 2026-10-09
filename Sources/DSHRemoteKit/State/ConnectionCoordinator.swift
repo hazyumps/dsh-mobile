@@ -461,6 +461,90 @@ public actor ConnectionCoordinator {
         return eventRouter
     }
 
+    // MARK: - Creating a session (SPEC §5)
+
+    /// What a create attempt left behind.
+    ///
+    /// Two outcomes rather than one, because SPEC §5 gives the second its own rule: a
+    /// `session/workspace-attach-failed` means the session **may already exist**, so the
+    /// caller must reconcile the identity it gets back rather than create another one.
+    public enum SessionCreateOutcome: Sendable, Hashable {
+        case created(CreatedSession)
+        case attachmentFailed(sessionId: String?, reason: String)
+    }
+
+    /// The identity a create returned.
+    public struct CreatedSession: Sendable, Hashable {
+        public var sessionId: String
+        public var agentPreset: String?
+
+        public init(sessionId: String, agentPreset: String? = nil) {
+            self.sessionId = sessionId
+            self.agentPreset = agentPreset
+        }
+    }
+
+    /// Creates — or adopts — a session with an identity the caller chose.
+    ///
+    /// **The identity is the caller's, never minted here.** SPEC §5: omitting `sessionId`
+    /// makes the host invent one *and* disables its persisted-identity checks, so supplying
+    /// it is what makes adopting an unknown outcome safe. A method that generated one would
+    /// silently remove the only thing that makes a retry after a timeout safe.
+    ///
+    /// `workspaceId` and `cwd` are mutually exclusive on the host, which refuses both with
+    /// `gateway/bad-request`. This takes the workspace only: the phone uses a workspace the
+    /// host already knows, never a path it invented.
+    ///
+    /// Retries are off, like every other write (SPEC §3.4).
+    public func createSession(
+        sessionId: String,
+        workspaceId: String? = nil,
+        agentPreset: String? = nil
+    ) async throws -> SessionCreateOutcome {
+        let client = DshRpcClient(
+            baseURL: origin.baseURL,
+            authorization: origin.authorization,
+            transport: makeTransport(origin)
+        )
+        let request = SessionCreateRequest(
+            workspaceId: workspaceId,
+            sessionId: sessionId,
+            agentPreset: agentPreset
+        )
+        do {
+            let response = try await client.call(
+                Self.sessionCreateMethod,
+                args: SessionCreateArguments(request: request),
+                returning: SessionCreateValue.self,
+                retryPolicy: RPCFailureRetryPolicy.none
+            )
+            // A missing value after `ok: true` would leave a session whose identity this
+            // client cannot name, which is worse than reporting the anomaly.
+            guard let value = response.result.value else {
+                throw Self.failure(from: DshRPCError.protocolIncompatible(
+                    reason: "session/create returned no session identity"
+                ))
+            }
+            return .created(CreatedSession(sessionId: value.sessionId, agentPreset: value.agentPreset))
+        } catch {
+            // `failure(from:)` lifts the transport error into the coordinator's own type;
+            // the business refusal underneath is what carries SPEC §5's partial success.
+            let failure = Self.failure(from: error)
+            if case .rpc(.business(let business)) = failure, business.code == Self.attachFailedCode {
+                return .attachmentFailed(
+                    sessionId: business.details?.unknownFields["sessionId"]?.stringValue,
+                    reason: business.message
+                )
+            }
+            lastError = failure
+            applyCallFailure(failure)
+            throw failure
+        }
+    }
+
+    /// The host's code for "the session was made, but its workspace was not attached".
+    public static let attachFailedCode = "session/workspace-attach-failed"
+
     // MARK: - Sessions (SPEC §3.3)
 
     /// One page of older history, decoded from `session/page`.
@@ -952,6 +1036,7 @@ public actor ConnectionCoordinator {
     /// The unary endpoint SPEC §3.3's session list comes from.
     public static let sessionListMethod = "session/list"
     public static let sessionPageMethod = "session/page"
+    public static let sessionCreateMethod = "session/create"
     public static let sessionPromptMethod = "session/prompt"
     public static let userQuestionsAnswerMethod = "userQuestions/answer"
 
