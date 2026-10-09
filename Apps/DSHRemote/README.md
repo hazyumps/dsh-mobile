@@ -139,10 +139,17 @@ live channel uses `userQuestions/answer`. The timed question's foreground claim 
 attached, paused and released by the conversation screen, which is where SPEC §8
 puts its lifetime.
 
-**Still to come:** attachments and slash commands (SPEC §9); a live approval and
-timed-question round-trip from the phone (the routing and the timed claim are wired
-and tested offline, but no real approval has been answered from the phone); and
-physical-device validation (slice F).
+**Slash commands** are read per session and suggested once a draft starts with `/`,
+with the host's own description and hint. A registered command goes to
+`commands/execute`; an unknown `/word` stays ordinary prompt text, and matching is on
+the exact name so `/nameplate` is not `/plan`. A refusal keeps the draft and refreshes
+the list.
+
+**Still to come:** attachments (SPEC §9) — the raw `session/uploadFileBinary` route
+with its base64 fallback, and image content parts against `imageLimits`; a live
+approval and timed-question round-trip from the phone (the routing and the timed claim
+are wired and tested offline, but no real approval has been answered from the phone);
+and physical-device validation (slice F).
 
 Returning from the background automatically opens a new connection with the
 stored credential and refreshes the session list and open conversation. Temporary
@@ -200,6 +207,7 @@ shipping app's normal flow is what runs by default.
 | `DSH_MODE` | Stages an agent preset for a launch-created session, by roster id (`minimal`, `ptc`, `cordis`). |
 | `DSH_MODEL` | Stages a model for a launch-created session, as `provider/model` or `provider/model/effort`. |
 | `DSH_DESTINATION=home` | Shows Home rather than the restored conversation, which the app otherwise correctly reopens. |
+| `DSH_DRAFT` | Prefills the conversation composer, so the `/` command suggestions can be seen on a machine that cannot type. |
 | `DSH_SEND_MESSAGE` | Sends one message once a conversation is open. **Point it at a scratch session**: a duplicate or stray prompt costs real work, and this client never resends on its own. |
 | `DSH_DESIGN_GALLERY` | Shows the component gallery instead of the app: every design-system component in each of its states, on the real tokens. |
 | `DSH_SCREEN_GALLERY` | Shows the screens above the components from fixture data — `drawer` draws the drawer, `conversation` the conversation transcript, anything else Home. It renders the **real** screens against a seeded model, so the layout can be reviewed without a host. |
