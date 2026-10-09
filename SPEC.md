@@ -1,6 +1,7 @@
 # DSH Remote for iPhone — Build Specification
 
-Status: proposed implementation contract; no application code exists yet.
+Status: original protocol and v1 implementation baseline; application code now exists. The current [mobile experience specification](design/MOBILE-UX-SPEC.md) supersedes the original navigation and expands the product direction, including new-session creation.
+Companion: [engineering wiring specification](design/MOBILE-IMPLEMENTATION-SPEC.md), dated 2026-10-09, defines the feature integrations, state ownership, source-verified corrections, and remaining acceptance gates.
 Date: 2026-10-07
 Working product name: DSH Remote
 Target: a personal-use native iPhone companion for DeepSeek Harness.
@@ -281,8 +282,8 @@ The host heartbeat is protocol-level WebSocket ping/pong. Verify URLSession resp
 ### 6.5 Conversation state and recovery
 
 - `session/follow` establishes a complete snapshot and optional live assistant baseline. Its `args` carry one named `request` object — neither a bare `sessionId` nor `_request` — whose only required field is `address`: a union of `{kind: "session", sessionId}` and `{kind: "subagent", parentSessionId, childSessionId, mode: "one-shot" | "continuable" | "unknown"}`. Optional fields are `assistantStream: true`, `maxMessages`, and `turnWindow: {minMessages, minTurns}`. This comes from the installed harness's own gateway descriptor; note that the subagent address is already on the wire even though subagent controls are deferred.
-- Durable event `data` keys observed per type, which is what the durable-history fold switches on: `turn/start` → `{turn}`; `step/start` and `step/end` → `{turn, step}`; `turn/end` → `{turn, reason:{kind}}`; `user/message` → `{id, role, content, source}`; `assistant/message` → `{turn, step, message, usage, stream}`; `agent/inbox/spliced` → `{target, start, inserted}`; `session-log-deepseek/delivery-accepted` → `{sessionId, sessionFormatVersion, throughSeq}`. The `throughSeq` here is the watermark the paging rule above refers to.
-- Cancellation is not a stop button. `session/cancel` answered `{"accepted":true}` and the turn still ran to completion: 1331 stream chunks, then `assistant-stream/end` with `outcome.kind: "committed"` and `turn/end` with `reason.kind: "completed"`. Until the real semantics are established, the UI must not present cancel as stopping the agent, and §3.4's rule against implying interruption stands. Its `args` carry one named `request` object — neither a bare `sessionId` nor `_request` — whose only required field is `address`: a union of `{kind: "session", sessionId}` and `{kind: "subagent", parentSessionId, childSessionId, mode: "one-shot" | "continuable" | "unknown"}`. Optional fields are `assistantStream: true`, `maxMessages`, and `turnWindow: {minMessages, minTurns}`. This comes from the installed harness's own gateway descriptor; note that the subagent address is already on the wire even though subagent controls are deferred.
+- Durable event `data` keys observed per type, which is what the durable-history fold switches on: `turn/start` → `{turn}`; `step/start` and `step/end` → `{turn, step}`; `turn/end` → `{turn, reason:{kind}}`; `user/message` → `{id, role, content, source}`; `assistant/message` → `{turn, step, message, usage, stream}`; `agent/inbox/spliced` → `{target, start, inserted}`; `session-log-deepseek/delivery-accepted` → `{sessionId, sessionFormatVersion, throughSeq}`. For paging, use the opening follow snapshot's `cursor`, not this delivery event's watermark; this is confirmed by the installed `follow`/`page` implementation.
+- Cancellation acceptance does not prove immediate interruption. An earlier live `session/cancel` returned `{"accepted":true}` while the turn still completed. Its exact args are `{request:{sessionId}}`; the copied follow-address fields previously shown here were incorrect. Installed source calls agent cancellation with `keepInbox:true`. Keep a stop control gated until active-tool and queued-message behavior is exercised; never imply that disconnecting the phone cancels work or clears queued prompts.
 - Store its opening cursor for paging. `session/page` must use that generation's `throughSeq`; never combine a page from an old generation with a new baseline.
 - Maintain durable history separately from transient assistant chunks.
 - Use attempt identity, revision, and chunk index to detect stale, duplicate, or gapped live frames.
@@ -311,7 +312,7 @@ POST `/api/$events/result` using the normal envelope and args:
 }
 ```
 
-Approval rejection uses result value `rejected`. Question results use `{ "answers": [...] }` as the value. The harness validates the body as exactly these three keys and accepts exactly three outcome shapes: `{"kind":"next"}` with no other key; `{"kind":"result"}` carrying `value` or not; and `{"kind":"rejected","error":{...}}`, whose error is projected to JSON-safe fields. Anything else is refused as an invalid event result, so a rejection with a reason must use the `rejected` shape rather than smuggling it through `result`.
+Approval rejection uses result value `rejected`. Live question results use `{ "answers": [...] }` as the value. The harness validates the body as exactly these three keys and accepts exactly three outcome shapes: `{"kind":"next"}` with no other key; `{"kind":"result"}` carrying `value` or not; and `{"kind":"rejected","error":{...}}`, whose error is projected to JSON-safe fields. The last shape rejects the remote continuation with an error; it is not the permission Reject button. Continued questions instead use `userQuestions/answer`. See the [engineering interaction contract](design/MOBILE-IMPLEMENTATION-SPEC.md#8-approval-and-question-cards) for channel selection and timed waits.
 
 Question constraints:
 
@@ -320,9 +321,9 @@ Question constraints:
 - Single-select questions allow at most one selected label.
 - For single-select, nonempty custom input and a selected option are mutually exclusive.
 - Omit blank custom input; an intentionally skipped question has `selected: []`.
-- Dismissing the entire question uses a rejected outcome with the host-compatible cancellation error, not `kind: next`.
+- Hiding a named question card is local presentation only. An explicit live question cancellation uses the host-compatible rejected error outcome; `kind: next` delegates to another listener. Navigation and reconnect do not manufacture a cancellation.
 
-Retire a successful own submission from the UI immediately on acknowledgement. A host cancellation may only reach the other clients. Failure ends or invalidates the affected generation as required by the host; wait for replay rather than retrying old event IDs.
+Retire this client's actionable controls on acknowledgement and reconcile host state; acknowledgement alone does not prove this client won a race to answer or that the action executed. Installed source emits cancellation to delivered clients when an event finishes. A pending event can replay with the same event ID on a new client, so invalidate old generation/client correlations rather than requiring a new event ID. Never automatically replay an answer.
 
 ### 6.8 Files and images
 
@@ -501,4 +502,4 @@ Reference documents:
 
 Implementation authorities to inspect during Stage 0: the installed harness's API type definitions, gateway stream protocol, assistant stream types, and file-upload client at the pinned version.
 
-Evidence boundary: this specification is based on the reference projects' published documentation plus the version, bundle, and packaging observations recorded above. No connection to Patrick's harness, a relay, or an iPhone has been tested. Platform and scope choices remain proposed decisions for this implementation, not observed properties of an existing iOS app.
+Evidence boundary: this file began as a pre-implementation specification; dated observations above include later host/relay captures. Current implementation status and remaining device gates are recorded in the [mobile experience](design/MOBILE-UX-SPEC.md) and [engineering wiring](design/MOBILE-IMPLEMENTATION-SPEC.md) specifications. Installed-source findings and generated schemas do not establish native feature completion or physical-iPhone behavior.
