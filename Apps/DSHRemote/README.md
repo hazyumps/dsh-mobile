@@ -191,6 +191,10 @@ harness's own projections (`tokenUsage`, `sessionStats`, `contextBreakdown`, `co
 — no host-wide totals, no estimates from the transcript. A field the harness did not report is
 absent rather than zero, and a rate with no denominator to divide by is absent too.
 
+The **app icon** is in `Resources/Assets.xcassets/AppIcon.appiconset` — the harness's own whale,
+with a phone and a typing bubble. It is lifted from that art rather than redrawn, so it stays
+the same whale; `Tools/make-app-icon.py` regenerates it (`--preview` writes a copy to look at).
+
 **Diagnostics** live under Settings → Support. The kit's `DiagnosticLog` had a previewable
 export and nothing recorded to it; the app now records connection state changes (with the
 generation and the attempt's duration) and each resource's state change, and the preview *is*
