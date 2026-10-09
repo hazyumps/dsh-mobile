@@ -84,6 +84,10 @@ each one; `DSH_TRACE=1` with `xcrun simctl launch --console-pty` prints a decisi
 
 ## Contributing
 
+Read [AGENTS.md](AGENTS.md) first — it carries the conventions: semantic versioning, test-driven
+development with a planner who writes the tests and a builder who passes them, signed commits,
+and the rules for working against a real harness.
+
 Issues are the front door: features, host gaps and papercuts all belong there. If you are
 changing the transport or a store, run `swift test` and expect a fixture to be the right place
 for protocol shapes — several of them were captured from a live host and the comments say so.
