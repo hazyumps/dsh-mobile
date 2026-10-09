@@ -186,6 +186,12 @@ stdout, readable with `xcrun simctl launch --console-pty`. It exists because a m
 looks like nothing at all, and nothing else shows whether the `$events` subscription was
 established. Debug builds only.
 
+**Diagnostics** live under Settings → Support. The kit's `DiagnosticLog` had a previewable
+export and nothing recorded to it; the app now records connection state changes (with the
+generation and the attempt's duration) and each resource's state change, and the preview *is*
+the export — the same string, so there is no "what will be sent" question. No prompts, answers,
+credentials, signed URLs, or paths, structurally: the record type has no free-text field.
+
 **Still to come:** physical-device validation (slice F), which is the only way to check the
 two pickers, background recovery, and the timed claim under a real lock.
 
@@ -245,6 +251,8 @@ shipping app's normal flow is what runs by default.
 | `DSH_MODE` | Stages an agent preset for a launch-created session, by roster id (`minimal`, `ptc`, `cordis`). |
 | `DSH_MODEL` | Stages a model for a launch-created session, as `provider/model` or `provider/model/effort`. |
 | `DSH_DESTINATION=home` | Shows Home rather than the restored conversation, which the app otherwise correctly reopens. |
+| `DSH_SETTINGS` | Opens Settings on launch — its only other door is a drawer row. |
+| `DSH_DIAGNOSTICS` | Opens Settings straight to the diagnostics preview. |
 | `DSH_DRAFT` | Prefills the conversation composer, so the `/` command suggestions can be seen on a machine that cannot type. |
 | `DSH_ATTACH` | Uploads this local path into the open conversation and stages its receipt, so the upload path can be exercised without a file importer. |
 | `DSH_IMAGE` | Stages this local image into the open conversation, so the inline-image path can be exercised without a photo picker. |
