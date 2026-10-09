@@ -16,6 +16,11 @@ struct BrowseSession: Identifiable, Hashable {
     /// Set for a session the host reports under another session, which is not an
     /// ordinary session to open from the drawer's workspace tree.
     let isSubagent: Bool
+    /// Whether the host says this session is waiting on the user *now* (SPEC §4).
+    ///
+    /// Two signals, and neither is the transcript: the session's own `inbox`/`userQuestions`
+    /// projections, and a live actionable `$events` request the interaction store holds for it.
+    let needsInput: Bool
     /// Whether `session/list` supplied a record for this id.
     ///
     /// The workspace registry names sessions the index may not have delivered — and the
@@ -126,7 +131,10 @@ struct BrowseState: Hashable {
     ///
     /// Membership comes from `snapshot.sections`, which the store derives from the
     /// workspace registry alone — not from `cwd`, and not from a title.
-    static func from(_ snapshot: HostSessionStore.Snapshot) -> BrowseState {
+    /// - Parameter liveWaiters: session ids with an actionable delivery in the interaction
+    ///   store — the third signal, which the projections cannot carry because a live request
+    ///   is not a projection.
+    static func from(_ snapshot: HostSessionStore.Snapshot, liveWaiters: Set<String> = []) -> BrowseState {
         let workspaces = snapshot.sections.map { section in
             BrowseWorkspace(
                 id: section.workspaceId ?? BrowseWorkspace.ungroupedId,
@@ -135,7 +143,12 @@ struct BrowseState: Hashable {
                     snapshot.workspaces.first { $0.workspaceId == id }?.path
                 },
                 sessions: section.sessionIds.map { id in
-                    Self.session(id: id, record: snapshot.sessions[id])
+                    Self.session(
+                        id: id,
+                        record: snapshot.sessions[id],
+                        projections: snapshot.projections[id],
+                        hasLiveRequest: liveWaiters.contains(id)
+                    )
                 }
             )
         }
@@ -149,13 +162,21 @@ struct BrowseState: Hashable {
     /// A session id the registry knows but the index has not delivered is still listed,
     /// with the untitled fallback, rather than dropped: the registry is the authority on
     /// membership and the record may simply not have arrived yet.
-    private static func session(id: String, record: HostSessionStore.SessionRecord?) -> BrowseSession {
+    private static func session(
+        id: String,
+        record: HostSessionStore.SessionRecord?,
+        projections: [String: HostSessionStore.Projection]? = nil,
+        hasLiveRequest: Bool = false
+    ) -> BrowseSession {
         BrowseSession(
             id: id,
             title: record?.title ?? "Untitled session",
             running: record?.running ?? false,
             updatedAt: record?.updatedAt.map { Date(timeIntervalSince1970: Double($0) / 1000) },
             isSubagent: record?.parentSessionId != nil,
+            needsInput: hasLiveRequest || SessionInputSignal.isWaiting(
+                projections: projections?.mapValues(\.value)
+            ),
             isLoaded: record != nil
         )
     }

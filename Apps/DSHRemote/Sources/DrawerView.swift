@@ -254,7 +254,7 @@ struct DrawerView: View {
                         ForEach(workspace.sessions) { session in
                             DrawerSessionRow(
                                 title: session.title,
-                                state: session.running ? .running : nil,
+                                state: session.needsInput ? .needsInput : (session.running ? .running : nil),
                                 isSelected: session.id == model.selectedSessionId
                             ) {
                                 openSession(session.id)

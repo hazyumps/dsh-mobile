@@ -454,7 +454,13 @@ final class AppModel {
     /// re-established on every ready connection is the *subscription*, because the router is
     /// per generation and the old one is retired with its socket.
     private func subscribeToDecisions(of coordinator: ConnectionCoordinator, selection: UUID) async {
-        guard let router = await coordinator.remoteEvents() else { return }
+        guard let router = await coordinator.remoteEvents() else {
+            // Nothing to subscribe to means no decisions will ever arrive on this connection.
+            // That is worth saying out loud, because the failure looks like a quiet list.
+            DSHBeacon.note("subscribeToDecisions: no events router for this generation")
+            return
+        }
+        DSHBeacon.note("subscribed to $events")
 
         if interactionStore == nil {
             let origin = self.origin
@@ -495,6 +501,7 @@ final class AppModel {
     }
 
     private func deliver(_ event: RemoteEvent) async {
+        DSHBeacon.event(event)
         guard let interactionStore, let coordinator else { return }
         // Read from the router rather than from the coordinator's status: the router *is*
         // the generation, which is what makes a stale submission detectable at all.
@@ -509,6 +516,10 @@ final class AppModel {
                 guard !Task.isCancelled else { return }
                 guard let self, selection == self.selectionID else { return }
                 self.interactions = requests
+                // A live request is a "needs input" signal the projections cannot carry, so the
+                // cards are rebuilt from the snapshot already held rather than waiting for the
+                // next one — otherwise the badge would lag the request that caused it.
+                self.rebuildBrowse()
             }
         }
     }
@@ -1137,10 +1148,26 @@ final class AppModel {
         }
     }
 
+    /// The sessions a live delivery is waiting on, which the projections do not know about.
+    private var liveWaiters: Set<String> {
+        Set(interactions.filter(\.state.isActionable).map(\.sessionId))
+    }
+
+    /// Re-maps the held snapshot into the browse values.
+    ///
+    /// Cheap enough to do on every interaction change: it is a map over the sessions the
+    /// registry already names, with no request of its own.
+    private func rebuildBrowse() {
+        guard let hostSnapshot else { return }
+        let waiters = liveWaiters
+        if !waiters.isEmpty { DSHBeacon.note("live waiters: \(waiters.sorted())") }
+        browse = BrowseState.from(hostSnapshot, liveWaiters: waiters)
+    }
+
     private func apply(snapshot: HostSessionStore.Snapshot, selection: UUID) {
         guard selection == selectionID else { return }
         hostSnapshot = snapshot
-        let next = BrowseState.from(snapshot)
+        let next = BrowseState.from(snapshot, liveWaiters: liveWaiters)
         browse = next
         // A selected workspace that this host does not have — a host switch, a renamed
         // registry — falls back rather than leaving the screens pointing at nothing.

@@ -21,6 +21,7 @@ struct HomeView: View {
         case schedules
     }
 
+    @Environment(\.scenePhase) private var scenePhase
     @State private var path: [Route] = []
     @State private var isDrawerOpen = false
     @State private var isWorkspacePickerOpen = false
@@ -106,6 +107,23 @@ struct HomeView: View {
                 return
             }
             if path.last != .session(sessionId) { path = [.session(sessionId)] }
+        }
+        .task(id: model.selectedHost?.id) {
+            // SPEC §4: "refresh `session/list` on foreground, opening the drawer,
+            // pull-to-refresh, and at most every 15 seconds while the recent list is
+            // visible." The recent list is *this* screen, so the timer lives here — the drawer
+            // already refreshes when it opens, and the open/highlighted fields are the only
+            // other reasons to re-read the index.
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(15))
+                guard !Task.isCancelled else { return }
+                await model.refreshSessions()
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // Foreground is the trigger that matters after a phone has been in a pocket: the
+            // list may be hours stale and the timer did not run while the app was suspended.
+            if phase == .active { Task { await model.refreshSessions() } }
         }
         .onChange(of: path) { _, next in
             // Leaving the conversation is what clears the stored destination; the
@@ -342,7 +360,7 @@ struct HomeView: View {
                     SessionCard(
                         title: session.title,
                         supportingLine: session.isLoaded ? nil : "Details didn’t load",
-                        state: session.running ? .running : nil,
+                        state: session.needsInput ? .needsInput : (session.running ? .running : nil),
                         lastActivity: session.running || !session.isLoaded ? nil : session.lastActivity
                     ) {
                         open(session.id)

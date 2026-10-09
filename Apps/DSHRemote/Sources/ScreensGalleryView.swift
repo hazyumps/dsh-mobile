@@ -164,6 +164,7 @@ extension AppModel {
                         running: true,
                         updatedAt: Date().addingTimeInterval(-90),
                         isSubagent: false,
+                        needsInput: false,
                         isLoaded: true
                     ),
                     BrowseSession(
@@ -172,6 +173,7 @@ extension AppModel {
                         running: false,
                         updatedAt: Date().addingTimeInterval(-3_600),
                         isSubagent: false,
+                        needsInput: true,
                         isLoaded: true
                     ),
                     BrowseSession(
@@ -180,6 +182,7 @@ extension AppModel {
                         running: true,
                         updatedAt: Date().addingTimeInterval(-600),
                         isSubagent: true,
+                        needsInput: true,
                         isLoaded: true
                     ),
                 ]
@@ -195,6 +198,7 @@ extension AppModel {
                         running: false,
                         updatedAt: Date().addingTimeInterval(-86_400),
                         isSubagent: false,
+                        needsInput: false,
                         isLoaded: true
                     )
                 ]
