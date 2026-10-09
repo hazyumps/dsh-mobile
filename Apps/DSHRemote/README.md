@@ -153,11 +153,17 @@ shows the files a message carried, from the durable part the host stores once th
 is retired. The importer is the system one, which a simulator cannot drive, so that one
 control is unverified here.
 
-**Still to come:** image content parts against the host's `imageLimits` (a prompt can cite
-an uploaded file, but not yet send a picture inline); a live approval and timed-question
-round-trip from the phone (the routing and the timed claim are wired and tested offline,
-but no real approval has been answered from the phone); and physical-device validation
-(slice F).
+**Images** go inline, in the prompt, inside the host's own `imageLimits` — read from the
+session's `imageLimits` projection, never assumed. An image the host already accepts is
+passed through byte-for-byte; anything else is shrunk to both the longest-edge and the
+pixel caps and re-encoded as JPEG until it fits, with a refusal that names the limit that
+stopped it. The transcript shows the pictures a message carried, resolved by the host into
+the same durable shape a file gets.
+
+**Still to come:** a live approval and timed-question round-trip from the phone (the routing
+and the timed claim are wired and tested offline, but no real approval has been answered
+from the phone); and physical-device validation (slice F), which is the only way to check
+the two pickers, background recovery, and the timed claim under a real lock.
 
 Returning from the background automatically opens a new connection with the
 stored credential and refreshes the session list and open conversation. Temporary
@@ -217,6 +223,7 @@ shipping app's normal flow is what runs by default.
 | `DSH_DESTINATION=home` | Shows Home rather than the restored conversation, which the app otherwise correctly reopens. |
 | `DSH_DRAFT` | Prefills the conversation composer, so the `/` command suggestions can be seen on a machine that cannot type. |
 | `DSH_ATTACH` | Uploads this local path into the open conversation and stages its receipt, so the upload path can be exercised without a file importer. |
+| `DSH_IMAGE` | Stages this local image into the open conversation, so the inline-image path can be exercised without a photo picker. |
 | `DSH_SEND_MESSAGE` | Sends one message once a conversation is open. **Point it at a scratch session**: a duplicate or stray prompt costs real work, and this client never resends on its own. |
 | `DSH_DESIGN_GALLERY` | Shows the component gallery instead of the app: every design-system component in each of its states, on the real tokens. |
 | `DSH_SCREEN_GALLERY` | Shows the screens above the components from fixture data — `drawer` draws the drawer, `conversation` the conversation transcript, anything else Home. It renders the **real** screens against a seeded model, so the layout can be reviewed without a host. |
