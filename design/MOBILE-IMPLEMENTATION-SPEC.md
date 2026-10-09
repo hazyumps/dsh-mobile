@@ -220,7 +220,9 @@ Create using `session/create` with the following `payload.args`:
 }}
 ```
 
-`workspaceId` and `cwd` are mutually exclusive. The phone uses a selected existing workspace. Omit `agentPreset` when using the host default. The result is `{sessionId,agentPreset?}`.
+`workspaceId` and `cwd` are mutually exclusive, and the host enforces it rather than picking one: supplying both is refused with `gateway/bad-request` and the message `session.create accepts workspaceId or cwd, not both`. An unknown `workspaceId` is refused separately with `workspace/not-found` carrying `{workspaceId}`. The phone uses a selected existing workspace. Omit `agentPreset` when using the host default. The result is `{sessionId,agentPreset?}`.
+
+Omitting `sessionId` makes the host mint one (`session-<uuid>`), and that also disables the persisted-identity checks: the host passes `request.sessionId !== undefined` as its `checkPersistedIdentity` flag, so a conflict with an existing directory header is only detected when the client supplied the identity itself. Supplying the ID is therefore what makes adoption safe, and it is the phone's job to supply it rather than let the host invent one.
 
 Perform these steps in order:
 
