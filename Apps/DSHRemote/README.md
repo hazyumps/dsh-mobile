@@ -24,13 +24,31 @@ xcodebuild -project DSHRemote.xcodeproj -scheme DSHRemote \
 
 ## Installing on a phone
 
-This machine currently has **no code-signing identity** (`security find-identity -v -p codesigning`
-reports none), so a device install needs one first:
+This machine has a valid Apple Development identity, and its team matches the one
+already committed to [project.yml](project.yml):
+
+```sh
+security find-identity -v -p codesigning
+#  1) … "Apple Development: ph@dontbuck.com (7JS22WHNBB)"   1 valid identities found
+security find-certificate -c "Apple Development" -p | openssl x509 -noout -subject
+#  … OU=U6LC736TBG …
+grep DEVELOPMENT_TEAM project.yml
+#  DEVELOPMENT_TEAM: "U6LC736TBG"
+```
+
+Read the **OU** for the team. The parenthesised value in the certificate's common
+name is the certificate ID, not the team, and the two look alike enough to be
+mistaken for a mismatch on a certificate that is in fact fine.
+
+So the remaining step is choosing the destination, not creating an identity:
 
 1. Open the project in Xcode and select the `DSHRemote` target.
-2. Signing & Capabilities → choose your Team. A free Apple ID works for a
-   personal build; the bundle identifier may need to be unique to your account.
+2. Signing & Capabilities should already show the team from `project.yml`.
 3. Select your iPhone and Run.
+
+Verified 2026-10-09: the identity exists and its team matches `project.yml`. A
+device install has **not** been re-run since, so that path is unblocked on paper
+rather than proven.
 
 Xcode writes the team into the project when you pick it, but since the project
 is generated, put it in `project.yml` instead (`DEVELOPMENT_TEAM`) so a
@@ -95,26 +113,22 @@ draft remains. Repeat with a temporarily unavailable network. The independently
 diagnosed host session-log inconsistency can still prevent session listing;
 reconnection does not repair host files or provide a stable remote hostname.
 
-## Two environment blockers on this machine
+## Environment state
 
-- **No code-signing identity** (`security find-identity -v -p codesigning`
-  reports none), so a device install needs an Apple ID in Xcode first — see
-  above.
-- **No iOS simulator runtime is installed.** `xcrun simctl runtime list -v`
-  reports zero disk images. The two runtimes `xcodebuild` mentions
-  (`iOS-18-5`, `iOS-26-2`) are dangling references to images that are gone,
-  which is why it offers no simulator destination at all. The earlier
-  "CoreSimulator is out of date" message was a stale service job, and it
-  clears the first time `simctl` runs.
+Both blockers this section used to list are gone, verified 2026-10-09:
 
-  To run locally, install a runtime — several GB:
+- **A code-signing identity exists**, and its team (OU `U6LC736TBG`) matches
+  `DEVELOPMENT_TEAM` in `project.yml` — see *Installing on a phone* above.
+- **An iOS simulator runtime is installed.** `xcrun simctl runtime list`
+  reports `iOS 27.0 (24A434) — Ready`. The simulator can therefore *run*, not
+  only build, so `-destination 'platform=iOS Simulator,name=…'` is usable and
+  a screen can be looked at rather than merely compiled.
 
-  ```sh
-  xcodebuild -downloadPlatform iOS
-  ```
+`xcodebuild -showdestinations -project DSHRemote.xcodeproj -scheme DSHRemote`
+lists the concrete destinations on this machine, which is the honest answer to
+"what can I run" and is cheaper than reading this paragraph.
 
-  or Xcode → Settings → Components → iOS Simulator. Until one exists,
-  `-destination 'generic/platform=iOS Simulator'` still *builds*; it just
-  cannot *run*.
+Still outstanding, and not an environment problem: physical-phone validation of
+the recovery behaviour described above. An installed runtime is not a phone.
 
 
