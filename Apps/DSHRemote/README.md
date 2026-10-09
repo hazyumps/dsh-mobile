@@ -104,9 +104,16 @@ than by the connection, so a list failure never relabels a healthy connection.
 
 Two things are deliberately absent rather than decorative: **New session** and
 the Home composer cannot start a session yet — that is the create transaction of
-SPEC §5 — so both say so instead of offering a Send that could not work. Plugins,
-Scheduled tasks, MCP, and Usage are omitted until their capability-gated reads
-land (SPEC §10).
+SPEC §5 — so both say so instead of offering a Send that could not work.
+
+The drawer's **Plugins** and **Scheduled tasks** destinations read through
+`SecondaryReadStore` and are capability-gated. On the installed host the plugin
+inventory answers (212 entries) while **every `schedule/*` endpoint 404s**, so the
+schedule screen says "not available on this harness" with no retry — an absence
+established by the host is not a failed read. Both are read-only: management
+controls are absent rather than greyed. **MCP and Usage** stay omitted, because
+this build exposes no MCP inventory endpoint and no verified host-wide usage
+source (SPEC §10).
 
 A conversation renders from `ChatSession`'s snapshot stream (messages, reasoning,
 fenced code with Copy, non-message activity cards, older-history paging) and
@@ -178,6 +185,7 @@ shipping app's normal flow is what runs by default.
 | `DSH_OPEN_HOST` | Selects the first saved host at launch. Home, the drawer, and the session list are otherwise unreachable on a simulator, which cannot be tapped. |
 | `DSH_OPEN_SESSION` | Opens a session once the list has loaded. Pair it with `DSH_SESSION_ID` to open a specific conversation rather than the newest. |
 | `DSH_SESSION_ID` | Names the session `DSH_OPEN_SESSION` should open. |
+| `DSH_DESTINATION` | Opens a drawer destination at launch: `plugins` or `schedules`. It wins over the restored conversation, which would otherwise always get there first. |
 | `DSH_SEND_MESSAGE` | Sends one message once a conversation is open. **Point it at a scratch session**: a duplicate or stray prompt costs real work, and this client never resends on its own. |
 | `DSH_DESIGN_GALLERY` | Shows the component gallery instead of the app: every design-system component in each of its states, on the real tokens. |
 | `DSH_SCREEN_GALLERY` | Shows the screens above the components from fixture data — `drawer` draws the drawer, `conversation` the conversation transcript, anything else Home. It renders the **real** screens against a seeded model, so the layout can be reviewed without a host. |
