@@ -30,6 +30,9 @@ struct ConversationTranscript: View {
     /// that it can still be answered. SPEC §8 gets this the other way round from the way it
     /// looks — the live waterfall is what a card may act on, and answering it goes through
     /// `$events/result` rather than the continued channel.
+    /// Loads one attachment's pixels. Nil when the screen has no reader, in which case an
+    /// image is listed by name rather than drawn.
+    var loadImage: ((String) async -> DisplayImage?)?
     var liveQuestions: [InteractionRequest] = []
     var onAnswerLive: ((String, [DecisionCard.Answer]) -> Void)?
 
@@ -90,7 +93,7 @@ struct ConversationTranscript: View {
             ForEach(rows) { row in
                 switch row {
                 case .message(let message):
-                    MessageRow(message: message)
+                    MessageRow(message: message, loadImage: loadImage)
                 case .activity(let activity):
                     ToolCard(
                         title: activity.title,
@@ -302,6 +305,8 @@ struct ConversationTranscript: View {
 /// canvas for the assistant.
 private struct MessageRow: View {
     let message: ConversationMessage
+    /// Loads one attachment's pixels; nil leaves an image listed by name rather than drawn.
+    var loadImage: ((String) async -> DisplayImage?)?
 
     var body: some View {
         HStack {
@@ -313,12 +318,16 @@ private struct MessageRow: View {
                 MessageBody(text: message.text)
                 if !message.attachments.isEmpty {
                     // The files the message actually carried. SPEC §9 retires the receipt into
-                    // a durable file part, so this is what the host recorded, not a guess.
-                    ForEach(message.attachments, id: \.self) { name in
-                        Label(name, systemImage: "paperclip")
-                            .font(.dshMetadata)
-                            .foregroundStyle(DSHPalette.secondaryText)
-                            .lineLimit(1)
+                    // a durable part, so this is what the host recorded, not a guess.
+                    ForEach(message.attachments) { attachment in
+                        if attachment.isImage, let id = attachment.attachmentId, let loadImage {
+                            AttachmentThumbnail(attachment: attachment) { await loadImage(id) }
+                        } else {
+                            Label(attachment.name, systemImage: "paperclip")
+                                .font(.dshMetadata)
+                                .foregroundStyle(DSHPalette.secondaryText)
+                                .lineLimit(1)
+                        }
                     }
                 }
             }

@@ -107,6 +107,9 @@ final class AppModel {
     private var modelModeStore: ModelModeCatalogStore?
     private var commandStore: CommandCatalogStore?
     private var attachmentUploader: AttachmentUploader?
+    private var attachmentReader: AttachmentReader?
+    /// Decoded images, so a scrolling transcript does not re-decode what it just drew.
+    private let imageCache = SessionImageCache()
     private var interactionStore: InteractionStore?
     private var statusTask: Task<Void, Never>?
     private var snapshotTask: Task<Void, Never>?
@@ -306,6 +309,7 @@ final class AppModel {
         modelModeStore = nil
         commandStore = nil
         attachmentUploader = nil
+        attachmentReader = nil
         stagedAttachments = [:]
         attachmentError = nil
         stagedImages = [:]
@@ -362,6 +366,7 @@ final class AppModel {
             self.secondaryStore = SecondaryReadStore(makeClient: makeClient)
             self.modelModeStore = ModelModeCatalogStore(makeClient: makeClient)
             self.commandStore = CommandCatalogStore(makeClient: makeClient)
+            self.attachmentReader = AttachmentReader(makeClient: makeClient)
             self.attachmentUploader = AttachmentUploader(
                 makeBareClient: {
                     DshBareEndpointClient(
@@ -921,6 +926,26 @@ final class AppModel {
     func clearAttachments(for sessionId: String) {
         stagedAttachments[sessionId] = nil
         attachmentError = nil
+    }
+
+    // MARK: - Reading attachments back (SPEC §6.8)
+
+    /// An attachment's pixels, decoded for display and cached.
+    ///
+    /// The host validates that an attachment belongs to the session asking for it, so the
+    /// lookup is scoped by both — the cache keys on the pair for the same reason.
+    func attachmentImage(sessionId: String, attachmentId: String) async -> DisplayImage? {
+        guard let attachmentReader else { return nil }
+        return try? await imageCache.image(
+            sessionId: sessionId,
+            attachmentId: attachmentId,
+            fetch: attachmentReader.fetcher
+        )
+    }
+
+    /// An attachment's bytes, for a caller that wants to inspect or share them.
+    func attachmentData(sessionId: String, attachmentId: String) async -> Data? {
+        try? await attachmentReader?.attachment(sessionId: sessionId, attachmentId: attachmentId).data
     }
 
     // MARK: - Inline images (SPEC §9)

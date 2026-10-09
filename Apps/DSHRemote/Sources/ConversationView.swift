@@ -235,6 +235,9 @@ struct ConversationView: View {
                         onAnswer: { answers in Task { await answer(answers) } },
                         approvals: approvalRequests,
                         onApproval: { eventId, isAllow in Task { await decide(eventId, isAllow: isAllow) } },
+                        loadImage: { attachmentId in
+                            await model.attachmentImage(sessionId: sessionId, attachmentId: attachmentId)
+                        },
                         liveQuestions: liveQuestionRequests,
                         onAnswerLive: { eventId, answers in
                             Task { await answerLive(eventId, answers) }
