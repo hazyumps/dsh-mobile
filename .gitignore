@@ -12,3 +12,6 @@ Apps/DSHRemote/.cache/
 
 # Python bytecode from Protocol/extract.py
 __pycache__/
+
+# Parallel subagent worktrees.
+.worktrees/
