@@ -323,14 +323,41 @@ public struct MuxSnapshotHeader: Codable, Sendable, Hashable {
     }
 }
 
-/// The live assistant baseline inside a snapshot: `{revision: 18}`.
+/// The live assistant baseline inside a snapshot: `{revision: 18}` in the capture.
 ///
-/// unverified: `revision` is the only key the capture shows; whether a baseline can also
-/// carry attempt identity, a partial chunk list, or nothing at all is unknown, so every field
-/// is optional.
+/// unverified: `revision` is the only key the capture shows. `activeAttempt` is named by
+/// the host's `SessionAssistantStreamBaseline` in installed source and by `SPEC §7`, which
+/// calls the live baseline optional and requires a reconnect to adopt it — but no capture
+/// holds one, so every field is optional and nothing here depends on a key the descriptor
+/// does not also list.
 public struct MuxAssistantStreamBaseline: Codable, Sendable, Hashable {
     /// The revision a following ``AssistantStreamFrame`` continues from.
     public var revision: Int64?
+    /// An attempt the host is still producing, with the prefix it has already published.
+    /// Absent when nothing is in flight.
+    public var activeAttempt: MuxAssistantStreamAttempt?
+}
+
+/// The `activeAttempt` of a reconnect baseline: an in-flight attempt plus its compact prefix.
+///
+/// The field list is the host's `SessionAssistantStreamAttempt`, read from installed source
+/// and from the follow descriptor (`Protocol/`): `attemptId`, `startedAfterSeq`, `turn`,
+/// `step`, `nextIndex`, `stream`. Shapes are from source, not a capture — no live baseline
+/// was ever recorded.
+public struct MuxAssistantStreamAttempt: Codable, Sendable, Hashable {
+    public var attemptId: String?
+    /// The durable `seq` the attempt began after. The host's own type allows `-1` for an
+    /// attempt that started before any durable event.
+    public var startedAfterSeq: Int64?
+    public var turn: Int64?
+    public var step: Int64?
+    /// How many frames of this attempt the host has already counted. A chunk arriving with
+    /// an index below it is already in ``stream`` and must not be appended twice.
+    public var nextIndex: Int64?
+    /// The prefix already published, in the **compact** form — runs with timing arrays, not
+    /// live frames. Expand it with ``AssistantStreamRecord``; appending these records as
+    /// though they were chunks renders one fragment instead of a paragraph.
+    public var stream: [JSONValue]?
 }
 
 /// One entry of a snapshot's `records` array: `{type, event}`.
@@ -496,12 +523,24 @@ extension AssistantStreamFrameType: Codable {
 /// The nested `chunk` object of a `chunk` frame — itself a union discriminated by its own
 /// `type`.
 ///
-/// Only `block-start` is captured on a live frame. `block-end` is captured, with the same
-/// `index` plus its finished `block`, inside the durable `assistant/message` event's `stream`
-/// array — the same shapes one step later — so both are named here.
+/// Unlike every other shape in this file, the three delta kinds below come from
+/// **installed source**, not from a capture: `dsh-llm/lib/types/assistant-stream.js` names
+/// them and reads their fields (`isTokenDelta`, `chunkHasVisibleText`, and the expansion in
+/// ``AssistantStreamRecord``). No live `session/follow` frame carrying a delta was ever
+/// captured — the only captured live chunk is a `block-start`. So the field set here is
+/// the source's, and the presence of these frames on this socket is established by that
+/// source plus `SPEC §7`, not by bytes in `Fixtures/`.
+///
+/// One flat struct rather than an enum, matching the file's existing rule: a chunk kind
+/// this build has no case for still decodes through ``AssistantStreamChunkType/unknown(_:)``
+/// with whatever keys it carries, instead of failing the stream.
 public struct AssistantStreamChunkBody: Codable, Sendable, Hashable {
     public var type: AssistantStreamChunkType
     /// Which content block of the message this chunk belongs to; `0` for the first.
+    ///
+    /// This is the *inner* content-block index. It is not the outer assistant-stream
+    /// frame's `index`, which advances once per frame regardless of block
+    /// (`SPEC §7`: "The outer frame index is not the inner content-block index").
     ///
     /// unverified: present as `0` on both captured chunk shapes; whether a chunk can omit it
     /// is unknown. Optional so an unknown chunk kind still decodes.
@@ -518,21 +557,52 @@ public struct AssistantStreamChunkBody: Codable, Sendable, Hashable {
     /// unverified: never seen on a live chunk frame; kept as ``JSONValue`` because the block
     /// shape differs per block type and the capture proves only `{"type":"reasoning","text":…}`.
     public var block: JSONValue?
+    /// The fragment of the answer, on `text-delta`, or of the reasoning, on
+    /// `reasoning-delta`. Installed source (`dsh-llm/lib/types/assistant-stream.js`) reads
+    /// both as `chunk.text`, which is why one field serves both kinds: which accumulator it
+    /// belongs to is decided by ``type``, and keeping them apart is `SPEC §7`'s rule that
+    /// reasoning is never merged into the answer.
+    public var text: String?
+    /// The tool call identity on `tool-call-delta`. Installed source requires it to be a
+    /// string for a fragment to be folded into a run.
+    public var id: String?
+    /// The tool name on `tool-call-delta`, present only when the run carried one.
+    public var name: String?
+    /// The fragment of a tool call's arguments on `tool-call-delta`. A fragment, never
+    /// parsed as JSON: a partial argument string is usually not valid JSON (`SPEC §7`).
+    public var argumentsDelta: String?
 }
 
 /// The `type` discriminator on an assistant-stream chunk body.
+///
+/// `block-start` and `block-end` are established by the capture. `text-delta`,
+/// `reasoning-delta` and `tool-call-delta` are established by installed source
+/// (`dsh-llm/lib/types/assistant-stream.js`), not by a capture — see
+/// ``AssistantStreamChunkBody``.
 public enum AssistantStreamChunkType: Hashable, Sendable {
     case blockStart
     case blockEnd
+    /// A fragment of the answer for one content block.
+    case textDelta
+    /// A fragment of the model's reasoning for one content block.
+    case reasoningDelta
+    /// A fragment of a tool call's arguments.
+    case toolCallDelta
     case unknown(String)
 
     public static let blockStartRawValue = "block-start"
     public static let blockEndRawValue = "block-end"
+    public static let textDeltaRawValue = "text-delta"
+    public static let reasoningDeltaRawValue = "reasoning-delta"
+    public static let toolCallDeltaRawValue = "tool-call-delta"
 
     public var rawValue: String {
         switch self {
         case .blockStart: Self.blockStartRawValue
         case .blockEnd: Self.blockEndRawValue
+        case .textDelta: Self.textDeltaRawValue
+        case .reasoningDelta: Self.reasoningDeltaRawValue
+        case .toolCallDelta: Self.toolCallDeltaRawValue
         case .unknown(let value): value
         }
     }
@@ -542,6 +612,9 @@ public enum AssistantStreamChunkType: Hashable, Sendable {
         switch rawValue {
         case Self.blockStartRawValue: self = .blockStart
         case Self.blockEndRawValue: self = .blockEnd
+        case Self.textDeltaRawValue: self = .textDelta
+        case Self.reasoningDeltaRawValue: self = .reasoningDelta
+        case Self.toolCallDeltaRawValue: self = .toolCallDelta
         default: self = .unknown(rawValue)
         }
     }
