@@ -102,9 +102,12 @@ saved host. Grouping comes from the host's own workspace registry through
 `HostSessionStore`; the session list is read and refreshed by that store rather
 than by the connection, so a list failure never relabels a healthy connection.
 
-Two things are deliberately absent rather than decorative: **New session** and
-the Home composer cannot start a session yet — that is the create transaction of
-SPEC §5 — so both say so instead of offering a Send that could not work.
+**Home's composer starts sessions.** Send is the first moment the host hears
+anything: the identity is persisted, `session/create` is sent once with it, the new
+session is followed, and the first prompt reuses the submission identity already on
+disk. A `session/workspace-attach-failed` is reconciled as the partial success it is
+rather than retried as a fresh create, and an uncertain outcome keeps the draft and
+says so. The drawer's New session just opens that composer.
 
 The drawer's **Plugins** and **Scheduled tasks** destinations read through
 `SecondaryReadStore` and are capability-gated. On the installed host the plugin
@@ -129,10 +132,10 @@ live channel uses `userQuestions/answer`. The timed question's foreground claim 
 attached, paused and released by the conversation screen, which is where SPEC §8
 puts its lifetime.
 
-**Still to come:** the create transaction (SPEC §5) and the model/mode pickers,
-attachments and commands (SPEC §6, §9) — so New session and the Home composer
-remain disabled with their reason — and the capability-gated secondary screens
-(SPEC §10).
+**Still to come:** the model and mode pickers (SPEC §6) and attachments and slash
+commands (SPEC §9), so a new session currently runs on the host's default preset and
+model; a live approval and timed-question round-trip from the phone; and physical
+device validation (slice F).
 
 Returning from the background automatically opens a new connection with the
 stored credential and refreshes the session list and open conversation. Temporary
@@ -186,6 +189,7 @@ shipping app's normal flow is what runs by default.
 | `DSH_OPEN_SESSION` | Opens a session once the list has loaded. Pair it with `DSH_SESSION_ID` to open a specific conversation rather than the newest. |
 | `DSH_SESSION_ID` | Names the session `DSH_OPEN_SESSION` should open. |
 | `DSH_DESTINATION` | Opens a drawer destination at launch: `plugins` or `schedules`. It wins over the restored conversation, which would otherwise always get there first. |
+| `DSH_NEW_SESSION_MESSAGE` | Starts a **new** session once a workspace is known, with this text as the first prompt. It creates a real session and runs one real turn, so point it at a scratch workspace. |
 | `DSH_SEND_MESSAGE` | Sends one message once a conversation is open. **Point it at a scratch session**: a duplicate or stray prompt costs real work, and this client never resends on its own. |
 | `DSH_DESIGN_GALLERY` | Shows the component gallery instead of the app: every design-system component in each of its states, on the real tokens. |
 | `DSH_SCREEN_GALLERY` | Shows the screens above the components from fixture data — `drawer` draws the drawer, `conversation` the conversation transcript, anything else Home. It renders the **real** screens against a seeded model, so the layout can be reviewed without a host. |
