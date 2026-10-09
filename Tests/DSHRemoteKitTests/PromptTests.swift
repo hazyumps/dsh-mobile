@@ -33,17 +33,16 @@ struct PromptTests {
         }
     }
 
-    @Test("a rejected prompt is not sent a second time")
-    func rejectedPromptIsNotRetried() async throws {
-        // A 500 is the kind of response a retry policy would act on. The prompt
-        // path must not: an uncertain send is reported, never repeated.
-        let transport = StubRelayTransport(responses: [.json(status: 500, Data("{}".utf8))])
+    @Test("a rejected prompt is not sent a second time", arguments: [429, 502, 500])
+    func rejectedPromptIsNotRetried(status: Int) async throws {
+        // 429 and 502 trigger the generic policy. Writes must override it.
+        let transport = StubRelayTransport(responses: [.json(status: status, Data("{}".utf8))])
         let coordinator = makeCoordinator(transport)
 
         let thrown = await failure {
             try await coordinator.prompt(sessionId: "session-1", text: "hello")
         }
-        #expect(thrown != nil, "a 500 should surface as a failure")
+        #expect(thrown != nil, "a refusal should surface as a failure")
 
         #expect(
             await transport.authorizationHeader(at: 0) != nil,
@@ -53,6 +52,19 @@ struct PromptTests {
             await transport.authorizationHeader(at: 1) == nil,
             "the prompt was sent more than once — SPEC §3.4 forbids that"
         )
+    }
+
+    @Test("an uncertain answer is not repeated", arguments: [429, 502])
+    func answerIsNotRetried(status: Int) async throws {
+        let transport = StubRelayTransport(responses: [.json(status: status, Data("{}".utf8))])
+        let coordinator = makeCoordinator(transport)
+        let thrown = await failure {
+            try await coordinator.answer(
+                agentId: "session-1", callId: "call-1", questionId: "question-1", selected: ["Yes"]
+            )
+        }
+        #expect(thrown != nil)
+        #expect(await transport.recordedRequests.count == 1)
     }
 
     // Note: an accepted-prompt test is deliberately absent. Building a success

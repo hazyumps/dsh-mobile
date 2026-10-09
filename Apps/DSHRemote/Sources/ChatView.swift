@@ -26,11 +26,25 @@ struct ChatView: View {
     @State private var sendError: String?
     @State private var openError: String?
     @State private var isOpen = false
+    @State private var isRefreshingConversation = true
+    @State private var followAttempt = 0
+    @State private var didSendLaunchMessage = false
+
+    private struct FollowKey: Hashable {
+        let connectionID: UUID?
+        let attempt: Int
+    }
 
     var body: some View {
         Group {
             if isOpen {
                 conversation
+            } else if model.status == .pairingRequired || model.status == .hostUnavailable {
+                ContentUnavailableView {
+                    Label(model.status.label, systemImage: "wifi.exclamationmark")
+                } description: {
+                    Text(model.connectionError ?? "Open the host to check its connection.")
+                }
             } else if let openError {
                 // Before this, a failed open showed a spinner forever: the error
                 // was only rendered inside the composer, which does not exist
@@ -41,28 +55,47 @@ struct ChatView: View {
                 } description: {
                     Text(openError)
                 } actions: {
-                    Button("Try again") { Task { await open() } }
+                    Button("Try again") { followAttempt += 1 }
+                        .disabled(!model.status.isUsable)
                 }
             } else {
-                ProgressView("Opening conversation…")
+                ProgressView(model.status.isUsable ? "Opening conversation…" : model.status.label)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .navigationTitle("Conversation")
         .navigationBarTitleDisplayMode(.inline)
-        .task {
-            guard session == nil, !isOpen else { return }
-            await open()
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                StatusBadge(status: model.status)
+            }
         }
-        .onDisappear {
-            let closing = session
-            session = nil
-            Task { await closing?.stop() }
+        .task(id: FollowKey(connectionID: model.connectionID, attempt: followAttempt)) {
+            guard let connectionID = model.connectionID else { return }
+            await open(connectionID: connectionID)
         }
     }
 
     private var conversation: some View {
         VStack(spacing: 0) {
+            if !model.status.isUsable {
+                Label(model.connectionError ?? model.status.label, systemImage: "wifi.exclamationmark")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+            } else if let openError {
+                HStack {
+                    Text(openError)
+                    Button("Retry") { followAttempt += 1 }
+                }
+                .font(.footnote)
+                .padding(8)
+            } else if isRefreshingConversation {
+                ProgressView("Updating conversation…")
+                    .font(.footnote)
+                    .padding(8)
+            }
             if hasGap {
                 // SPEC §6.9: a hole in the history is said out loud rather than
                 // shown as a conversation that looks continuous.
@@ -111,6 +144,7 @@ struct ChatView: View {
                             Task { await answer(question, selecting: [option.label]) }
                         }
                         .buttonStyle(.bordered)
+                        .disabled(!model.status.isUsable || isRefreshingConversation)
                     }
                 }
                 .padding(10)
@@ -168,7 +202,8 @@ struct ChatView: View {
                         Image(systemName: "arrow.up.circle.fill").font(.title2)
                     }
                 }
-                .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSending)
+                .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSending
+                          || !model.status.isUsable || isRefreshingConversation)
             }
         }
         .padding(.horizontal)
@@ -178,48 +213,27 @@ struct ChatView: View {
 
     /// Opens the conversation, or records why it could not be opened. Extracted
     /// so the error state's retry runs the same path the first attempt did.
-    private func open() async {
+    private func open(connectionID: UUID) async {
         openError = nil
-        // A navigation can arrive before the host's connect finishes: the list is
-        // pushed faster than the socket opens. Waiting beats failing instantly —
-        // the verification affordance made this reproducible, but a quick tap on
-        // a real phone would hit the same race. Bounded, so a genuinely offline
-        // host still ends in the error state rather than a spinner.
-        var opened: ChatSession?
-        for _ in 0..<40 {
-            if let session = await model.chatSession(for: sessionId) {
-                opened = session
-                break
-            }
-            try? await Task.sleep(for: .milliseconds(250))
-        }
-        guard let opened else {
-            openError = "Not connected to the harness. Go back and open the host again."
-            return
-        }
+        isRefreshingConversation = true
+        guard let opened = await model.chatSession(for: sessionId),
+              !Task.isCancelled, connectionID == model.connectionID else { return }
         session = opened
         do {
             try await opened.start()
-            isOpen = true
-            // Verification affordance: send one message automatically, so the
-            // composer's wiring and the resulting turn can be seen without a tap.
-            // Inert unless DSH_SEND_MESSAGE is set.
-            if let message = model.launchMessage {
-                draft = message
-                await send()
-            }
-            await watch(opened)
+            await watch(opened, connectionID: connectionID)
         } catch {
-            openError = """
-                The harness did not open this conversation. It may be too new to \
-                follow yet, or the connection dropped.
-                """
+            if !Task.isCancelled, connectionID == model.connectionID {
+                openError = "The harness did not open this conversation."
+            }
         }
+        await opened.stop()
+        if session === opened { session = nil }
     }
 
     private func send() async {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
+        guard !text.isEmpty, model.status.isUsable, !isRefreshingConversation else { return }
         isSending = true
         sendError = nil
         do {
@@ -234,13 +248,40 @@ struct ChatView: View {
     }
 
     /// Copies the session's state into view state until the screen goes away.
-    private func watch(_ session: ChatSession) async {
-        while !Task.isCancelled {
+    private func watch(_ session: ChatSession, connectionID: UUID) async {
+        let deadline = ContinuousClock.now + .seconds(10)
+        while !Task.isCancelled, connectionID == model.connectionID {
+            let ready = await session.hasSnapshot
             let next = await session.messages
-            if next.count != messages.count { messages = next }
-            hasGap = await session.hasGap
-            isStreaming = await session.isStreaming
-            questions = await session.pendingQuestions
+            let failure = await session.followError
+            let gap = await session.hasGap
+            let streaming = await session.isStreaming
+            let pending = await session.pendingQuestions
+            guard !Task.isCancelled, connectionID == model.connectionID else { return }
+            // Preserve the cached conversation until a complete new baseline
+            // arrives, including replacements with the same number of messages.
+            if ready {
+                if next != messages { messages = next }
+                isOpen = true
+                isRefreshingConversation = false
+            }
+            if let error = failure {
+                isRefreshingConversation = true
+                openError = error
+                return
+            }
+            if !ready, ContinuousClock.now >= deadline {
+                openError = "The harness has not sent the conversation yet."
+                return
+            }
+            hasGap = gap
+            isStreaming = streaming
+            if ready { questions = pending }
+            if ready, !didSendLaunchMessage, let message = model.launchMessage {
+                didSendLaunchMessage = true
+                draft = message
+                await send()
+            }
             try? await Task.sleep(for: .milliseconds(250))
         }
     }

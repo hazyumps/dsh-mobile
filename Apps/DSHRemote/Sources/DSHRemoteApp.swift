@@ -6,11 +6,23 @@ import SwiftUI
 @main
 struct DSHRemoteApp: App {
     @State private var model = AppModel()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
             HostsView()
                 .environment(model)
+                .onChange(of: scenePhase, initial: true) { _, phase in
+                    switch phase {
+                    case .active: model.setForeground(true)
+                    case .background: model.setForeground(false)
+                    case .inactive: break
+                    @unknown default: break
+                    }
+                }
+                .task(id: model.connectionID) {
+                    await model.refreshSessions()
+                }
                 .task {
                     // Verification affordance, debug builds only: a harness can
                     // seed pairing by passing `DSH_PAIRING_PAYLOAD`, so the whole

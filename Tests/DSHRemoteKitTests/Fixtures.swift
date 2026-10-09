@@ -1,3 +1,4 @@
+import Testing
 import Foundation
 
 import DSHRemoteKit
@@ -98,3 +99,16 @@ enum Fixtures {
         }
     }
 }
+
+/// The follow id is per subscription; fixture ids must match the actual open.
+func followStreamID(on socket: StubRelaySocket) async throws -> String {
+    for text in await socket.sentTexts.reversed() {
+        let frame = try JSONDecoder().decode(JSONValue.self, from: Data(text.utf8))
+        if frame["endpoint"]?.stringValue == "session/follow" {
+            return try #require(frame["streamId"]?.stringValue)
+        }
+    }
+    throw FixtureError.noFollowStream
+}
+
+private enum FixtureError: Error { case noFollowStream }

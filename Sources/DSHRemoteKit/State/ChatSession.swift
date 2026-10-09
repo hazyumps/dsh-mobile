@@ -15,6 +15,8 @@ public actor ChatSession {
     private let client: MuxClient
     private let sessionId: String
     private let streamId: String
+    public private(set) var hasSnapshot = false
+    public private(set) var followError: String?
 
     private var builder = ConversationBuilder()
     private var pump: Task<Void, Never>?
@@ -31,7 +33,7 @@ public actor ChatSession {
         self.sessionId = sessionId
         // Generated, never reused: a cancelled stream's id must not be handed to
         // a later consumer, which is the leak rule the mux client tests assert.
-        self.streamId = "follow-\(sessionId)"
+        self.streamId = "follow-\(UUID().uuidString)"
     }
 
     /// Builds a session on an already-connected coordinator's socket.
@@ -97,9 +99,11 @@ public actor ChatSession {
                 for try await item in stream {
                     await self?.fold(item.frame)
                 }
+                if !Task.isCancelled { await self?.recordFollowFailure() }
             } catch {
                 // A dead socket ends the stream; the connection's status is the
                 // place that failure belongs, not this conversation's contents.
+                if !Task.isCancelled { await self?.recordFollowFailure() }
             }
             await self?.clearPump()
         }
@@ -116,6 +120,9 @@ public actor ChatSession {
     // MARK: - Internals
 
     private func fold(_ frame: MuxFrame) {
+        if frame.type == .error {
+            followError = ConnectionCoordinator.describe(frame)
+        }
         // Questions hide in two places, and missing the first one cost a round:
         // a *fresh* follow receives history as a snapshot whose `records` carry
         // the tool calls, while only events arriving after the follow come as
@@ -125,6 +132,7 @@ public actor ChatSession {
             collectQuestions(from: event)
         }
         if let snapshot = frame.value?.snapshot {
+            hasSnapshot = true
             for record in snapshot.records {
                 if let event = record.event {
                     collectQuestions(from: event)
@@ -155,5 +163,9 @@ public actor ChatSession {
 
     private func clearPump() {
         pump = nil
+    }
+
+    private func recordFollowFailure() {
+        followError = followError ?? "The conversation connection closed."
     }
 }

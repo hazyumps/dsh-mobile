@@ -34,6 +34,12 @@ struct ChatSessionQuestionTests {
         ]),
     ])
 
+    private func pushQuestion(to socket: StubRelaySocket) async throws {
+        var frame = try #require(Self.frame.objectValue)
+        frame["streamId"] = .string(try await followStreamID(on: socket))
+        try await socket.push(json: .object(frame))
+    }
+
     private func makeSession() -> (chat: ChatSession, socket: StubRelaySocket) {
         let socket = StubRelaySocket()
         let transport = StubRelayTransport(sockets: [socket])
@@ -60,7 +66,7 @@ struct ChatSessionQuestionTests {
     func questionBecomesPending() async throws {
         let (chat, socket) = makeSession()
         try await chat.start()
-        try await socket.push(json: Self.frame)
+        try await pushQuestion(to: socket)
 
         let arrived = await eventually { await !chat.pendingQuestions.isEmpty }
         #expect(arrived, "the tool/call event never produced a pending question")
@@ -75,7 +81,7 @@ struct ChatSessionQuestionTests {
     func answeringClearsIt() async throws {
         let (chat, socket) = makeSession()
         try await chat.start()
-        try await socket.push(json: Self.frame)
+        try await pushQuestion(to: socket)
         _ = await eventually { await !chat.pendingQuestions.isEmpty }
 
         await chat.markAnswered(questionId: "colour")
@@ -86,10 +92,10 @@ struct ChatSessionQuestionTests {
     func duplicateEventIsIdempotent() async throws {
         let (chat, socket) = makeSession()
         try await chat.start()
-        try await socket.push(json: Self.frame)
+        try await pushQuestion(to: socket)
         _ = await eventually { await !chat.pendingQuestions.isEmpty }
         // A reconnect replays the snapshot, which carries the same tool call.
-        try await socket.push(json: Self.frame)
+        try await pushQuestion(to: socket)
 
         try? await Task.sleep(for: .milliseconds(200))
         #expect(await chat.pendingQuestions.count == 1)

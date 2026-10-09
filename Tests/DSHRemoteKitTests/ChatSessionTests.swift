@@ -15,8 +15,6 @@ import Testing
 @Suite("ChatSession")
 struct ChatSessionTests {
 
-    private static let streamId = "follow-session-1"
-
     private func makeSession() -> (chat: ChatSession, socket: StubRelaySocket) {
         let socket = StubRelaySocket()
         let transport = StubRelayTransport(sockets: [socket])
@@ -32,7 +30,7 @@ struct ChatSessionTests {
     /// stream this session opened. `StubRelaySocket` is an actor.
     private func push(_ name: String, to socket: StubRelaySocket) async throws {
         var frame = try muxFrameObject(name)
-        frame["streamId"] = .string(Self.streamId)
+        frame["streamId"] = .string(try await followStreamID(on: socket))
         try await socket.push(json: .object(frame))
     }
 
@@ -68,7 +66,7 @@ struct ChatSessionTests {
         // The captured snapshot's two records are permission and sandbox state,
         // so the conversation stays empty. Asserting this pins what the fixture
         // actually demonstrates rather than what its name suggests.
-        try? await Task.sleep(for: .milliseconds(100))
+        #expect(await eventually { await chat.hasSnapshot })
         #expect(await chat.messages.isEmpty)
 
         // And a message still arrives afterwards, so the snapshot did not wedge it.
@@ -110,5 +108,46 @@ struct ChatSessionTests {
         // survive: the connection's status owns that failure, not this type.
         await socket.fail()
         #expect(await !chat.messages.isEmpty)
+    }
+
+    @Test("reopening creates a fresh follow and ignores frames addressed to the old one")
+    func freshSubscriptionIgnoresLateFrames() async throws {
+        let socket = StubRelaySocket()
+        let transport = StubRelayTransport(sockets: [socket])
+        let client = MuxClient(
+            baseURL: URL(string: "https://relay.test")!,
+            authorization: .bearer("test-token"), transport: transport
+        )
+        let old = ChatSession(client: client, sessionId: "session-1")
+        try await old.start()
+        let oldID = try await followStreamID(on: socket)
+        await old.stop()
+        let fresh = ChatSession(client: client, sessionId: "session-1")
+        try await fresh.start()
+        #expect(try await followStreamID(on: socket) != oldID)
+        var late = try muxFrameObject("event/user/message")
+        late["streamId"] = .string(oldID)
+        try await socket.push(json: .object(late))
+        try await push("snapshot", to: socket)
+        #expect(await eventually { await fresh.hasSnapshot })
+        #expect(await fresh.messages.isEmpty)
+        try await push("event/user/message", to: socket)
+        #expect(await eventually { await fresh.messages.count == 1 })
+        await fresh.stop()
+        await client.close()
+    }
+
+    @Test("a rejected follow reports an error before any snapshot")
+    func rejectedFollowIsVisible() async throws {
+        let (chat, socket) = makeSession()
+        try await chat.start()
+        try await socket.push(json: .object([
+            "type": .string("error"), "streamId": .string(try await followStreamID(on: socket)),
+            "error": .object(["message": .string("session unavailable")]),
+        ]))
+        #expect(await eventually { await chat.followError != nil })
+        #expect(await chat.followError == "session unavailable")
+        #expect(await !chat.hasSnapshot)
+        await chat.stop()
     }
 }

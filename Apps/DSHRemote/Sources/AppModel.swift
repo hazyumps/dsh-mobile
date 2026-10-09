@@ -3,17 +3,19 @@ import Foundation
 import Observation
 import UIKit
 
-/// Everything the UI reads. Pairing and the session list are wired; the chat is
-/// the next slice.
+/// Pairing, the selected host, and the state shared by the phone's screens.
 @MainActor
 @Observable
-final class AppModel {    /// The kit owns `ConnectionStatus` — this is the transport's own view of
-    /// where the connection stands, not a UI invention.
-    var status: ConnectionStatus = .pairingRequired
+final class AppModel {
+    private var idleStatus: ConnectionStatus = .pairingRequired
+    var status: ConnectionStatus { recovery?.status ?? idleStatus }
+    var connectionID: UUID? { recovery?.connectionID }
+    var connectionError: String? { recovery?.error?.description }
     var hosts: [SavedHost] = []
     var sessions: [SessionSummary] = []
     var sessionListError: String?
-    var isLoadingSessions = false
+    private var isRefreshingSessions = false
+    var isLoadingSessions: Bool { isRefreshingSessions || status == .connecting }
 
     /// Result of reading a pasted pairing payload, shown beside the field.
     var pairingOutcome: PairingOutcome?
@@ -29,6 +31,11 @@ final class AppModel {    /// The kit owns `ConnectionStatus` — this is the tr
     private let store = HostStore()
     private let secrets = KeychainSecretStore()
     private var coordinator: ConnectionCoordinator?
+    private var recovery: ForegroundConnection?
+    private var selectedHostID: UUID?
+    private var selectionID = UUID()
+    private var refreshID = UUID()
+    private var isForeground = false
 
     /// Raised when a chat action is attempted with no live connection. The
     /// coordinator reports *why* through ``status``; this only says the screen
@@ -91,14 +98,14 @@ final class AppModel {    /// The kit owns `ConnectionStatus` — this is the tr
     /// writing to one are different capabilities (SPEC §4), and this is the seam
     /// that keeps them out of the view.
     func chatSession(for sessionId: String) async -> ChatSession? {
-        guard let coordinator else { return nil }
+        guard status.isUsable, let coordinator else { return nil }
         return await ChatSession.connected(to: coordinator, sessionId: sessionId)
     }
 
     /// Sends a prompt. Never retried — an uncertain send is reported, not
     /// repeated, because a duplicate turn costs real work (SPEC §3.4).
     func sendPrompt(_ text: String, to sessionId: String) async throws {
-        guard let coordinator else { throw ChatUnavailable.notConnected }
+        guard status.isUsable, let coordinator else { throw ChatUnavailable.notConnected }
         try await coordinator.prompt(sessionId: sessionId, text: text)
     }
 
@@ -115,7 +122,7 @@ final class AppModel {    /// The kit owns `ConnectionStatus` — this is the tr
         selected: [String],
         custom: String? = nil
     ) async throws -> Bool {
-        guard let coordinator else { throw ChatUnavailable.notConnected }
+        guard status.isUsable, let coordinator else { throw ChatUnavailable.notConnected }
         return try await coordinator.answer(
             agentId: sessionId,
             callId: callId,
@@ -127,7 +134,7 @@ final class AppModel {    /// The kit owns `ConnectionStatus` — this is the tr
 
     init() {
         hosts = store.load()
-        if !hosts.isEmpty { status = .offline }
+        if !hosts.isEmpty { idleStatus = .offline }
     }
 
     // MARK: - Pairing
@@ -194,7 +201,7 @@ final class AppModel {    /// The kit owns `ConnectionStatus` — this is the tr
         }
         claimError = nil
         isClaiming = true
-        status = .connecting
+        idleStatus = .connecting
         defer { isClaiming = false }
 
         // A pin from the payload is the trust anchor; without one the platform
@@ -218,23 +225,24 @@ final class AppModel {    /// The kit owns `ConnectionStatus` — this is the tr
             hosts.append(host)
             try store.save(hosts)
             pairingOutcome = nil
-            status = .offline
+            idleStatus = .offline
         } catch let error as PairingError {
             claimError = error.readableReason ?? String(describing: error)
-            status = hosts.isEmpty ? .pairingRequired : .offline
+            idleStatus = hosts.isEmpty ? .pairingRequired : .offline
         } catch {
             claimError = String(describing: error)
-            status = hosts.isEmpty ? .pairingRequired : .offline
+            idleStatus = hosts.isEmpty ? .pairingRequired : .offline
         }
     }
 
     func forget(_ host: SavedHost) {
+        if selectedHostID == host.id { disconnect() }
         hosts.removeAll { $0.id == host.id }
         Task {
             try? await secrets.deleteRelayDeviceToken(forHostUUID: host.id)
         }
         try? store.save(hosts)
-        if hosts.isEmpty { status = .pairingRequired }
+        if hosts.isEmpty { idleStatus = .pairingRequired }
     }
 
     // MARK: - Sessions
@@ -242,20 +250,46 @@ final class AppModel {    /// The kit owns `ConnectionStatus` — this is the tr
     /// Connect to a saved host and read its sessions. The token comes from the
     /// keychain, so this works after a relaunch without re-pairing.
     func loadSessions(for host: SavedHost) async {
-        isLoadingSessions = true
-        sessionListError = nil
-        defer { isLoadingSessions = false }
-
-        do {
-            let coordinator = try await connected(to: host)
-            status = await coordinator.status
-            sessions = try await coordinator.sessions()
-            status = await coordinator.status
-        } catch {
-            sessionListError = String(describing: error)
-            sessions = []
-            status = .hostUnavailable
+        if selectedHostID == host.id, recovery != nil {
+            if status.isUsable { await refreshSessions() }
+            return
         }
+        await select(host)
+    }
+
+    /// The app calls this once for every fresh ready connection, including after
+    /// returning from the background. A host data error keeps the cached list.
+    func refreshSessions() async {
+        refreshID = UUID()
+        let refresh = refreshID
+        guard let coordinator, let connectionID else {
+            isRefreshingSessions = false
+            return
+        }
+        let selection = selectionID
+        isRefreshingSessions = true
+        sessionListError = nil
+        defer {
+            if refresh == refreshID {
+                isRefreshingSessions = false
+            }
+        }
+        do {
+            let latest = try await coordinator.sessions()
+            guard refresh == refreshID, selection == selectionID,
+                  connectionID == self.connectionID else { return }
+            sessions = latest
+        } catch {
+            guard !Task.isCancelled, refresh == refreshID, selection == selectionID,
+                  connectionID == self.connectionID else { return }
+            sessionListError = String(describing: error)
+        }
+    }
+
+    func setForeground(_ active: Bool) {
+        isForeground = active
+        if !active { isRefreshingSessions = false }
+        recovery?.setForeground(active)
     }
 
     /// SPEC §3.3 groups by the host's workspace registry. The session row carries
@@ -272,30 +306,54 @@ final class AppModel {    /// The kit owns `ConnectionStatus` — this is the tr
         session.updatedAt.map { Date(timeIntervalSince1970: Double($0) / 1000) }
     }
 
-    private func connected(to host: SavedHost) async throws -> ConnectionCoordinator {
-        if let coordinator, await coordinator.status.isUsable {
-            return coordinator
-        }
-        let token = try await secrets.secret(for: RelayDeviceCredential.account(hostUUID: host.id))
-        guard let token else { throw HostConnectionError.missingCredential }
-        let origin = ConnectionCoordinator.Origin(
-            baseURL: host.origin,
-            authorization: .bearer(token),
-            pinning: RelayPinningPolicy(
-                expectedSPKIPin: host.pinnedFingerprint,
-                requiresPlatformTrust: host.pinnedFingerprint == nil
+    private func select(_ host: SavedHost) async {
+        let previous = recovery
+        previous?.setForeground(false)
+        recovery = nil
+        coordinator = nil
+        selectedHostID = host.id
+        selectionID = UUID()
+        let selection = selectionID
+        sessions = []
+        sessionListError = nil
+        isRefreshingSessions = false
+        idleStatus = .connecting
+        await previous?.stop()
+        guard selection == selectionID else { return }
+        do {
+            let token = try await secrets.secret(for: RelayDeviceCredential.account(hostUUID: host.id))
+            guard selection == selectionID else { return }
+            guard let token else { throw HostConnectionError.missingCredential }
+            let origin = ConnectionCoordinator.Origin(
+                baseURL: host.origin,
+                authorization: .bearer(token),
+                pinning: RelayPinningPolicy(
+                    expectedSPKIPin: host.pinnedFingerprint,
+                    requiresPlatformTrust: host.pinnedFingerprint == nil
+                )
             )
-        )
-        let coordinator = ConnectionCoordinator(origin: origin)
-        _ = try await coordinator.connect()
-        self.coordinator = coordinator
-        return coordinator
+            let coordinator = ConnectionCoordinator(origin: origin)
+            self.coordinator = coordinator
+            let recovery = ForegroundConnection(coordinator: coordinator)
+            self.recovery = recovery
+            recovery.setForeground(isForeground)
+        } catch {
+            guard selection == selectionID else { return }
+            sessionListError = String(describing: error)
+            idleStatus = .pairingRequired
+        }
     }
 
-    func disconnect() async {
-        await coordinator?.shutdown()
+    func disconnect() {
+        recovery?.setForeground(false)
+        recovery = nil
         coordinator = nil
+        selectedHostID = nil
+        selectionID = UUID()
+        isRefreshingSessions = false
         sessions = []
+        sessionListError = nil
+        idleStatus = hosts.isEmpty ? .pairingRequired : .offline
     }
 }
 

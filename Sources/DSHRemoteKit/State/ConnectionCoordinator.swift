@@ -20,9 +20,8 @@ import Foundation
 ///
 /// ## What this type does not do
 ///
-/// It does not reconnect. SPEC §6.4's jittered exponential backoff (0.5 s base, 10 s
-/// cap, stop on credential or pin failure) is the next slice; see the `Reconnect`
-/// MARK at the bottom of this file for the seam it will take. It also does not reduce
+/// ``ForegroundConnection`` schedules automatic retries and foreground recovery.
+/// This type does not reduce
 /// conversation state (SPEC §6.5), page history, or store sessions — ``sessions()``
 /// returns what the host just said, and the store that puts it on screen is not this.
 public actor ConnectionCoordinator {
@@ -89,7 +88,7 @@ public actor ConnectionCoordinator {
 
     /// Builds the transport each attempt runs on.
     ///
-    /// A closure rather than one transport instance, so a reconnect (next slice) gets a
+    /// A closure rather than one transport instance, so each reconnect gets a
     /// pristine connection instead of reusing one that just failed — and so a test can
     /// hand out a scripted transport per attempt, which is what makes
     /// "attempt 1 fails, attempt 2 succeeds" expressible at all.
@@ -286,7 +285,29 @@ public actor ConnectionCoordinator {
     // MARK: - State
 
     /// The current status. Read it from an actor-isolated context.
-    public private(set) var status: ConnectionStatus = .pairingRequired
+    public private(set) var status: ConnectionStatus = .pairingRequired {
+        didSet {
+            for observer in statusObservers.values { observer.yield(status) }
+        }
+    }
+    private var statusObservers: [UUID: AsyncStream<ConnectionStatus>.Continuation] = [:]
+
+    /// Includes the current state so a loss between connect and subscription is
+    /// observed as well. Cancelling the consumer removes its subscription.
+    public func statusUpdates() -> AsyncStream<ConnectionStatus> {
+        let id = UUID()
+        let (stream, continuation) = AsyncStream<ConnectionStatus>.makeStream()
+        statusObservers[id] = continuation
+        continuation.yield(status)
+        continuation.onTermination = { [weak self] _ in
+            Task { await self?.removeStatusObserver(id) }
+        }
+        return stream
+    }
+
+    private func removeStatusObserver(_ id: UUID) {
+        statusObservers.removeValue(forKey: id)
+    }
     /// The live connection, when there is one. Non-nil exactly when ``status`` is
     /// ``ConnectionStatus/connected``.
     public private(set) var connection: Connection?
@@ -304,7 +325,7 @@ public actor ConnectionCoordinator {
 
     private var activeGeneration: Generation?
     private var mux: MuxClient?
-    private var drainTask: Task<Void, Never>?
+    private var eventRouter: RemoteEventRouter?
 
     /// Public for tests and for an explicit logout; production wiring passes the
     /// origin once and leaves it alone (SPEC §3.2: selecting another host disconnects
@@ -337,8 +358,8 @@ public actor ConnectionCoordinator {
     /// after the stream readiness handshake completes").
     ///
     /// Calling it again tears the previous connection down first and burns a new
-    /// generation, which is the shape SPEC §6.5 requires of a reconnect. Automatic
-    /// reconnect is the next slice; a caller may drive this manually in the meantime.
+    /// generation, which is the shape SPEC §6.5 requires of a reconnect.
+    /// ``ForegroundConnection`` schedules automatic attempts.
     ///
     /// - Throws: ``ConnectError``. On *any* throw the status has already been moved off
     ///   ``ConnectionStatus/connecting`` — a failure never leaves the app claiming to
@@ -361,10 +382,7 @@ public actor ConnectionCoordinator {
         status = .connecting
 
         do {
-            let connection = try await performConnect(generation: generation)
-            self.connection = connection
-            status = .connected
-            return connection
+            return try await performConnect(generation: generation)
         } catch {
             throw await abandon(Self.failure(from: error))
         }
@@ -412,16 +430,35 @@ public actor ConnectionCoordinator {
             try await Self.firstReadyFrame(in: opened, streamId: eventsStreamId)
         }
 
-        // Frames that arrive after the ready frame are still the socket's business —
-        // they must be read or the connection stalls — but this slice has no consumer
-        // for them yet, so they are drained. Also the only place a mid-connection
-        // socket failure can be noticed.
-        drainTask?.cancel()
-        drainTask = Task { [weak self] in
-            await Self.drain(opened, generation: generation, coordinator: self)
-        }
+        guard generation == activeGeneration, !Task.isCancelled else { throw ConnectError.cancelled }
+        let connection = Connection(generation: generation, clientId: ready.clientId, host: ready.host)
+        self.connection = connection
+        status = .connected
 
-        return Connection(generation: generation, clientId: ready.clientId, host: ready.host)
+        // Frames that arrive after the ready frame are still the socket's business — they
+        // must be read or the connection stalls. They are no longer *discarded*: one
+        // router consumes `$events` for this generation and fans the decoded events out.
+        // SPEC §2 replaced the drain on exactly this reasoning, and §8 needs the events.
+        // The router owns its own loop, so teardown only has to cancel the router.
+        let router = RemoteEventRouter(
+            identity: .init(generation: generation, clientId: ready.clientId),
+            onEnded: { [weak self] error in
+                await self?.streamEnded(generation: generation, error: error)
+            }
+        )
+        eventRouter = router
+        await router.start(opened)
+
+        return connection
+    }
+
+    /// The `$events` router for the current ready generation, when one is connected.
+    ///
+    /// The only supported way to receive host events. It returns nil while there is no
+    /// ready connection, so a caller cannot subscribe to a generation that has gone.
+    public func remoteEvents() -> RemoteEventRouter? {
+        guard connection != nil, let eventRouter else { return nil }
+        return eventRouter
     }
 
     // MARK: - Sessions (SPEC §3.3)
@@ -494,7 +531,7 @@ public actor ConnectionCoordinator {
                 Self.sessionPromptMethod,
                 args: SessionPromptArguments(request: request),
                 returning: SessionPromptValue.self,
-                retryPolicy: .none
+                retryPolicy: RPCFailureRetryPolicy.none
             )
         } catch {
             let failure = Self.failure(from: error)
@@ -546,7 +583,7 @@ public actor ConnectionCoordinator {
                 Self.userQuestionsAnswerMethod,
                 args: arguments,
                 returning: UserQuestionsAnswerResult.self,
-                retryPolicy: .none
+                retryPolicy: RPCFailureRetryPolicy.none
             )
             // `ok: true` means the call was accepted; this value says whether the
             // host actually applied it. A question that had already been abandoned
@@ -579,27 +616,7 @@ public actor ConnectionCoordinator {
         )
     }
 
-    /// Keeps the `$events` frame sequence alive for a consumer that has moved on.
-    ///
-    /// Unstructured on purpose: the stream's own termination handler releases the mux
-    /// subscription when the iterator is dropped, and this task is cancelled by
-    /// ``shutdown()``/``teardown()``, so it cannot outlive the connection.
-    private static func drain(
-        _ stream: AsyncThrowingStream<MuxStreamItem, any Error>,
-        generation: Generation,
-        coordinator: ConnectionCoordinator?
-    ) async {
-        do {
-            for try await _ in stream {}
-        } catch {
-            // A socket that died mid-connection. It is not an error this slice
-            // presents — reconnect is the next slice — but the status must not keep
-            // claiming `connected` over a dead socket.
-            await coordinator?.streamEnded(generation: generation, error: error)
-        }
-    }
-
-    /// Called by the drain loop when a live stream ends. Guards on the generation so a
+    /// Called by the router when the `$events` stream ends. Guards on the generation so a
     /// late failure from an abandoned attempt cannot demote the attempt that replaced
     /// it (SPEC §6.5: a reconnect replaces baselines rather than merging them).
     private func streamEnded(generation: Generation, error: any Error) {
@@ -613,7 +630,8 @@ public actor ConnectionCoordinator {
         }
         lastError = reported
         connection = nil
-        mux = nil
+        // Keep ownership until teardown closes the entire socket, including any
+        // conversation stream left behind by a logical events-stream end.
         activeGeneration = nil
         status = reported.status
     }
@@ -635,29 +653,40 @@ public actor ConnectionCoordinator {
         status = .offline
     }
 
-    /// The shared teardown: cancel the drain, close the mux, forget the connection.
+    /// The shared teardown: cancel the router, close the mux, forget the connection.
     ///
     /// ``MuxClient/close()`` is what cancels the receive loop and closes the socket —
     /// and it finishes every open stream, which is what lets a consumer's `for await`
     /// end instead of hanging on a socket nobody will feed again.
     private func teardown() async {
-        drainTask?.cancel()
-        drainTask = nil
+        // Drop the connection's claim *first*. The router is about to observe its stream
+        // end, and that end belongs to this deliberate teardown — `streamEnded` guards on
+        // `connection != nil`, so nothing here can be reported as a lost connection and
+        // schedule a pointless reconnect.
+        connection = nil
+
+        // The socket goes before the router, not after. `MuxClient.close()` removes every
+        // subscription before finishing it, so the router's iterator ends without its
+        // termination handler reaching the per-stream cancel path — a cancel frame for a
+        // stream we are already abandoning is a write on a socket that is closing.
         if let mux {
             self.mux = nil
             await mux.close()
         }
-        connection = nil
+
+        // Belt and braces: stops the consumer if the stream end has not already, retires
+        // this generation's pending deliveries, and closes its subscribers. Idempotent.
+        let router = eventRouter
+        eventRouter = nil
+        await router?.cancel()
     }
 
     // MARK: - Status
 
     /// Records that a connection was lost and is being re-established.
     ///
-    /// The only way ``ConnectionStatus/reconnecting`` is reachable in this slice, and
-    /// it is public so the next slice's backoff loop has one call to make when it
-    /// takes over the status. Without this, `Reconnecting` would be a state the UI
-    /// renders and nothing ever sets.
+    /// Available to manual callers. ``ForegroundConnection`` owns the app's
+    /// reconnecting presentation while it schedules retries.
     public func reportReconnecting() {
         status = .reconnecting
     }
@@ -756,6 +785,8 @@ public actor ConnectionCoordinator {
             return .transportInterruption(detail: detail)
         case .tlsPinMismatch(let detail):
             return .certificateChanged(detail: detail)
+        case .webSocketRejected(let error):
+            return .rpc(error)
         case .cancelled:
             return .cancelled
         }
@@ -790,6 +821,8 @@ public actor ConnectionCoordinator {
             // SPEC §6.4: stop, say the certificate changed, offer re-pairing. The
             // kind is read from the error itself, not recovered from its wording.
             return .certificateChanged(detail: detail)
+        case .webSocketRejected(let error):
+            return .rpc(error)
         case .cancelled:
             return .cancelled
         case .offline(let detail), .other(let detail):
@@ -910,69 +943,42 @@ public actor ConnectionCoordinator {
 
     // MARK: - Budgets
 
-    /// Runs `operation`, failing with ``onExpiry`` if it has not returned within
-    /// `seconds`.
-    ///
-    /// A racing child task rather than a `URLRequest.timeoutInterval`: SPEC §6.4's
-    /// budgets are connection budgets, and the operation here spans the transport's own
-    /// upgrade *and* the protocol's handshake, which no request timeout can cover.
-    ///
-    /// The cancellation detail that matters: when the deadline wins, leaving the task
-    /// group cancels `operation` and **awaits it** before returning. So a budget expiry
-    /// cannot return while a socket upgrade is still in flight — the caller's teardown
-    /// then closes the mux, and the socket is released rather than leaked.
-    ///
-    /// `sleeper` rather than `Task.sleep` so a test can fire the deadline without
-    /// waiting for the wall clock; the default is the real one.
-    /// Resumes a budget race exactly once, whichever side finishes first.
-    private actor BudgetGate {
-        private var used = false
-        func claim() -> Bool {
-            if used { return false }
-            used = true
-            return true
-        }
-    }
-
+    /// Race the deadline and operation without waiting on an unresponsive socket.
+    /// AsyncStream also wakes immediately on caller cancellation, so backgrounding
+    /// can tear down a stalled handshake instead of waiting for its timeout.
     static func withBudget<T: Sendable>(
         seconds: Double,
         onExpiry: @escaping @Sendable (Double) -> ConnectError,
         sleeper: any RelaySleeper = TaskRelaySleeper(),
         operation: @escaping @Sendable () async throws -> T
     ) async throws -> T {
-        // Raced through a continuation rather than a task group.
-        //
-        // A task group cannot leave its scope while a child is parked, so a stuck
-        // operation made this budget unreachable: the expiry was computed, thrown
-        // at the group, and then discarded by the scope exit. A wrong pin hung for
-        // forty seconds rather than failing at ten, which is the opposite of what
-        // SPEC §6.9 asks for. Here the first outcome wins and the loser is
-        // abandoned, so the budget always fires.
-        let gate = BudgetGate()
-        return try await withCheckedThrowingContinuation { continuation in
-            let work = Task {
-                do {
-                    let value = try await operation()
-                    if await gate.claim() { continuation.resume(returning: value) }
-                } catch {
-                    if await gate.claim() { continuation.resume(throwing: error) }
-                }
-            }
-            Task {
-                do {
-                    try await sleeper.sleep(seconds: seconds)
-                } catch {
-                    // The sleeper was cancelled; another outcome owns the race.
-                    return
-                }
-                if await gate.claim() {
-                    // A bounded failure beats an unbounded hang: stop waiting on an
-                    // operation that is not coming back.
-                    work.cancel()
-                    continuation.resume(throwing: onExpiry(seconds))
-                }
+        try Task.checkCancellation()
+        let (stream, continuation) = AsyncThrowingStream<T, any Error>.makeStream()
+        let work = Task {
+            do {
+                try Task.checkCancellation()
+                continuation.yield(try await operation())
+                continuation.finish()
+            } catch {
+                continuation.finish(throwing: error)
             }
         }
+        let timer = Task {
+            do {
+                try await sleeper.sleep(seconds: seconds)
+                continuation.finish(throwing: onExpiry(seconds))
+            } catch {}
+        }
+        defer {
+            work.cancel()
+            timer.cancel()
+            continuation.finish()
+        }
+        var iterator = stream.makeAsyncIterator()
+        guard let value = try await iterator.next(), !Task.isCancelled else {
+            throw ConnectError.cancelled
+        }
+        return value
     }
 }
 
@@ -997,24 +1003,5 @@ extension MuxFrameValue {
     }
 }
 
-// MARK: - Reconnect (next slice)
-
-// SPEC §6.4: reconnect with jittered exponential backoff, 0.5 s base, 10 s cap, while
-// foregrounded; honour relay rate limiting; stop retrying on credential or pin
-// failure and offer the user the relevant action. None of that is implemented here.
-//
-// The seam it will take, so the next slice does not have to redesign this file:
-//
-// 1. `connect()` already starts from a clean slate — it tears the previous attempt down
-//    and burns a new ``Generation`` — so a retry loop needs no new entry point.
-// 2. `ConnectError.isRetryable` and `ConnectError.status` already answer "should I try
-//    again" and "what do I say meanwhile". `.certificateChanged` answers no, and
-//    `refreshStatus(from:)` keeps a hard `Pairing required` from being churned back to
-//    `Connecting`.
-// 3. `reportReconnecting()` exists so the loop has one call to make for the
-//    ``ConnectionStatus/reconnecting`` state, and `makeTransport` hands out a fresh
-//    transport per attempt rather than reusing a dead one.
-// 4. What is missing is only the schedule: a `RelaySleeper`-driven loop with jitter
-//    over `RPCFailureRetryPolicy.backoffBaseSeconds` (0.5) / `backoffCapSeconds` (10),
-//    plus foreground/background gating from SPEC §7 and `Retry-After` honouring from
-//    SPEC §6.9 — which `RelayExchange` already parses for unary calls.
+// Automatic foreground recovery is owned by ForegroundConnection. This actor
+// owns the handshake, socket, and per-connection generation.

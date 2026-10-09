@@ -73,9 +73,27 @@ metadata goes to `hosts.json` in Application Support. Forgetting a host
 deletes its credential and says plainly that it does not revoke the device at
 the relay.
 
-Connecting to a saved host, listing its sessions, and the chat itself are the
-next slices. The status badge already carries text as well as a symbol, per
-SPEC §3.1.
+The app connects to saved hosts, lists sessions, follows conversations, sends
+prompts, and answers questions. The status badge carries text and a symbol.
+
+Returning from the background automatically opens a new connection with the
+stored credential and refreshes the session list and open conversation. Temporary
+failures retry while foregrounded with backoff; there is no reconnect approval.
+Backgrounding cancels retries and closes the socket. A revoked credential or
+changed certificate stops recovery and shows the reason.
+
+The open screen keeps its messages and draft during reconnection and waits for
+a fresh snapshot before enabling sends. It does not replay prompts or answers.
+This is in-memory retention, not draft/history restoration after iOS terminates
+the app. Session-list errors preserve the cached list and do not relabel a
+healthy connection as unavailable.
+
+Recovery is covered by offline transport tests and an iOS simulator build.
+Physical-phone validation is still needed: open a conversation, type a draft,
+lock/unlock or switch apps, then confirm that new host output appears and the
+draft remains. Repeat with a temporarily unavailable network. The independently
+diagnosed host session-log inconsistency can still prevent session listing;
+reconnection does not repair host files or provide a stable remote hostname.
 
 ## Two environment blockers on this machine
 

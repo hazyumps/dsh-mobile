@@ -97,6 +97,8 @@ struct RelayExchange: Sendable {
                 throw DshRPCError.transportInterruption(detail: error.safeDescription)
             case .tlsPinMismatch(let detail):
                 throw DshRPCError.certificateChanged(detail: detail)
+            case .webSocketRejected(let failure):
+                throw failure
             case .cancelled:
                 throw DshRPCError.cancelled
             case .other(let detail):

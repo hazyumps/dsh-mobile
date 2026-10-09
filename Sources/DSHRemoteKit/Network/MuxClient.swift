@@ -261,6 +261,12 @@ public actor MuxClient {
         } catch {
             throw classify(error)
         }
+        // A transport may finish its upgrade after foreground recovery has
+        // already cancelled this attempt. Never revive an abandoned mux.
+        guard !isClosed, !Task.isCancelled else {
+            await opened.close()
+            throw MuxStreamError.clientClosed
+        }
         socket = opened
         startReceiveLoop(on: opened)
         return opened
@@ -273,17 +279,18 @@ public actor MuxClient {
         // frames that arrive in that window belong to *other* streams.
         receiveLoop = Task {
             do {
-                while true {
+                while !Task.isCancelled, !isClosed {
                     let message = try await socket.receive()
-                    self.deliver(message)
+                    await self.deliver(message)
                 }
             } catch {
-                self.failAllStreams(self.classify(error))
+                await self.failAllStreams(self.classify(error))
             }
         }
     }
 
-    private func deliver(_ message: RelaySocketMessage) {
+    private func deliver(_ message: RelaySocketMessage) async {
+        guard !isClosed else { return }
         let data: Data
         switch message {
         case .text(let text): data = Data(text.utf8)
@@ -293,7 +300,7 @@ public actor MuxClient {
         guard let frame = try? decoder.decode(MuxFrame.self, from: data) else {
             // A frame that is not a MuxFrame means the framing contract is gone;
             // guessing past it would silently corrupt every stream.
-            failAllStreams(
+            await failAllStreams(
                 .protocolIncompatible(reason: "an inbound frame did not decode as a mux envelope")
             )
             return
@@ -340,11 +347,16 @@ public actor MuxClient {
         subscription.continuation.finish()
     }
 
-    private func failAllStreams(_ error: MuxStreamError) {
+    private func failAllStreams(_ error: MuxStreamError) async {
+        guard !isClosed else { return }
+        isClosed = true
+        receiveLoop?.cancel()
         receiveLoop = nil
+        let failedSocket = socket
         socket = nil
         let openSubscriptions = subscriptions
         subscriptions.removeAll()
+        await failedSocket?.close()
         for subscription in openSubscriptions.values {
             subscription.continuation.finish(throwing: error)
         }

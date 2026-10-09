@@ -11,6 +11,10 @@ struct SessionsView: View {
 
     var body: some View {
         List {
+            if !model.status.isUsable, let error = model.connectionError {
+                Label(error, systemImage: "wifi.exclamationmark")
+                    .foregroundStyle(.secondary)
+            }
             if model.isLoadingSessions {
                 HStack(spacing: 8) {
                     ProgressView()

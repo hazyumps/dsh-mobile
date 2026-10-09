@@ -136,7 +136,7 @@ public protocol RelayTransport: Sendable {
 
 // MARK: - Transport failures
 
-/// What a transport may report before any HTTP status exists.
+/// Connection failures, including a refused WebSocket HTTP upgrade.
 ///
 /// Separated from ``DshRPCError`` because these are properties of the connection
 /// rather than of an exchange, and because the URLSession implementation is the
@@ -151,6 +151,9 @@ public enum RelayTransportError: Error, Sendable, Hashable {
     /// distinct case because it must never be retried and never fall back to
     /// normal CA validation (SPEC §3.2).
     case tlsPinMismatch(String)
+    /// Preserve the upgrade response so authentication failures stop recovery
+    /// and rate limits retain Retry-After instead of becoming generic offline.
+    case webSocketRejected(DshRPCError)
     /// The exchange was cancelled by the caller's task. Not an error to show.
     case cancelled
     /// Anything else the platform reported.
@@ -163,6 +166,7 @@ public enum RelayTransportError: Error, Sendable, Hashable {
         switch self {
         case .offline(let detail): "transport offline: \(detail)"
         case .tlsPinMismatch(let detail): "TLS pin mismatch: \(detail)"
+        case .webSocketRejected(let error): "WebSocket upgrade refused: \(error.readableReason ?? String(describing: error))"
         case .cancelled: "transport cancelled"
         case .other(let detail): "transport failure: \(detail)"
         }
@@ -191,6 +195,26 @@ public enum RelayTransportError: Error, Sendable, Hashable {
             }
         }
         return .other(String(describing: type(of: error)))
+    }
+
+    static func webSocketFailure(_ error: any Error, response: HTTPURLResponse?) -> RelayTransportError {
+        guard let response, response.statusCode != 101 else { return classify(error) }
+        let failure: DshRPCError
+        switch response.statusCode {
+        case 401:
+            failure = .relayedAuthenticationFailure(relayError: nil, status: 401)
+        case 403:
+            failure = .credentialRejected(relayError: nil, status: 403)
+        case 429:
+            let delay = HTTPRetryAfter.seconds(from: response.value(forHTTPHeaderField: "Retry-After"), now: Date())
+                ?? RPCFailureRetryPolicy.default.defaultRetryAfterSeconds
+            failure = .rateLimited(retryAfterSeconds: delay, attempts: 1)
+        case 502:
+            failure = .harnessUnavailable(attempts: 1)
+        default:
+            failure = .unexpectedStatus(status: response.statusCode, endpoint: "remote.mux")
+        }
+        return .webSocketRejected(failure)
     }
 }
 
@@ -430,7 +454,7 @@ private final class URLSessionRelaySocket: RelaySocket, @unchecked Sendable {
         do {
             try await task.send(.string(text))
         } catch {
-            throw RelayTransportError.classify(error)
+            throw RelayTransportError.webSocketFailure(error, response: task.response as? HTTPURLResponse)
         }
     }
 
@@ -443,7 +467,7 @@ private final class URLSessionRelaySocket: RelaySocket, @unchecked Sendable {
                 throw RelayTransportError.other("unknown WebSocket message kind")
             }
         } catch {
-            throw RelayTransportError.classify(error)
+            throw RelayTransportError.webSocketFailure(error, response: task.response as? HTTPURLResponse)
         }
     }
 
