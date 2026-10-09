@@ -368,10 +368,18 @@ final class AppModel {
             // through the coordinator's own `sessions()`, which owns a status policy: a
             // list failure must not demote a healthy connection (SPEC §3).
             let makeClient: @Sendable () -> DshRpcClient = {
-                DshRpcClient(
+                // Built here rather than as a shared constant: `URLSessionConfiguration` is not
+                // `Sendable`, and the transport is constructed per call anyway.
+                let configuration = URLSessionConfiguration.ephemeral
+                configuration.timeoutIntervalForRequest = Self.readTimeoutSeconds
+                configuration.timeoutIntervalForResource = 60
+                return DshRpcClient(
                     baseURL: origin.baseURL,
                     authorization: origin.authorization,
-                    transport: URLSessionRelayTransport(pinning: origin.pinning)
+                    transport: URLSessionRelayTransport(
+                        configuration: configuration,
+                        pinning: origin.pinning
+                    )
                 )
             }
             let hostStore = HostSessionStore(coordinator: coordinator, makeRPCClient: makeClient)
@@ -448,6 +456,16 @@ final class AppModel {
             }
         }
     }
+
+    /// How long an ordinary read waits, in seconds.
+    ///
+    /// `URLSession`'s default request timeout is a minute, so a read the host never answers
+    /// leaves a screen on its spinner for a minute — indistinguishable from a screen that is
+    /// simply broken, and what the Plugins and Usage screens looked like on a phone while the
+    /// harness answered the same call instantly over loopback. Twenty seconds is long enough
+    /// for a slow LAN and short enough that a failure arrives as a message. Uploads keep the
+    /// default: a large file legitimately takes longer than this.
+    nonisolated static let readTimeoutSeconds: TimeInterval = 20
 
     private func apply(status: ConnectionStatus, selection: UUID) async {
         guard selection == selectionID else { return }
