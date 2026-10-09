@@ -446,7 +446,7 @@ A scratch session exists for exactly this:
 session-429af9e1-6e19-4872-bae2-c4e2d5aa94e5
 ```
 
-created on the live harness with `cwd /Users/patrick/repo/dsh-mobile`, empty, and
+created on the live harness with `cwd /Users/example/repo/dsh-mobile`, empty, and
 safe to send into. The device that created it was revoked immediately; the app's
 own paired device (`dsh-verify`, in the simulator's keychain) is what reads it.
 

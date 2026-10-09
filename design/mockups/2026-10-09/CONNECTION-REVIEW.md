@@ -73,7 +73,7 @@ An isolated reproduction directly imported the relay's src/tls.ts, writing only 
 
 Reproduce with:
 ```sh
-node --experimental-strip-types Tools/diagnostics/relay-identity-probe.mjs /Users/patrick/repo/deepseek-harness-relay
+node --experimental-strip-types Tools/diagnostics/relay-identity-probe.mjs /Users/example/repo/deepseek-harness-relay
 ```
 
 This is a fingerprint comparison using generated certificates, not a simulated iPhone handshake. The app's pin comparison rejects unequal fingerprints. The important timing qualification is relay certificate loading/reloading; a DHCP change does not instantly rewrite a running TLS listener.

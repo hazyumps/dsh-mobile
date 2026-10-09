@@ -174,7 +174,7 @@ extension AppModel {
             BrowseWorkspace(
                 id: "workspace-dsh-mobile",
                 title: "dsh-mobile",
-                path: "/Users/patrick/repo/dsh-mobile",
+                path: "/Users/example/repo/dsh-mobile",
                 sessions: [
                     BrowseSession(
                         id: "session-example-1",
@@ -208,7 +208,7 @@ extension AppModel {
             BrowseWorkspace(
                 id: "workspace-gaia",
                 title: "gaia",
-                path: "/Users/patrick/repo/gaia",
+                path: "/Users/example/repo/gaia",
                 sessions: [
                     BrowseSession(
                         id: "session-example-3",

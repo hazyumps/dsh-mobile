@@ -24,7 +24,7 @@ struct DiagnosticsTests {
     func failureReasonIsNotRecorded() {
         // The reason is user-facing text. The harness's own persistence failure quotes a
         // storage path in its message, so a state recorded verbatim is a leak.
-        let secret = "/Users/patrick/repo/private/session-017dd1d3"
+        let secret = "/Users/example/repo/private/session-017dd1d3"
         let line = DiagnosticRecord(
             correlation: UUID(),
             subject: .endpoint("session/list"),
@@ -101,8 +101,8 @@ struct DiagnosticsTests {
     }
 
     @Test("anything not shaped like a code becomes a placeholder", arguments: [
-        "/Users/patrick/repo/homelab",
-        "corrupt session log at /Users/patrick/.dsh/sessions/x",
+        "/Users/example/repo/homelab",
+        "corrupt session log at /Users/example/.dsh/sessions/x",
         "header id 123 and cwd identify a different storage path",
         "token 9f2c41ab30d7e155",
         "https://relay.example/api?a=bearer",
@@ -162,7 +162,7 @@ struct DiagnosticsTests {
             correlation: UUID(),
             subject: .endpoint("session/list"),
             status: 500,
-            errorCode: "/Users/patrick/.dsh/sessions/private/session-017dd1d3"
+            errorCode: "/Users/example/.dsh/sessions/private/session-017dd1d3"
         )
 
         let exported = log.export()
@@ -229,7 +229,7 @@ struct DiagnosticsTests {
             correlation: UUID(),
             subject: .endpoint("session/list"),
             stateName: "failed",
-            errorCode: "/Users/patrick/repo/homelab"
+            errorCode: "/Users/example/repo/homelab"
         )
         #expect(withPath.errorCode == DiagnosticRecord.unshapedErrorCode)
     }

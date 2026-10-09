@@ -203,7 +203,7 @@ public struct DiagnosticRecord: Sendable, Hashable, Codable {
     /// Keeps a code that is shaped like one and refuses anything else.
     ///
     /// Shape, not just alphabet. The first version of this checked only which characters
-    /// were allowed, and `/Users/patrick/repo/homelab` sailed through: a slash is legal in
+    /// were allowed, and `/Users/example/repo/homelab` sailed through: a slash is legal in
     /// `gateway/method-unavailable`, so a path and a namespaced code share an alphabet and
     /// only their *structure* separates them.
     ///
