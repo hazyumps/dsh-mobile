@@ -160,10 +160,19 @@ pixel caps and re-encoded as JPEG until it fits, with a refusal that names the l
 stopped it. The transcript shows the pictures a message carried, resolved by the host into
 the same durable shape a file gets.
 
-**Still to come:** a live approval and timed-question round-trip from the phone (the routing
-and the timed claim are wired and tested offline, but no real approval has been answered
-from the phone); and physical-device validation (slice F), which is the only way to check
-the two pickers, background recovery, and the timed claim under a real lock.
+**Live questions work end to end.** A harness session that uses `ask_user_question` parks its
+turn, the phone receives the `user-questions/request` waterfall, shows the card, and answering
+it through `$events/result` resumes the turn — verified against the installed host, whose
+durable tool result read `{"answers":[{"id":"colour","selected":["Blue"]}]}` with
+`isError: false`.
+
+**Approvals and the timed claim are still offline-only.** Nothing on this host produces
+either: an unanswered question's waterfall carries **no** `wait`, and a write outside the
+workspace is refused by the sandbox outright rather than escalated to an approval. So SPEC
+§8's timed-claim path is implemented and unit-tested but has no live coverage here.
+
+**Still to come:** physical-device validation (slice F), which is the only way to check the
+two pickers, background recovery, and the timed claim under a real lock.
 
 Returning from the background automatically opens a new connection with the
 stored credential and refreshes the session list and open conversation. Temporary
@@ -224,6 +233,7 @@ shipping app's normal flow is what runs by default.
 | `DSH_DRAFT` | Prefills the conversation composer, so the `/` command suggestions can be seen on a machine that cannot type. |
 | `DSH_ATTACH` | Uploads this local path into the open conversation and stages its receipt, so the upload path can be exercised without a file importer. |
 | `DSH_IMAGE` | Stages this local image into the open conversation, so the inline-image path can be exercised without a photo picker. |
+| `DSH_ANSWER` | Answers the first live request with this value — a question's option label, or `allow`/`deny` for an approval — so the `$events/result` path can be exercised without a tap. |
 | `DSH_SEND_MESSAGE` | Sends one message once a conversation is open. **Point it at a scratch session**: a duplicate or stray prompt costs real work, and this client never resends on its own. |
 | `DSH_DESIGN_GALLERY` | Shows the component gallery instead of the app: every design-system component in each of its states, on the real tokens. |
 | `DSH_SCREEN_GALLERY` | Shows the screens above the components from fixture data — `drawer` draws the drawer, `conversation` the conversation transcript, anything else Home. It renders the **real** screens against a seeded model, so the layout can be reviewed without a host. |
