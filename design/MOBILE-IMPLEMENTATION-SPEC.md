@@ -269,7 +269,9 @@ Do not send a new prompt before the conversation baseline is current. Do not que
 
 The model catalog contains `default`, `routableProviders`, `groups`, and `failures`. Each group's `id` identifies the provider; each model has an `id` and display `name`, with optional advertised reasoning choices. Preserve provider/model IDs exactly. Show provider failures without hiding the usable groups. Never hardcode Spark, Ember, or a DeepSeek model as the selected backend.
 
-The model-selection response is normalized by the host. Its source also saves the selection as a host default asynchronously; that persistence may fail after session selection succeeds. Document the side effect in Settings/help and do not promise the choice affects only this phone. Do not offer unsupported reasoning efforts.
+The model-selection response is normalized by the host, which resolves the request through its own call-config path and returns the settled `{provider, model, reasoningEffort?}` rather than echoing what was asked for. Its source also saves the selection as a host default asynchronously — `agentDefaultModel.saveSelection` is deliberately not awaited, and a failure is logged as a warning, so the session selection can succeed while the default silently does not persist. Document the side effect in Settings/help and do not promise the choice affects only this phone. Do not offer unsupported reasoning efforts.
+
+A model the host cannot resolve is refused with `session/model-unavailable` carrying `{provider, model}`, which is the state the picker must show rather than leaving the old selection displayed as if it had taken.
 
 Stage selections locally before creation. While an existing selection request is pending, serialize selection and sending so the prompt cannot race ahead on the old model. On refusal, restore the confirmed display and keep the draft. On uncertainty, refresh projections before enabling Send.
 
