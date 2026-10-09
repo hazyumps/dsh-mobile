@@ -208,4 +208,29 @@ struct DiagnosticsTests {
         log.removeAll()
         #expect(log.isEmpty)
     }
+
+    @Test("a state this build does not model is recorded as written, and is still code-checked")
+    func namedStateRecords() {
+        // The secondary screens report their own vocabulary — `unavailable` has no
+        // `ResourceState` case, and mapping it onto one would say something the host did not.
+        let record = DiagnosticRecord(
+            correlation: UUID(),
+            subject: .endpoint("schedule/catalog"),
+            resource: "schedule/catalog",
+            stateName: "unavailable",
+            errorCode: "gateway/method-unavailable"
+        )
+        #expect(record.resourceState == "unavailable")
+        #expect(record.errorCode == "gateway/method-unavailable")
+        #expect(record.line.contains("state=unavailable"))
+
+        // The shape check still applies on this path: a path is not an error code.
+        let withPath = DiagnosticRecord(
+            correlation: UUID(),
+            subject: .endpoint("session/list"),
+            stateName: "failed",
+            errorCode: "/Users/patrick/repo/homelab"
+        )
+        #expect(withPath.errorCode == DiagnosticRecord.unshapedErrorCode)
+    }
 }

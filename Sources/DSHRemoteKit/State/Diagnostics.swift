@@ -172,6 +172,34 @@ public struct DiagnosticRecord: Sendable, Hashable, Codable {
         self.recordedAt = recordedAt
     }
 
+    /// The same record from a state this build does not model as a ``ResourceState``.
+    ///
+    /// The secondary screens report `unknown`/`loading`/`available`/`unavailable`/`failed`,
+    /// which is not the resource vocabulary — an unavailable capability has no `ResourceState`
+    /// case, and mapping it onto one would say something the host did not. The name is kept
+    /// as written, and the record is otherwise identical, `errorCode` shape check included.
+    public init(
+        correlation: UUID,
+        subject: Subject,
+        generation: UInt64? = nil,
+        resource: String? = nil,
+        stateName: String?,
+        status: Int? = nil,
+        errorCode: String? = nil,
+        durationMilliseconds: Int? = nil,
+        recordedAt: Date = Date()
+    ) {
+        self.correlation = correlation
+        self.subject = subject
+        self.generation = generation
+        self.resource = resource
+        self.resourceState = stateName
+        self.status = status
+        self.errorCode = Self.shape(errorCode)
+        self.durationMilliseconds = durationMilliseconds
+        self.recordedAt = recordedAt
+    }
+
     /// Keeps a code that is shaped like one and refuses anything else.
     ///
     /// Shape, not just alphabet. The first version of this checked only which characters
