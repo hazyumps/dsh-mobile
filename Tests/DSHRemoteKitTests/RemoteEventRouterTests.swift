@@ -120,6 +120,30 @@ struct RemoteEventRouterTests {
         await router.cancel()
     }
 
+    @Test("a subscriber that arrives after retirement gets an ended stream, not a hang")
+    func subscribingAfterRetirementEnds() async throws {
+        let (router, _) = await started()
+        await router.cancel()
+
+        // A screen that mounted one frame after the reconnect would otherwise park forever in
+        // `for await`: the router never finishes a subscription it never saw. That race is why
+        // the reconnect test below failed intermittently under load.
+        let ended = await withTaskGroup(of: Bool.self) { group in
+            group.addTask {
+                for await _ in await router.events() {}
+                return true
+            }
+            group.addTask {
+                try? await Task.sleep(for: .seconds(2))
+                return false
+            }
+            let first = await group.next() ?? false
+            group.cancelAll()
+            return first
+        }
+        #expect(ended, "a retired router left a subscriber's stream open")
+    }
+
     @Test("the buffered prefix goes to the first subscriber only")
     func bufferIsHandedOverOnce() async throws {
         let (router, continuation) = await started()

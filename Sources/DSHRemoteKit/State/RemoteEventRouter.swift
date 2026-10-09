@@ -118,11 +118,23 @@ public actor RemoteEventRouter {
     ///
     /// Cancelling the returned stream removes the subscription, which is what lets a
     /// navigating-away screen stop receiving without touching the socket.
+    ///
+    /// A subscriber that arrives **after** this router was retired gets the buffered prefix
+    /// and then an immediately finished stream. Without that, `for await` over a retired
+    /// router's events parks forever — the router never finishes a subscription it never
+    /// saw — so a screen that mounted one frame late would hang instead of finding nothing.
+    /// It is a race, which is why it surfaced under load: the reconnect test caught it.
     public func events() -> AsyncStream<RemoteEvent> {
         let id = UUID()
         let (stream, continuation) = AsyncStream<RemoteEvent>.makeStream()
+        let prefix = drainBufferForFirstSubscriber()
+        if isFinished {
+            for event in prefix { continuation.yield(event) }
+            continuation.finish()
+            return stream
+        }
         subscribers[id] = continuation
-        for event in drainBufferForFirstSubscriber() { continuation.yield(event) }
+        for event in prefix { continuation.yield(event) }
         continuation.onTermination = { [weak self] _ in
             Task { await self?.removeSubscriber(id) }
         }
