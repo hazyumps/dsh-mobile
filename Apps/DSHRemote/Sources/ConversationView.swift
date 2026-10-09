@@ -28,7 +28,14 @@ struct ConversationView: View {
     @State private var followAttempt = 0
     @State private var didSendLaunchMessage = false
 
+    /// What a follow belongs to.
+    ///
+    /// The session id is part of it, and that is not bookkeeping: SwiftUI reuses one
+    /// `ConversationView` when the stack navigates from one conversation to another, so a
+    /// key of connection-and-attempt alone left the *old* follow running — and the old
+    /// transcript on screen — under the new session's id.
     private struct FollowKey: Hashable {
+        let sessionId: String
         let connectionID: UUID?
         let attempt: Int
     }
@@ -50,7 +57,11 @@ struct ConversationView: View {
                 StatusBadge(status: model.status)
             }
         }
-        .task(id: FollowKey(connectionID: model.connectionID, attempt: followAttempt)) {
+        .task(id: FollowKey(
+            sessionId: sessionId,
+            connectionID: model.connectionID,
+            attempt: followAttempt
+        )) {
             guard let connectionID = model.connectionID else { return }
             await follow(connectionID: connectionID)
         }

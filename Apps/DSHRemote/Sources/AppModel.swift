@@ -40,6 +40,11 @@ final class AppModel {
     /// says what is still waiting.
     private(set) var interactions: [InteractionRequest] = []
 
+    /// Whether a first prompt is being created and sent right now.
+    private(set) var isStartingSession = false
+    /// What went wrong with the most recent new-session attempt, in the user's terms.
+    private(set) var newSessionError: String?
+
     /// Where the user is. Persisted per host, separately from any draft (SPEC §5).
     private(set) var selectedWorkspaceId: String?
     private(set) var selectedSessionId: String?
@@ -151,6 +156,19 @@ final class AppModel {
     var launchDestination: String? {
         #if DEBUG
         ProcessInfo.processInfo.environment["DSH_DESTINATION"]
+        #else
+        nil
+        #endif
+    }
+
+    /// A first prompt for a *new* session, sent once a workspace is known.
+    ///
+    /// Same reason as the other launch affordances: creating a session needs a tap this
+    /// machine cannot make. Point it at a scratch workspace, because it does create a real
+    /// session and run one real turn. Debug builds only.
+    var launchNewSessionMessage: String? {
+        #if DEBUG
+        ProcessInfo.processInfo.environment["DSH_NEW_SESSION_MESSAGE"]
         #else
         nil
         #endif
@@ -445,6 +463,118 @@ final class AppModel {
         }
     }
 
+    // MARK: - Starting a session (SPEC §5)
+
+    /// The draft a new session in this workspace belongs to.
+    ///
+    /// One per workspace, held for the life of the process: the *draft* is what persists, and
+    /// its identity is what makes two new drafts in one workspace unable to overwrite each
+    /// other. Re-creating this UUID each time would defeat the storage key that exists to
+    /// prevent exactly that.
+    private var newSessionDraftIds: [String: UUID] = [:]
+    /// Set once a launch-triggered new session has been started, so a later snapshot cannot
+    /// start a second one.
+    private var didStartLaunchSession = false
+
+    /// Whether the composer can start a new session where the user is.
+    var canStartSession: Bool {
+        status.isUsable && selectedHost != nil && selectedWorkspaceId != nil
+    }
+
+    /// Creates a session in the selected workspace and sends the first prompt.
+    ///
+    /// The order is SPEC §5's, and each step is there for a failure it prevents:
+    ///
+    /// 1. the identity is **persisted before the request**, so a lost response still leaves
+    ///    the phone able to adopt what the host may have made rather than make a second one;
+    /// 2. the create is sent **once**, with that identity, and never re-sent automatically;
+    /// 3. a partial success is reconciled — the session exists, so it is opened and the
+    ///    attachment problem reported — instead of being retried as a fresh create;
+    /// 4. the prompt reuses the submission identity already on disk, which is the value the
+    ///    host deduplicates on.
+    ///
+    /// Nothing here resends anything on a reconnect. An uncertain outcome keeps the draft and
+    /// says so.
+    @discardableResult
+    func startSession(workspaceId: String, text: String) async -> String? {
+        guard let coordinator, let host = selectedHost else {
+            newSessionError = "This phone is not connected to a harness."
+            return nil
+        }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            newSessionError = "A first prompt needs something to say."
+            return nil
+        }
+
+        isStartingSession = true
+        newSessionError = nil
+        defer { isStartingSession = false }
+
+        let draftId = newSessionDraftIds[workspaceId] ?? UUID()
+        newSessionDraftIds[workspaceId] = draftId
+        let key = DraftKey(hostId: host.id, owner: .newSession(draftId))
+
+        // The identity, chosen here and written before the request goes out.
+        let existing = await drafts.draft(for: key)
+        let sessionId = existing.proposedSessionId ?? "session-\(UUID().uuidString)"
+        _ = await drafts.setWorkspace(workspaceId, for: key)
+        _ = await drafts.setText(trimmed, for: key)
+        _ = await drafts.setProposedSessionId(sessionId, for: key)
+        let draft = await drafts.draft(for: key)
+        let submission = await drafts.beginSubmission(requestId: UUID().uuidString, for: key)
+        try? await drafts.flush()
+
+        do {
+            let outcome = try await coordinator.createSession(
+                sessionId: sessionId,
+                workspaceId: workspaceId
+            )
+            switch outcome {
+            case .created(let created):
+                // Bound before anything else: the screen and the draft follow the identity
+                // the host confirmed, not the one that was proposed.
+                openSession(created.sessionId)
+                await send(first: trimmed, requestId: submission.requestId, to: created.sessionId, draft: draft, key: key)
+                return created.sessionId
+
+            case .attachmentFailed(let reconciled, let reason):
+                // SPEC §5: the session may already exist, so it is reconciled and the
+                // attachment problem is shown. Creating another one would leave a duplicate.
+                let identity = reconciled ?? sessionId
+                openSession(identity)
+                newSessionError = "The session was created but its workspace could not be attached: \(reason)"
+                return identity
+            }
+        } catch {
+            newSessionError = Self.reason(for: error)
+            return nil
+        }
+    }
+
+    /// Sends the first prompt, clearing only the revision that was submitted.
+    private func send(
+        first text: String,
+        requestId: String,
+        to sessionId: String,
+        draft: Draft,
+        key: DraftKey
+    ) async {
+        guard let coordinator else { return }
+        do {
+            try await coordinator.prompt(requestId: requestId, sessionId: sessionId, text: text)
+            // Acceptance clears exactly the revision sent; text typed while it was in flight
+            // survives, because that is a different revision.
+            _ = await drafts.clearSubmitted(revision: draft.revision, for: key)
+            try? await drafts.flush()
+        } catch {
+            // The session exists and is on screen; only the first prompt's fate is unknown.
+            // The draft stays so the text can be retried deliberately, and the transaction is
+            // never replayed automatically.
+            newSessionError = "The session was created, but that message may not have been sent. It will not be resent."
+        }
+    }
+
     // MARK: - Secondary reads (SPEC §10)
 
     /// Reads the host's plugin inventory.
@@ -602,6 +732,19 @@ final class AppModel {
             selectedWorkspaceId = next.workspaces.first?.id
             persistNavigation()
         }
+        startLaunchSessionIfAsked()
+    }
+
+    /// Debug builds only: start a new session with the prompt a launch named.
+    ///
+    /// Driven from the snapshot rather than a view's `.task`, because the workspace it needs
+    /// only exists once the registry has arrived.
+    private func startLaunchSessionIfAsked() {
+        guard !didStartLaunchSession, let message = launchNewSessionMessage,
+              let workspaceId = selectedWorkspaceId, canStartSession
+        else { return }
+        didStartLaunchSession = true
+        Task { await startSession(workspaceId: workspaceId, text: message) }
     }
 
     /// Re-reads the session index. The host is not paginated, so one call is the index.

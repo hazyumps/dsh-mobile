@@ -28,6 +28,10 @@ struct Composer: View {
     /// visibly identified as such rather than looking like a menu.
     var modelSelection: ModelSelection?
     var placeholder = "Message"
+    /// Bumped by the caller to focus the field — the drawer's New session uses it so the
+    /// prompt field is ready without a second tap. The composer owns the focus state; the
+    /// caller only asks.
+    var focusRequest = 0
     /// Called with the trimmed draft. Clearing it stays the caller's decision,
     /// because the draft is cleared only after the host accepts the prompt
     /// (UX spec "Composer, commands, and attachments").
@@ -89,6 +93,10 @@ struct Composer: View {
                     .foregroundStyle(DSHPalette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
+        }
+        .onChange(of: focusRequest) { _, _ in
+            guard focusRequest > 0 else { return }
+            isFocused = true
         }
         .padding(DSHMetrics.spaceCard)
         .background(DSHPalette.card)

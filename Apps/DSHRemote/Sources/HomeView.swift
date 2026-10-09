@@ -26,6 +26,8 @@ struct HomeView: View {
     @State private var isWorkspacePickerOpen = false
     @State private var isSettingsOpen = false
     @State private var draft = ""
+    /// Bumped by the drawer's New session, so the field is focused without a second tap.
+    @State private var focusRequest = 0
 
     private var browse: BrowseState { model.browse }
 
@@ -204,14 +206,39 @@ struct HomeView: View {
         }
     }
 
+    /// Why Send is not available, or `nil` when it is.
+    private var sendBlockedReason: String? {
+        if !model.status.isUsable { return "Offline — reconnect to send." }
+        if model.selectedWorkspaceId == nil { return "Choose a workspace first." }
+        return nil
+    }
+
     private var composer: some View {
-        Composer(
-            text: $draft,
-            canSend: false,
-            sendBlockedReason: "Start a new session on your computer for now — the phone can follow and answer existing ones.",
-            isSending: false,
-            placeholder: "Ask your harness…"
-        )
+        VStack(alignment: .leading, spacing: DSHMetrics.spaceSmall) {
+            if let error = model.newSessionError {
+                Label(error, systemImage: "exclamationmark.triangle")
+                    .font(.dshMetadata)
+                    .foregroundStyle(DSHPalette.attention)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Composer(
+                text: $draft,
+                canSend: sendBlockedReason == nil,
+                sendBlockedReason: sendBlockedReason,
+                isSending: model.isStartingSession,
+                placeholder: "Start something new…",
+                focusRequest: focusRequest,
+                onSend: { text in Task { await startSession(text) } }
+            )
+        }
+    }
+
+    /// Starts a session with the first prompt, and clears the field only if the prompt was
+    /// accepted — the transaction owns the rest (SPEC §5).
+    private func startSession(_ text: String) async {
+        guard let workspaceId = model.selectedWorkspaceId else { return }
+        let started = await model.startSession(workspaceId: workspaceId, text: text)
+        if started != nil, model.newSessionError == nil { draft = "" }
     }
 
     private var continueSection: some View {
@@ -331,6 +358,10 @@ struct HomeView: View {
                 openSchedules: {
                     withAnimation(.snappy) { isDrawerOpen = false }
                     path.append(.schedules)
+                },
+                openNewSession: {
+                    withAnimation(.snappy) { isDrawerOpen = false }
+                    focusRequest += 1
                 }
             )
             .transition(.move(edge: .leading))

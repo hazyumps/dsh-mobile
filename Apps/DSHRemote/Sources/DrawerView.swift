@@ -19,6 +19,8 @@ struct DrawerView: View {
     let openSettings: () -> Void
     let openPlugins: () -> Void
     let openSchedules: () -> Void
+    /// Closes the drawer and puts the cursor in Home's prompt field.
+    let openNewSession: () -> Void
 
     @State private var query = ""
     @State private var expandedWorkspaceId: String?
@@ -84,31 +86,33 @@ struct DrawerView: View {
         .padding(.bottom, DSHMetrics.space)
     }
 
-    /// The one control in this drawer that is deliberately not enabled.
+    /// New session opens the composer rather than creating anything.
     ///
-    /// The UX specification asks for it to be prominent and for an unsupported start to
-    /// say "Start this session on your computer." A greyed button with its reason is the
-    /// treatment it prescribes; an enabled one that silently did nothing would be worse
-    /// than its absence.
+    /// SPEC §5: "Opening New session changes local UI only. Do not create a host session
+    /// until the first Send." Home *is* the new-session surface, so this closes the drawer
+    /// and puts the cursor in the field — the host hears nothing until something is sent.
     private var newSessionRow: some View {
         VStack(alignment: .leading, spacing: DSHMetrics.spaceSmall) {
-            HStack(spacing: DSHMetrics.space) {
-                Image(systemName: "square.and.pencil")
-                    .accessibilityHidden(true)
-                Text("New session")
-                    .font(.dshSupporting)
-                Spacer(minLength: DSHMetrics.space)
+            Button(action: openNewSession) {
+                HStack(spacing: DSHMetrics.space) {
+                    Image(systemName: "square.and.pencil")
+                        .accessibilityHidden(true)
+                    Text("New session")
+                        .font(.dshSupporting)
+                    Spacer(minLength: DSHMetrics.space)
+                }
+                .foregroundStyle(DSHPalette.primaryText)
+                .padding(.horizontal, DSHMetrics.spaceCard)
+                .padding(.vertical, DSHMetrics.space + 2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(DSHPalette.card)
+                .clipShape(RoundedRectangle(cornerRadius: DSHMetrics.spaceCard, style: .continuous))
+                .contentShape(Rectangle())
             }
-            .foregroundStyle(DSHPalette.secondaryText)
-            .padding(.horizontal, DSHMetrics.spaceCard)
-            .padding(.vertical, DSHMetrics.space + 2)
-            .background(DSHPalette.card)
-            .clipShape(RoundedRectangle(cornerRadius: DSHMetrics.spaceCard, style: .continuous))
-            .opacity(0.6)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("New session. Not available yet.")
+            .buttonStyle(.plain)
+            .accessibilityHint("Opens the prompt field in the selected workspace")
 
-            Text("Start a new session on your computer for now.")
+            Text("Creates the session when you send the first message, in \(selectedWorkspaceTitle).")
                 .font(.dshMetadata)
                 .foregroundStyle(DSHPalette.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
@@ -116,6 +120,12 @@ struct DrawerView: View {
         }
         .padding(.horizontal, DSHMetrics.spaceCard)
         .padding(.bottom, DSHMetrics.spaceCard)
+    }
+
+    private var selectedWorkspaceTitle: String {
+        model.browse.workspace(id: model.selectedWorkspaceId)?.title
+            ?? model.browse.workspaces.first?.title
+            ?? "the selected workspace"
     }
 
     /// The drawer's global destinations.
