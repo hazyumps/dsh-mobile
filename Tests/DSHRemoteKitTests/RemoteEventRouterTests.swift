@@ -81,8 +81,15 @@ struct RemoteEventRouterTests {
         }
     }
 
+    /// Polls until `condition` holds.
+    ///
+    /// The deadline is generous on purpose. These tests wait on a real reconnect, which
+    /// crosses several actor hops plus teardown, and a tighter deadline made the reconnect
+    /// test flaky under load -- it failed once while the model gateway was restarting
+    /// concurrently. A slow test is a nuisance; a flaky one teaches people to re-run
+    /// failures, which is how a real regression gets waved through.
     private func eventually(_ condition: () async -> Bool) async -> Bool {
-        let deadline = ContinuousClock.now + .seconds(2)
+        let deadline = ContinuousClock.now + .seconds(10)
         while ContinuousClock.now < deadline {
             if await condition() { return true }
             try? await Task.sleep(for: .milliseconds(2))
@@ -347,8 +354,15 @@ struct RemoteEventGenerationTests {
         ])
     }
 
+    /// Polls until `condition` holds.
+    ///
+    /// The deadline is generous on purpose. These tests wait on a real reconnect, which
+    /// crosses several actor hops plus teardown, and a tighter deadline made the reconnect
+    /// test flaky under load -- it failed once while the model gateway was restarting
+    /// concurrently. A slow test is a nuisance; a flaky one teaches people to re-run
+    /// failures, which is how a real regression gets waved through.
     private func eventually(_ condition: () async -> Bool) async -> Bool {
-        let deadline = ContinuousClock.now + .seconds(2)
+        let deadline = ContinuousClock.now + .seconds(10)
         while ContinuousClock.now < deadline {
             if await condition() { return true }
             try? await Task.sleep(for: .milliseconds(2))
