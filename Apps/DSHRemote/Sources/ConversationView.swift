@@ -1,5 +1,6 @@
 import DSHRemoteKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// One conversation: what the host said, and a place to answer it.
 ///
@@ -24,6 +25,7 @@ struct ConversationView: View {
     @State private var openError: String?
     @State private var isSubmittingAnswer = false
     @State private var claimError: String?
+    @State private var isImportingFile = false
     @Environment(\.scenePhase) private var scenePhase
     @State private var followAttempt = 0
     @State private var didSendLaunchMessage = false
@@ -87,7 +89,20 @@ struct ConversationView: View {
                let seeded = ProcessInfo.processInfo.environment["DSH_DRAFT"] {
                 draft = seeded
             }
+            seedAttachmentIfAsked()
             #endif
+        }
+        .fileImporter(
+            isPresented: $isImportingFile,
+            allowedContentTypes: [.item],
+            allowsMultipleSelection: false
+        ) { result in
+            // The only place a security-scoped URL is touched, and only long enough to hand it
+            // to the upload: SPEC §9 keeps the scope no longer than the copy.
+            guard case .success(let urls) = result, let url = urls.first else { return }
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            Task { await model.attachFile(at: url, name: url.lastPathComponent, to: sessionId) }
         }
         .onChange(of: draft) { _, text in
             // The visible countdown stops while the answer is being written, which is the
@@ -194,6 +209,13 @@ struct ConversationView: View {
             }
             .background(DSHPalette.canvas)
             .scrollDismissesKeyboard(.interactively)
+            .onChange(of: snapshot.hasSnapshot) { _, ready in
+                // A conversation opens at its newest message, not at its oldest. Without
+                // this the transcript sat on the harness's own early events and the last
+                // exchange — the thing the screen exists for — was a long scroll away.
+                guard ready else { return }
+                proxy.scrollTo("transcript", anchor: .bottom)
+            }
             .onChange(of: snapshot.messages.last?.text) { _, _ in
                 // Follow the live tail: the point of watching a reply arrive is to watch
                 // it, and the anchor is the transcript itself so a growing answer cannot
@@ -204,6 +226,50 @@ struct ConversationView: View {
         }
         .safeAreaInset(edge: .bottom) {
             composer
+        }
+    }
+
+    /// Files uploaded for this session and waiting to be cited by the next prompt.
+    private var stagedAttachments: [UploadedAttachment] {
+        model.stagedAttachments[sessionId] ?? []
+    }
+
+    /// The staged files, each removable before the prompt goes out.
+    private var attachmentChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: DSHMetrics.space) {
+                ForEach(stagedAttachments, id: \.receiptId) { attachment in
+                    HStack(spacing: DSHMetrics.spaceSmall) {
+                        Image(systemName: "doc")
+                            .font(.caption)
+                            .accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(attachment.name.isEmpty ? "Attached file" : attachment.name)
+                                .font(.dshMetadata)
+                                .foregroundStyle(DSHPalette.primaryText)
+                                .lineLimit(1)
+                            Text("\(attachment.byteCount) bytes")
+                                .font(.caption2)
+                                .foregroundStyle(DSHPalette.secondaryText)
+                        }
+                        Button {
+                            model.clearAttachments(for: sessionId)
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.footnote)
+                                .foregroundStyle(DSHPalette.secondaryText)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Remove \(attachment.name)")
+                    }
+                    .padding(.horizontal, DSHMetrics.spaceCard)
+                    .padding(.vertical, DSHMetrics.spaceSmall)
+                    .background(DSHPalette.card)
+                    .clipShape(Capsule())
+                    .overlay(Capsule().strokeBorder(DSHPalette.cardEdge, lineWidth: 1))
+                }
+            }
+            .padding(.horizontal, DSHMetrics.pageMargin)
         }
     }
 
@@ -282,11 +348,24 @@ struct ConversationView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            if !stagedAttachments.isEmpty {
+                attachmentChips
+            }
+            if let attachmentError = model.attachmentError {
+                Label(attachmentError, systemImage: "exclamationmark.triangle")
+                    .font(.dshMetadata)
+                    .foregroundStyle(DSHPalette.attention)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, DSHMetrics.pageMargin)
+            }
             Composer(
                 text: $draft,
                 canSend: sendBlockedReason == nil,
                 sendBlockedReason: sendBlockedReason,
                 isSending: isSending,
+                onAttach: { isImportingFile = true },
+                attachmentLabel: "Add a file",
                 placeholder: "Message",
                 onSend: { text in Task { await send(text) } }
             )
@@ -415,6 +494,19 @@ struct ConversationView: View {
         }
     }
 
+    #if DEBUG
+    /// Debug builds only: upload a file a launch named, so the receipt path can be exercised
+    /// on a machine that cannot drive a file importer.
+    private func seedAttachmentIfAsked() {
+        guard stagedAttachments.isEmpty,
+              let path = ProcessInfo.processInfo.environment["DSH_ATTACH"],
+              !path.isEmpty
+        else { return }
+        let url = URL(fileURLWithPath: path)
+        Task { await model.attachFile(at: url, name: url.lastPathComponent, to: sessionId) }
+    }
+    #endif
+
     /// Allows or rejects one approval. The card retires on acknowledgement, and the screen
     /// never claims the agent ran anything: another client may have settled it first, and
     /// the host is the authority on what happened next (SPEC §8).
@@ -432,6 +524,13 @@ struct ConversationView: View {
     private func sendLaunchMessageIfAsked() async {
         guard !didSendLaunchMessage, let message = model.launchMessage else { return }
         didSendLaunchMessage = true
+        // A launch that attached a file waits for its receipt: the whole point of the receipt
+        // is that the prompt cites it, and a race here would send the text without the file.
+        if ProcessInfo.processInfo.environment["DSH_ATTACH"] != nil {
+            for _ in 0..<60 where stagedAttachments.isEmpty && model.attachmentError == nil {
+                try? await Task.sleep(for: .milliseconds(250))
+            }
+        }
         await send(message)
     }
 }

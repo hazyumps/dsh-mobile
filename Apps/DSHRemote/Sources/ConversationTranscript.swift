@@ -277,6 +277,16 @@ private struct MessageRow: View {
                     ReasoningDisclosure(text: reasoning)
                 }
                 MessageBody(text: message.text)
+                if !message.attachments.isEmpty {
+                    // The files the message actually carried. SPEC §9 retires the receipt into
+                    // a durable file part, so this is what the host recorded, not a guess.
+                    ForEach(message.attachments, id: \.self) { name in
+                        Label(name, systemImage: "paperclip")
+                            .font(.dshMetadata)
+                            .foregroundStyle(DSHPalette.secondaryText)
+                            .lineLimit(1)
+                    }
+                }
             }
             .padding(message.role == .user ? DSHMetrics.spaceCard : 0)
             .background(message.role == .user ? DSHPalette.elevatedSurface : Color.clear)

@@ -25,6 +25,15 @@ final class AppModel {
     /// What the browse screens render, mapped from the host store's snapshot.
     private(set) var browse: BrowseState = .idle
 
+    /// Files uploaded for a session, waiting to be cited by the next prompt.
+    ///
+    /// Kept per session: SPEC §9 binds every upload to its draft, session, host and attachment
+    /// id, and a receipt is scoped to the session runtime that received it.
+    private(set) var stagedAttachments: [String: [UploadedAttachment]] = [:]
+    /// What went wrong with the most recent attachment, in the user's terms.
+    private(set) var attachmentError: String?
+    private(set) var isUploading = false
+
     /// The commands the host advertises, per session (SPEC §9).
     private(set) var commands: [String: [CommandEntry]] = [:]
     /// What the last command said, when it had something to say.
@@ -85,6 +94,7 @@ final class AppModel {
     private var secondaryStore: SecondaryReadStore?
     private var modelModeStore: ModelModeCatalogStore?
     private var commandStore: CommandCatalogStore?
+    private var attachmentUploader: AttachmentUploader?
     private var interactionStore: InteractionStore?
     private var statusTask: Task<Void, Never>?
     private var snapshotTask: Task<Void, Never>?
@@ -283,6 +293,9 @@ final class AppModel {
         schedulesReport = .unknown
         modelModeStore = nil
         commandStore = nil
+        attachmentUploader = nil
+        stagedAttachments = [:]
+        attachmentError = nil
         commands = [:]
         commandMessage = nil
         catalog = nil
@@ -333,6 +346,16 @@ final class AppModel {
             self.secondaryStore = SecondaryReadStore(makeClient: makeClient)
             self.modelModeStore = ModelModeCatalogStore(makeClient: makeClient)
             self.commandStore = CommandCatalogStore(makeClient: makeClient)
+            self.attachmentUploader = AttachmentUploader(
+                makeBareClient: {
+                    DshBareEndpointClient(
+                        baseURL: origin.baseURL,
+                        authorization: origin.authorization,
+                        transport: URLSessionRelayTransport(pinning: origin.pinning)
+                    )
+                },
+                makeRPCClient: makeClient
+            )
             self.coordinator = coordinator
             self.hostStore = hostStore
             let recovery = ForegroundConnection(coordinator: coordinator)
@@ -824,6 +847,61 @@ final class AppModel {
         }
     }
 
+    // MARK: - Attachments (SPEC §9)
+
+    /// Uploads one prepared file into a session and stages its receipt.
+    ///
+    /// Nothing is retried and nothing is discarded on failure: SPEC §9 keeps the prepared bytes
+    /// so the user does not have to pick the file again, and an uncertain upload is reconciled
+    /// rather than replayed.
+    @discardableResult
+    func attachFile(at fileURL: URL, name: String? = nil, to sessionId: String) async -> UploadedAttachment? {
+        guard let attachmentUploader else {
+            attachmentError = "This phone is not connected to a harness."
+            return nil
+        }
+        isUploading = true
+        attachmentError = nil
+        defer { isUploading = false }
+
+        let size = (try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        do {
+            let uploaded = try await attachmentUploader.upload(
+                sessionId: sessionId,
+                name: name ?? fileURL.lastPathComponent,
+                fileURL: fileURL,
+                byteCount: size
+            )
+            stagedAttachments[sessionId, default: []].append(uploaded)
+            return uploaded
+        } catch let failure as AttachmentUploadFailure {
+            attachmentError = Self.describe(failure)
+            return nil
+        } catch {
+            attachmentError = Self.reason(for: error)
+            return nil
+        }
+    }
+
+    /// What an upload failure means, in the user's terms.
+    static func describe(_ failure: AttachmentUploadFailure) -> String {
+        switch failure {
+        case .tooLargeForFallback(let bytes, let limit):
+            "This host has no direct upload route and \(bytes) bytes is over the \(limit)-byte limit for the fallback."
+        case .noReceipt:
+            "The harness accepted the file but named no receipt, so nothing could cite it."
+        case .refused(let code, let message):
+            "The harness refused that file (\(code)): \(message)"
+        case .transport(let reason):
+            "That upload may not have arrived: \(reason)"
+        }
+    }
+
+    func clearAttachments(for sessionId: String) {
+        stagedAttachments[sessionId] = nil
+        attachmentError = nil
+    }
+
     // MARK: - The timed question's foreground claim
 
     /// The live claim over one timed question, if this phone holds it.
@@ -1067,11 +1145,16 @@ final class AppModel {
     /// deduplicate instead of admitting a second turn.
     func sendPrompt(_ text: String, to sessionId: String) async throws {
         guard status.isUsable, let coordinator else { throw ChatUnavailable.notConnected }
+        // The staged receipts ride along, and are cleared only if the host accepts the prompt:
+        // an uncertain send keeps them so the same files can be cited again deliberately.
+        let receipts = (stagedAttachments[sessionId] ?? []).map(\.receiptId)
         try await coordinator.prompt(
             requestId: UUID().uuidString,
             sessionId: sessionId,
-            text: text
+            text: text,
+            fileReceiptIds: receipts
         )
+        if !receipts.isEmpty { clearAttachments(for: sessionId) }
     }
 
     /// Answers a question the harness asked, so a session that needs a decision
