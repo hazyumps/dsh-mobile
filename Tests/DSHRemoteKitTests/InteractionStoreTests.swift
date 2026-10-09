@@ -262,3 +262,185 @@ struct InteractionStoreTests {
         #expect(await store.needsInputCount == 0)
     }
 }
+
+// SPEC §8's channel table: a question is answered through `$events/result` when a live
+// waterfall is asking, and through `userQuestions/answer` when the host has parked it in its
+// `continued` state. Choosing the wrong channel is silent — the host simply does not take the
+// answer — so which channel was used is asserted rather than assumed.
+
+@Suite("Question channels")
+struct QuestionChannelTests {
+    private actor Recorder {
+        private(set) var results: [EventResultRequest] = []
+        private(set) var continued: [(agentId: String, callId: String, body: JSONValue)] = []
+        var continuedReply = true
+
+        func submit(_ request: EventResultRequest) async throws { results.append(request) }
+        func setReply(_ value: Bool) { continuedReply = value }
+        func answer(agentId: String, callId: String, body: JSONValue) async throws -> Bool {
+            continued.append((agentId, callId, body))
+            return continuedReply
+        }
+    }
+
+    private static let questionsJSON = JSONValue.array([
+        .object([
+            "id": .string("q1"),
+            "question": .string("Which one?"),
+            "options": .array([
+                .object(["label": .string("A")]),
+                .object(["label": .string("B")]),
+            ]),
+        ])
+    ])
+
+    private func waterfall(eventId: String = "e1", timed: Bool = false, event: String = "user-questions/request") -> RemoteEvent {
+        var request: [String: JSONValue] = ["callId": .string("call-1")]
+        // Only a question waterfall carries questions. An approval that happened to carry a
+        // `questions` key would be a batch, so the helper must not fabricate one.
+        if event == "user-questions/request" {
+            request["questions"] = Self.questionsJSON
+        } else {
+            request["toolName"] = .string("bash")
+            request["reason"] = .string("Run the requested test command")
+        }
+        if timed {
+            request["wait"] = .object(["callId": .string("call-1"), "timed": .bool(true)])
+        }
+        return .waterfall(RemoteWaterfall(
+            event: event,
+            eventId: eventId,
+            agentId: "session-1",
+            request: .object(request)
+        ))
+    }
+
+    private func store(_ recorder: Recorder, generation: UInt64 = 1) -> InteractionStore {
+        InteractionStore(
+            identity: { RemoteEventRouter.Identity(generation: generation, clientId: "client-1") },
+            submit: { try await recorder.submit($0) },
+            answerContinued: { agentId, callId, body in
+                try await recorder.answer(agentId: agentId, callId: callId, body: body)
+            }
+        )
+    }
+
+    @Test("a live question goes out through the events result channel, as a result value")
+    func liveQuestionUsesTheEventsChannel() async throws {
+        let recorder = Recorder()
+        let store = store(recorder)
+        await store.observe(waterfall(), generation: 1)
+
+        try await store.answerLiveQuestions("e1", with: [QuestionAnswer(id: "q1", selected: ["A"])])
+
+        let sent = try #require(await recorder.results.first)
+        #expect(sent.eventId == "e1")
+        #expect(sent.outcome.jsonValue["kind"]?.stringValue == "result")
+        let answers = try #require(sent.outcome.jsonValue["value"]?["answers"]?.arrayValue)
+        #expect(answers.first?["id"]?.stringValue == "q1")
+        #expect(answers.first?["selected"]?.arrayValue?.first?.stringValue == "A")
+        // The continued channel was not touched: choosing the wrong one is silent on the wire.
+        #expect(await recorder.continued.isEmpty)
+    }
+
+    @Test("an invalid answer is refused locally and nothing is sent")
+    func invalidAnswerIsNotSent() async throws {
+        let recorder = Recorder()
+        let store = store(recorder)
+        await store.observe(waterfall(), generation: 1)
+
+        // No entry for q1 at all, which is an omission rather than a skip.
+        await #expect(throws: InteractionRefusal.self) {
+            try await store.answerLiveQuestions("e1", with: [])
+        }
+        #expect(await recorder.results.isEmpty)
+        // And the request is still answerable, since nothing was submitted.
+        #expect(await store.request("e1")?.state == .pending)
+    }
+
+    @Test("a timed question is refused until its foreground claim is held")
+    func timedQuestionNeedsItsClaim() async throws {
+        // SPEC §8 answers a timed waterfall only after userQuestions/attachWait has claimed
+        // it. Answering without the claim races the host's own deadline.
+        let recorder = Recorder()
+        let store = store(recorder)
+        await store.observe(waterfall(timed: true), generation: 1)
+
+        await #expect(throws: InteractionRefusal.timedQuestionNeedsClaim) {
+            try await store.answerLiveQuestions("e1", with: [QuestionAnswer(id: "q1", selected: ["A"])])
+        }
+        #expect(await recorder.results.isEmpty)
+    }
+
+    @Test("an approval is not a question batch")
+    func approvalIsNotAQuestion() async throws {
+        let recorder = Recorder()
+        let store = store(recorder)
+        await store.observe(waterfall(event: "approval/request"), generation: 1)
+
+        await #expect(throws: InteractionRefusal.notAQuestion) {
+            try await store.answerLiveQuestions("e1", with: [QuestionAnswer(id: "q1", selected: ["A"])])
+        }
+        #expect(await recorder.results.isEmpty)
+    }
+
+    @Test("a continued question goes out through the answer channel instead")
+    func continuedQuestionUsesTheAnswerChannel() async throws {
+        let recorder = Recorder()
+        let store = store(recorder)
+
+        let accepted = try await store.answerContinuedQuestions(
+            agentId: "session-1",
+            callId: "call-1",
+            with: [QuestionAnswer(id: "q1", selected: ["A"])]
+        )
+
+        #expect(accepted)
+        let sent = try #require(await recorder.continued.first)
+        #expect(sent.agentId == "session-1")
+        #expect(sent.callId == "call-1")
+        #expect(sent.body["answers"]?.arrayValue?.first?["id"]?.stringValue == "q1")
+        // Nothing went through the events channel, which is the distinction under test.
+        #expect(await recorder.results.isEmpty)
+    }
+
+    @Test("a false from the continued channel is not success")
+    func continuedFalseIsNotSuccess() async throws {
+        // SPEC §8: "true accepts the reply; false means no longer answerable, not success."
+        // The store reports what the host said rather than absorbing it.
+        let recorder = Recorder()
+        await recorder.setReply(false)
+        let store = store(recorder)
+
+        let accepted = try await store.answerContinuedQuestions(
+            agentId: "session-1", callId: "call-1", with: [QuestionAnswer(id: "q1", selected: ["A"])]
+        )
+        #expect(accepted == false)
+    }
+
+    @Test("an unwired continued channel refuses rather than silently doing nothing")
+    func unwiredContinuedChannelRefuses() async throws {
+        let store = InteractionStore(
+            identity: { RemoteEventRouter.Identity(generation: 1, clientId: "client-1") },
+            submit: { _ in }
+        )
+        await #expect(throws: InteractionRefusal.continuedChannelUnavailable) {
+            try await store.answerContinuedQuestions(
+                agentId: "session-1", callId: "call-1", with: [QuestionAnswer(id: "q1", selected: [])]
+            )
+        }
+    }
+
+    @Test("a question is no more re-answerable than an approval")
+    func liveQuestionSubmitsOnce() async throws {
+        let recorder = Recorder()
+        let store = store(recorder)
+        await store.observe(waterfall(), generation: 1)
+
+        try await store.answerLiveQuestions("e1", with: [QuestionAnswer(id: "q1", selected: ["A"])])
+        await #expect(throws: InteractionRefusal.self) {
+            try await store.answerLiveQuestions("e1", with: [QuestionAnswer(id: "q1", selected: ["B"])])
+        }
+        #expect(await recorder.results.count == 1)
+    }
+}

@@ -86,6 +86,18 @@ public enum InteractionRefusal: Error, Sendable, Hashable {
     /// The submission did not reach a verdict. SPEC §8: keep the decision history and
     /// resynchronise; never replay.
     case uncertain(reason: String)
+    /// The request is not a question batch, or carries no questions to answer.
+    case notAQuestion
+    /// The answer was refused before it was sent. The associated error names the question.
+    case invalidAnswer(QuestionAnswerError)
+    /// A timed question needs a foreground claim this client does not hold.
+    ///
+    /// SPEC §8 answers a timed waterfall only after `userQuestions/attachWait` has claimed it,
+    /// and owning that claim's lifetime is a separate unit. Answering without it would race
+    /// the host's own timeout, so this refuses rather than guesses.
+    case timedQuestionNeedsClaim
+    /// The `userQuestions/answer` channel was not wired in.
+    case continuedChannelUnavailable
 }
 
 /// Approvals and questions, and the rules that stop one being answered twice.
@@ -113,6 +125,7 @@ public actor InteractionStore {
 
     private let identity: @Sendable () async -> RemoteEventRouter.Identity?
     private let submit: @Sendable (EventResultRequest) async throws -> Void
+    private let answerContinued: (@Sendable (String, String, JSONValue) async throws -> Bool)?
 
     /// - Parameters:
     ///   - identity: the current ready generation and `clientId`, read at submission time.
@@ -121,12 +134,19 @@ public actor InteractionStore {
     ///     generation and the answer is refused instead of delivered to a dead socket.
     ///   - submit: performs the `$events/result` POST, injected so tests never touch the
     ///     network.
+    ///   - answerContinued: performs `userQuestions/answer` for a question the host has
+    ///     parked in its `continued` state. Optional because that channel is only used for
+    ///     questions with no live delivery, and a caller that never meets one need not wire
+    ///     it — but a caller that does meet one gets ``InteractionRefusal/continuedChannelUnavailable``
+    ///     rather than a silent no-op.
     public init(
         identity: @escaping @Sendable () async -> RemoteEventRouter.Identity?,
-        submit: @escaping @Sendable (EventResultRequest) async throws -> Void
+        submit: @escaping @Sendable (EventResultRequest) async throws -> Void,
+        answerContinued: (@Sendable (String, String, JSONValue) async throws -> Bool)? = nil
     ) {
         self.identity = identity
         self.submit = submit
+        self.answerContinued = answerContinued
     }
 
     // MARK: - Reading
@@ -274,5 +294,75 @@ public actor InteractionStore {
     public func removeAll() {
         requests.removeAll()
         groups.removeAll()
+    }
+
+    // MARK: - Questions
+
+    /// The batch a question waterfall carries, if this request has one.
+    public func questionBatch(_ id: String) -> QuestionBatch? {
+        guard let request = requests[id] else { return nil }
+        return QuestionBatch(request: request.request)
+    }
+
+    /// Whether the request is a timed question awaiting a foreground claim.
+    ///
+    /// SPEC §8's table keys the channel on `request.wait:{callId,timed:true}`. A timed
+    /// question is answered only after `userQuestions/attachWait` has claimed it, so this
+    /// refuses rather than answering into a race.
+    static func isTimed(_ request: JSONValue) -> Bool {
+        guard let wait = request["wait"] else { return false }
+        return wait["timed"]?.boolValue == true
+    }
+
+    /// Answers a **live** question waterfall through `$events/result`.
+    ///
+    /// This is the first row of SPEC §8's channel table. It validates before sending, and
+    /// goes through ``answer(_:with:)`` so the duplicate-tap guard and the generation check
+    /// apply unchanged — a question is no more re-answerable than an approval is.
+    public func answerLiveQuestions(_ id: String, with answers: [QuestionAnswer]) async throws {
+        guard let request = requests[id] else {
+            throw InteractionRefusal.notActionable(state: .settled)
+        }
+        guard let batch = QuestionBatch(request: request.request) else {
+            throw InteractionRefusal.notAQuestion
+        }
+        if Self.isTimed(request.request) {
+            // Answering a timed question without holding its claim would race the host's own
+            // deadline, so the claim is required rather than optional.
+            throw InteractionRefusal.timedQuestionNeedsClaim
+        }
+        do {
+            try QuestionAnswerValidator.validate(answers, against: batch)
+        } catch let error as QuestionAnswerError {
+            throw InteractionRefusal.invalidAnswer(error)
+        }
+        try await answer(id, with: .result(QuestionAnswerValidator.body(answers)))
+    }
+
+    /// Answers a question the host parked in its `continued` state.
+    ///
+    /// The third row of SPEC §8's table, reached through `userQuestions/answer` rather than
+    /// `$events/result` because there is no live delivery to reply to. `true` means the host
+    /// accepted the reply; **`false` means the question is no longer answerable, which is not
+    /// success** and is reported as such rather than as a delivered answer.
+    ///
+    /// - Returns: whether the host accepted the reply.
+    @discardableResult
+    public func answerContinuedQuestions(
+        agentId: String,
+        callId: String,
+        with answers: [QuestionAnswer]
+    ) async throws -> Bool {
+        guard let channel = answerContinued else {
+            throw InteractionRefusal.continuedChannelUnavailable
+        }
+        // Validation needs the batch, which lives on the waterfall that asked. A continued
+        // row arrives from a projection rather than a waterfall, so the caller supplies the
+        // questions it is answering when there is no waterfall to read them from.
+        guard let ready = await identity() else {
+            throw InteractionRefusal.staleGeneration
+        }
+        _ = ready
+        return try await channel(agentId, callId, QuestionAnswerValidator.body(answers))
     }
 }
