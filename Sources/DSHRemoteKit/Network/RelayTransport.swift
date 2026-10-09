@@ -32,13 +32,38 @@ public struct RelayHTTPRequest: Sendable, Hashable {
     /// Header names as supplied. Lookup is case-insensitive through
     /// ``header(_:)``, because HTTP header names are.
     public var headers: [String: String]
+    /// An in-memory body. Mutually exclusive with ``bodyFile``.
     public var body: Data?
+    /// A body to stream from disk, for the one request that can be large.
+    ///
+    /// SPEC §3.6 / §6.8 asks for a file upload that does not force the file into
+    /// memory. A `Data` body cannot do that: the bytes are read once to build the
+    /// request and typically copied again by the networking layer, so a large file
+    /// costs the app a multiple of its size before a byte leaves the phone.
+    ///
+    /// Filled through ``init(url:method:headers:bodyFile:)``, which is the only
+    /// supported way to set it. A second initializer rather than one field of an
+    /// enum, so that every existing in-memory call site keeps compiling untouched.
+    /// Exactly one of ``body`` and ``bodyFile`` is set; nothing enforces that at
+    /// the type level, which is the price of not rewriting fourteen call sites for
+    /// something only uploads need.
+    public var bodyFile: URL?
 
     public init(url: URL, method: String, headers: [String: String] = [:], body: Data? = nil) {
         self.url = url
         self.method = method
         self.headers = headers
         self.body = body
+        self.bodyFile = nil
+    }
+
+    /// A request whose body is streamed from `bodyFile` rather than held in memory.
+    public init(url: URL, method: String, headers: [String: String] = [:], bodyFile: URL) {
+        self.url = url
+        self.method = method
+        self.headers = headers
+        self.body = nil
+        self.bodyFile = bodyFile
     }
 
     /// Case-insensitive header lookup.
@@ -60,10 +85,9 @@ public struct RelayHTTPRequest: Sendable, Hashable {
 ///
 /// The body is `Data` rather than a stream because every response this client
 /// reads is a small JSON object — including the bare `{ok,value}` upload body
-/// (SPEC §6.8). Upload *request* bodies may be large, and ``RelayHTTPRequest``
-/// therefore carries `Data?`; streaming a file from disk to the request body
-/// without a second in-memory copy is a Stage 3 concern (SPEC §3.6) and would
-/// change that field to a body source, not this one.
+/// (SPEC §6.8). The asymmetry with requests is deliberate: a request body can be
+/// an arbitrary file, and ``RelayHTTPRequest`` carries ``RelayHTTPRequest/bodyFile``
+/// for exactly that case.
 public struct RelayHTTPResponse: Sendable, Hashable {
     public var status: Int
     /// Header names as received; ``header(_:)`` is case-insensitive so a caller
@@ -331,7 +355,16 @@ public final class URLSessionRelayTransport: NSObject, RelayTransport, @unchecke
     public func send(_ request: RelayHTTPRequest) async throws -> RelayHTTPResponse {
         let urlRequest = Self.urlRequest(from: request)
         do {
-            let (data, response) = try await session.data(for: urlRequest)
+            // A file body is handed to URLSession as a file rather than read into
+            // memory first. This is the whole point of `bodyFile`: the upload's cost
+            // stops scaling with the file's size. Everything else takes the ordinary
+            // in-memory path.
+            let (data, response): (Data, URLResponse)
+            if let bodyFile = request.bodyFile {
+                (data, response) = try await session.upload(for: urlRequest, fromFile: bodyFile)
+            } else {
+                (data, response) = try await session.data(for: urlRequest)
+            }
             guard let http = response as? HTTPURLResponse else {
                 throw RelayTransportError.other("response was not HTTP")
             }
@@ -353,10 +386,15 @@ public final class URLSessionRelayTransport: NSObject, RelayTransport, @unchecke
         return URLSessionRelaySocket(task: task)
     }
 
-    private static func urlRequest(from request: RelayHTTPRequest) -> URLRequest {
+    /// Internal rather than private so the streaming contract below can be asserted:
+    /// `httpBody` must stay nil when the body comes from a file.
+    static func urlRequest(from request: RelayHTTPRequest) -> URLRequest {
         var urlRequest = URLRequest(url: request.url)
         urlRequest.httpMethod = request.method
-        urlRequest.httpBody = request.body
+        // Deliberately not `request.body` unconditionally: a file body is supplied to
+        // the upload call itself, and setting `httpBody` here as well would send
+        // nothing extra but would defeat the streaming.
+        urlRequest.httpBody = request.bodyFile == nil ? request.body : nil
         for (name, value) in request.headers {
             urlRequest.setValue(value, forHTTPHeaderField: name)
         }

@@ -40,7 +40,7 @@ The installed source resolves several previous uncertainties:
 | `AppModel` | Composition root, selected-host boundary | Persistent navigation, workspace/session store, service injection |
 | `ChatSession` / `ConversationBuilder` | Actor isolation, durable sequence identity | Full follow baseline, live text, paging, observable snapshots, interaction reconciliation |
 | `ChatView` | Working basic conversation and retained draft during reconnect | Persistent draft ownership, richer renderer, complete decision forms |
-| `DshRpcClient` / `DshBareEndpointClient` | Envelope and raw-route primitives | Typed feature services; explicit no-retry policy on every mutation; file-backed uploads |
+| `DshRpcClient` / `DshBareEndpointClient` | Envelope and raw-route primitives; `mutate`/`mutateVoid`, which take no retry policy so a write cannot pick the retrying default; `uploadFileBinary(sessionId:name:fileURL:)`, which streams the body from disk | Typed feature services |
 
 The working tree's recovery changes previously passed package tests and an iOS simulator build. Physical-phone recovery, new-session submission, approval routing, file uploads, and the redesigned screens remain release gates. Writing this spec does not retest or implement those features.
 

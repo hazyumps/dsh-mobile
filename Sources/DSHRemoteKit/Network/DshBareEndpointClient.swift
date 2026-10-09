@@ -180,6 +180,44 @@ public struct DshBareEndpointClient: Sendable {
         return try decodeBareBody(response.body, endpoint: "session/uploadFileBinary")
     }
 
+    /// The same upload, streamed from a file on disk (SPEC §3.6, §6.8).
+    ///
+    /// Prefer this one for anything the user picked from the photo library or the
+    /// file importer. ``uploadFileBinary(sessionId:name:bytes:)`` reads the whole
+    /// file into memory to build the request; this hands the file to the
+    /// networking layer, so cost stops scaling with the file's size.
+    ///
+    /// The file must remain readable at this URL until the call returns — the
+    /// transport reads it during the upload, not before. That is why the caller
+    /// copies a security-scoped import into its own directory first rather than
+    /// streaming straight from the picker's temporary location.
+    ///
+    /// - Throws: the same errors as the in-memory form, including
+    ///   ``DshRPCError/capabilityUnavailable(endpoint:)`` for a 404, which is the
+    ///   one status SPEC §6.8 permits to trigger the base64 `fileUploads/upload`
+    ///   fallback.
+    public func uploadFileBinary(
+        sessionId: String,
+        name: String,
+        fileURL: URL
+    ) async throws -> FileUploadResult {
+        let path = "/api/session/uploadFileBinary"
+        let url = try RelayURL.resolve(
+            path,
+            against: baseURL,
+            queryItems: [
+                URLQueryItem(name: "sessionId", value: sessionId),
+                URLQueryItem(name: "name", value: name),
+            ]
+        )
+        var headers = RelayHTTPRequest.authorizationHeader(authorization)
+        headers["Content-Type"] = "application/octet-stream"
+        let request = RelayHTTPRequest(url: url, method: "POST", headers: headers, bodyFile: fileURL)
+
+        let response = try await exchange.perform(request, endpoint: "session/uploadFileBinary")
+        return try decodeBareBody(response.body, endpoint: "session/uploadFileBinary")
+    }
+
     // MARK: $events/result
 
     /// The envelope for SPEC §6.7's event result, with `payload.args` exactly

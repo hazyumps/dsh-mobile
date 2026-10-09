@@ -685,6 +685,69 @@ func uploadFileBinaryRequestShape() async throws {
     #expect(result.value?["receiptId"] == .string("r-1"))
 }
 
+@Test("a file upload streams from disk instead of loading the bytes")
+func uploadFileBinaryStreamsFromDisk() async throws {
+    // SPEC §3.6 / §6.8: the upload must not force the file into memory, so the
+    // request carries a file URL and no in-memory body. A `Data` body here would
+    // defeat the whole point, and this is the assertion that notices.
+    let transport = StubRelayTransport()
+    await transport.setDefault(
+        .json(status: 200, json(#"{"ok":true,"value":{"receiptId":"r-2"}}"#))
+    )
+    let client = DshBareEndpointClient(
+        baseURL: hostOrigin,
+        authorization: .bearer("device-token"),
+        transport: transport
+    )
+
+    let scratch = FileManager.default.temporaryDirectory
+        .appendingPathComponent("upload-\(UUID().uuidString).bin")
+    try Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A]).write(to: scratch)
+    defer { try? FileManager.default.removeItem(at: scratch) }
+
+    let result = try await client.uploadFileBinary(
+        sessionId: "session-0002",
+        name: "large export.bin",
+        fileURL: scratch
+    )
+
+    let request = try #require(await transport.recordedRequests.first)
+    #expect(request.method == "POST")
+    #expect(request.url.path == "/api/session/uploadFileBinary")
+    #expect(request.header("Content-Type") == "application/octet-stream")
+    #expect(request.bodyFile == scratch)
+    // The bytes are not read on this side at all.
+    #expect(request.body == nil)
+
+    let components = try #require(URLComponents(url: request.url, resolvingAgainstBaseURL: false))
+    let items = try #require(components.queryItems)
+    #expect(items.contains(URLQueryItem(name: "sessionId", value: "session-0002")))
+    #expect(items.contains(URLQueryItem(name: "name", value: "large export.bin")))
+    #expect(result.value?["receiptId"] == .string("r-2"))
+}
+
+@Test("a file body is not also attached as an in-memory body")
+func fileBodyIsNotAlsoHTTPBody() throws {
+    // The failure this guards is specific and silent: setting `httpBody` from
+    // `request.body` unconditionally would send nothing extra for a file body, so
+    // the upload would still work while quietly reading the file into memory.
+    let url = URL(string: "https://relay.test/api/session/uploadFileBinary")!
+    let file = URL(fileURLWithPath: "/tmp/does-not-need-to-exist.bin")
+
+    let streamed = URLSessionRelayTransport.urlRequest(from: RelayHTTPRequest(
+        url: url, method: "POST", headers: ["X-Test": "1"], bodyFile: file
+    ))
+    #expect(streamed.httpBody == nil)
+    #expect(streamed.httpMethod == "POST")
+    #expect(streamed.value(forHTTPHeaderField: "X-Test") == "1")
+
+    // The in-memory path is unchanged.
+    let inMemory = URLSessionRelayTransport.urlRequest(from: RelayHTTPRequest(
+        url: url, method: "POST", body: Data([1, 2, 3])
+    ))
+    #expect(inMemory.httpBody == Data([1, 2, 3]))
+}
+
 @Test("a bare ok:false is a business refusal even on HTTP 200")
 func uploadFileBinaryBareFailure() async throws {
     let transport = StubRelayTransport()
