@@ -17,6 +17,8 @@ struct DrawerView: View {
     let openSession: (String) -> Void
     let openWorkspace: (String) -> Void
     let openSettings: () -> Void
+    let openPlugins: () -> Void
+    let openSchedules: () -> Void
 
     @State private var query = ""
     @State private var expandedWorkspaceId: String?
@@ -45,6 +47,7 @@ struct DrawerView: View {
         VStack(spacing: 0) {
             header
             newSessionRow
+            destinations
             Divider().overlay(DSHPalette.divider)
             workspaceSearch
             workspaceList
@@ -113,6 +116,43 @@ struct DrawerView: View {
         }
         .padding(.horizontal, DSHMetrics.spaceCard)
         .padding(.bottom, DSHMetrics.spaceCard)
+    }
+
+    /// The drawer's global destinations.
+    ///
+    /// MCP and Usage are deliberately absent: SPEC §10 establishes no MCP inventory endpoint
+    /// for this build at all, and there is no verified host-wide usage source. Plugins and
+    /// Scheduled tasks have endpoints, so they get rows — and the screens themselves say when
+    /// the connected host does not answer them.
+    private var destinations: some View {
+        VStack(spacing: 0) {
+            destinationRow("Plugins", symbol: "puzzlepiece.extension", action: openPlugins)
+            destinationRow("Scheduled tasks", symbol: "calendar.badge.clock", action: openSchedules)
+        }
+        .padding(.horizontal, DSHMetrics.spaceSmall + 2)
+        .padding(.bottom, DSHMetrics.spaceSmall)
+    }
+
+    private func destinationRow(_ title: String, symbol: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: DSHMetrics.space) {
+                Image(systemName: symbol)
+                    .foregroundStyle(DSHPalette.secondaryText)
+                    .accessibilityHidden(true)
+                Text(title)
+                    .font(.dshSupporting)
+                    .foregroundStyle(DSHPalette.primaryText)
+                Spacer(minLength: DSHMetrics.space)
+                Image(systemName: "chevron.right")
+                    .font(.caption2)
+                    .foregroundStyle(DSHPalette.secondaryText)
+                    .accessibilityHidden(true)
+            }
+            .padding(.horizontal, DSHMetrics.spaceCard)
+            .frame(minHeight: DSHMetrics.minimumHitTarget)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private var workspaceSearch: some View {

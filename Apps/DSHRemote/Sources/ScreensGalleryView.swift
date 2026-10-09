@@ -135,7 +135,9 @@ struct ScreensGalleryView: View {
                 close: {},
                 openSession: { _ in },
                 openWorkspace: { _ in },
-                openSettings: {}
+                openSettings: {},
+                openPlugins: {},
+                openSchedules: {}
             )
             .frame(maxWidth: 340)
         }

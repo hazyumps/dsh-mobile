@@ -25,6 +25,14 @@ final class AppModel {
     /// What the browse screens render, mapped from the host store's snapshot.
     private(set) var browse: BrowseState = .idle
 
+    /// The host's plugin inventory, once read. Nil until a read has happened, which is
+    /// distinct from an inventory with no entries.
+    private(set) var plugins: PluginInventory?
+    private(set) var pluginsReport: SecondaryReport = .unknown
+    /// The host's schedule catalog, once read. Empty means the host lists none.
+    private(set) var schedules: [ScheduleEntry] = []
+    private(set) var schedulesReport: SecondaryReport = .unknown
+
     /// Every decision this generation has delivered: approvals and questions.
     ///
     /// SPEC §8's routing is the only thing that can answer an approval, and a durable
@@ -56,6 +64,7 @@ final class AppModel {
     private var coordinator: ConnectionCoordinator?
     private var recovery: ForegroundConnection?
     private var hostStore: HostSessionStore?
+    private var secondaryStore: SecondaryReadStore?
     private var interactionStore: InteractionStore?
     private var statusTask: Task<Void, Never>?
     private var snapshotTask: Task<Void, Never>?
@@ -135,6 +144,18 @@ final class AppModel {
         #endif
     }
 
+    /// Which drawer destination a launch should open: `plugins` or `schedules`.
+    ///
+    /// The same reason as ``launchSessionId``: `simctl` cannot tap, so a screen reachable
+    /// only through the drawer is otherwise unreviewable on this machine. Debug only.
+    var launchDestination: String? {
+        #if DEBUG
+        ProcessInfo.processInfo.environment["DSH_DESTINATION"]
+        #else
+        nil
+        #endif
+    }
+
     /// A message to send once the conversation opens. Only ever set for
     /// verification, and only ever pointed at a scratch session: a duplicate or
     /// stray prompt costs real work, so this must not be aimed at a conversation
@@ -198,12 +219,16 @@ final class AppModel {
         recovery = nil
         coordinator = nil
         hostStore = nil
+        secondaryStore = nil
+        plugins = nil
+        pluginsReport = .unknown
+        schedules = []
+        schedulesReport = .unknown
         // A decision belongs to the host that delivered it: switching hosts must not leave
         // another host's approval on screen, where it could be answered.
         interactionStore = nil
         interactions = []
         browse = .idle
-        selectedHost = host
         selectionID = UUID()
         let selection = selectionID
         idleStatus = .connecting
@@ -238,10 +263,18 @@ final class AppModel {
                 )
             }
             let hostStore = HostSessionStore(coordinator: coordinator, makeRPCClient: makeClient)
+            // The capability ledger lives with the store, so a 404 learned on one screen
+            // suppresses the request on the next (SPEC §10).
+            self.secondaryStore = SecondaryReadStore(makeClient: makeClient)
             self.coordinator = coordinator
             self.hostStore = hostStore
             let recovery = ForegroundConnection(coordinator: coordinator)
             self.recovery = recovery
+
+            // Published only now, so a screen's `.task` cannot run against a host whose
+            // stores do not exist yet — which is exactly what left the Plugins screen
+            // reading a store that was still nil, with nothing to retry it.
+            selectedHost = host
 
             observeStatus(of: coordinator, selection: selection)
             observeSnapshots(of: hostStore, selection: selection)
@@ -254,6 +287,7 @@ final class AppModel {
         } catch {
             guard selection == selectionID else { return }
             claimError = nil
+            selectedHost = host
             let reason = Self.reason(for: error)
             browse = BrowseState(
                 workspaces: [],
@@ -409,6 +443,58 @@ final class AppModel {
         } catch {
             return Self.reason(for: error)
         }
+    }
+
+    // MARK: - Secondary reads (SPEC §10)
+
+    /// Reads the host's plugin inventory.
+    ///
+    /// Read-only on purpose: installing, enabling or removing a plugin is a mutation with
+    /// its own consequences, and `managementAvailable` is reported rather than acted on.
+    func loadPlugins() async {
+        guard let secondaryStore else { return }
+        pluginsReport = .loading
+        let outcome = await secondaryStore.loadPluginInventory()
+        plugins = await secondaryStore.pluginInventory
+        pluginsReport = await Self.report(
+            outcome,
+            endpoint: SecondaryReadStore.pluginInventoryMethod,
+            store: secondaryStore
+        )
+    }
+
+    /// Turns a read's outcome into what the screen should say.
+    ///
+    /// A read that failed *because the host has no such endpoint* is not a failure to retry:
+    /// the store records that in its ledger, and SPEC §10 keeps "unavailable" and "failed"
+    /// apart because only one of them is worth another attempt. The store's own outcome
+    /// cannot express both facts at once, so the ledger supplies the second half here.
+    private static func report(
+        _ outcome: SecondaryReadOutcome,
+        endpoint: String,
+        store: SecondaryReadStore
+    ) async -> SecondaryReport {
+        if case .failed = outcome,
+           case .unavailable(let reason) = await store.capabilityLedger.state(of: endpoint) {
+            return SecondaryReport(kind: .unavailable, detail: reason)
+        }
+        return SecondaryReport(outcome)
+    }
+
+    /// Reads the host's schedule catalog.
+    ///
+    /// A host that does not expose `schedule/*` answers 404, which the store records as
+    /// *unavailable* rather than as a failure — and that is what this screen shows.
+    func loadSchedules() async {
+        guard let secondaryStore else { return }
+        schedulesReport = .loading
+        let outcome = await secondaryStore.loadScheduleCatalog()
+        schedules = await secondaryStore.scheduleCatalog
+        schedulesReport = await Self.report(
+            outcome,
+            endpoint: SecondaryReadStore.scheduleCatalogMethod,
+            store: secondaryStore
+        )
     }
 
     // MARK: - The timed question's foreground claim
@@ -755,6 +841,11 @@ final class AppModel {
         coordinator = nil
         origin = nil
         hostStore = nil
+        secondaryStore = nil
+        plugins = nil
+        pluginsReport = .unknown
+        schedules = []
+        schedulesReport = .unknown
         interactionStore = nil
         interactions = []
         selectedHost = nil
@@ -786,6 +877,45 @@ final class AppModel {
         idleStatus = status
         self.browse = browse
         selectedWorkspaceId = workspaceId
+    }
+}
+
+/// What is known about one capability-gated screen, in SPEC §10's own four states.
+///
+/// The store answers with a `SecondaryReadOutcome`, which already distinguishes "the host
+/// does not implement this" from "the read failed" — and that distinction is lost the moment
+/// it is projected onto a `ResourceState`, whose five cases describe freshness rather than
+/// existence. Keeping the outcome's meaning is what stops a 404 from rendering as a failure
+/// with a Retry button that could never work.
+struct SecondaryReport: Equatable {
+    enum Kind: Equatable {
+        case unknown
+        case loading
+        case available
+        case unavailable
+        case failed
+    }
+
+    var kind: Kind
+    var detail: String?
+
+    static let unknown = SecondaryReport(kind: .unknown)
+    static let loading = SecondaryReport(kind: .loading)
+
+    init(kind: Kind, detail: String? = nil) {
+        self.kind = kind
+        self.detail = detail
+    }
+
+    init(_ outcome: SecondaryReadOutcome) {
+        switch outcome {
+        case .loaded(let itemCount):
+            self.init(kind: .available, detail: "\(itemCount) entries")
+        case .gated(let reason):
+            self.init(kind: .unavailable, detail: reason)
+        case .failed(let reason):
+            self.init(kind: .failed, detail: reason)
+        }
     }
 }
 

@@ -16,6 +16,9 @@ struct HomeView: View {
         case session(String)
         /// `nil` lists every session the host reported.
         case sessions(String?)
+        /// The capability-gated drawer destinations (SPEC §10).
+        case plugins
+        case schedules
     }
 
     @State private var path: [Route] = []
@@ -60,6 +63,10 @@ struct HomeView: View {
                     ConversationView(sessionId: sessionId)
                 case .sessions(let workspaceId):
                     SessionBrowserView(workspaceId: workspaceId)
+                case .plugins:
+                    PluginsView()
+                case .schedules:
+                    SchedulesView()
                 }
             }
         }
@@ -80,6 +87,13 @@ struct HomeView: View {
         .task(id: model.selectedSessionId) {
             // Navigation is restored from the same value the store persists, so a cold
             // launch reopens the last conversation instead of the workspace list.
+            // An explicit launch destination wins over the restored conversation: it is the
+            // only way to reach a drawer screen on a machine that cannot tap, and the
+            // restored session would otherwise always get there first.
+            if let route = Self.launchRoute(for: model.launchDestination) {
+                path = [route]
+                return
+            }
             guard let sessionId = model.selectedSessionId else {
                 path.removeAll()
                 return
@@ -309,10 +323,27 @@ struct HomeView: View {
                 openSettings: {
                     withAnimation(.snappy) { isDrawerOpen = false }
                     isSettingsOpen = true
+                },
+                openPlugins: {
+                    withAnimation(.snappy) { isDrawerOpen = false }
+                    path.append(.plugins)
+                },
+                openSchedules: {
+                    withAnimation(.snappy) { isDrawerOpen = false }
+                    path.append(.schedules)
                 }
             )
             .transition(.move(edge: .leading))
             .frame(maxWidth: 340)
+        }
+    }
+
+    /// A launch destination, in the drawer's own terms.
+    private static func launchRoute(for destination: String?) -> Route? {
+        switch destination {
+        case "plugins": .plugins
+        case "schedules": .schedules
+        default: nil
         }
     }
 

@@ -50,6 +50,12 @@ struct DSHRemoteApp: App {
                     await model.claim(pasted: pasted)
                 }
                 #endif
+                // The galleries are review modes, not the app: restoring a host there
+                // would let a live snapshot overwrite the seeded fixtures mid-review,
+                // which is exactly what happened the first time the drawer was shot.
+                guard !model.shouldShowScreenGalleryOnLaunch,
+                      !model.shouldShowDesignGalleryOnLaunch
+                else { return }
                 await model.restoreLastHost()
             }
         }
