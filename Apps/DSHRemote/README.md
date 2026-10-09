@@ -132,3 +132,26 @@ Still outstanding, and not an environment problem: physical-phone validation of
 the recovery behaviour described above. An installed runtime is not a phone.
 
 
+## Debug affordances
+
+Two environment variables change what a **debug** build shows. Both are compiled
+out of a release build, and neither does anything unless it is set, so the
+shipping landing screen is what runs by default.
+
+| variable | effect |
+| --- | --- |
+| `DSH_PAIRING_PAYLOAD` | Seeds pairing at launch with a relay pairing payload, running the ordinary `claim` path rather than a parallel one. For exercising the whole flow on a simulator with no keyboard. |
+| `DSH_DESIGN_GALLERY` | Shows the component gallery instead of the landing screen: every design-system component in each of its states, on the real tokens. |
+
+A simulator launch passes them through `simctl`'s `SIMCTL_CHILD_` prefix, and the
+bundle identifier is generated from `bundleIdPrefix` in [project.yml](project.yml):
+
+```sh
+SIMCTL_CHILD_DSH_DESIGN_GALLERY=1 \
+  xcrun simctl launch --console booted net.fernlabs.dshremote
+```
+
+The gallery exists because the visual foundation has to be *looked at* to be
+reviewed, and this machine has no Simulator GUI. It is a debug screen, not a
+shipping destination, and the components it renders take plain data and closures
+— no store or networking types — so it can exercise every state without a host.
