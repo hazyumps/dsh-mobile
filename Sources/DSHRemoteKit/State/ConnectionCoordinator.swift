@@ -547,6 +547,33 @@ public actor ConnectionCoordinator {
 
     // MARK: - Sessions (SPEC §3.3)
 
+    /// A session's current projections, decoded from `session/projections`.
+    ///
+    /// Read through the unary endpoint rather than taken from the `session/control` stream,
+    /// because the two are not the same picture: against the installed host on 2026-10-09 the
+    /// control baseline for a live session carried its `modelSelection` but **not** its
+    /// `imageLimits`, while this endpoint carried both. A picker that trusted the stream would
+    /// refuse images the host actually accepts.
+    public func sessionProjections(sessionId: String) async throws -> SessionProjectionsValue? {
+        let client = DshRpcClient(
+            baseURL: origin.baseURL,
+            authorization: origin.authorization,
+            transport: makeTransport(origin)
+        )
+        do {
+            let response = try await client.call(
+                Self.sessionProjectionsMethod,
+                args: SessionProjectionsArguments(request: SessionProjectionsRequest(sessionId: sessionId)),
+                returning: SessionProjectionsValue.self
+            )
+            return response.result.value
+        } catch {
+            let failure = Self.failure(from: error)
+            lastError = failure
+            throw failure
+        }
+    }
+
     /// One page of older history, decoded from `session/page`.
     ///
     /// A read, so it uses the ordinary read-retry policy rather than the mutation
@@ -666,7 +693,8 @@ public actor ConnectionCoordinator {
         requestId: String,
         sessionId: String,
         text: String,
-        fileReceiptIds: [String] = []
+        fileReceiptIds: [String] = [],
+        images: [PromptImage] = []
     ) async throws {
         let client = DshRpcClient(
             baseURL: origin.baseURL,
@@ -681,6 +709,17 @@ public actor ConnectionCoordinator {
         ]
         content.append(contentsOf: fileReceiptIds.map {
             .file(SessionPromptRequestContentItemFile(type: "file", receiptId: $0))
+        })
+        // Images travel inline, base64, with the host's own media type — SPEC §9 keeps the
+        // upload route for generic files and puts pictures in the prompt itself. Whether these
+        // are within the host's `imageLimits` is checked before this call, not here.
+        content.append(contentsOf: images.map { image in
+            .image(SessionPromptRequestContentItemImage(
+                type: "image",
+                mediaType: SessionPromptRequestContentItemImageMediaType(rawValue: image.mediaType),
+                data: image.data.base64EncodedString(),
+                name: image.name
+            ))
         })
         let request = SessionPromptRequest(
             requestId: requestId,
@@ -1051,6 +1090,7 @@ public actor ConnectionCoordinator {
     public static let sessionListMethod = "session/list"
     public static let sessionPageMethod = "session/page"
     public static let sessionCreateMethod = "session/create"
+    public static let sessionProjectionsMethod = "session/projections"
     public static let sessionPromptMethod = "session/prompt"
     public static let userQuestionsAnswerMethod = "userQuestions/answer"
 

@@ -384,7 +384,7 @@ public struct ConversationBuilder: Sendable {
             guard event.data["source"]?["kind"]?.stringValue == "user" else { return nil }
             let content = event.data["content"]
             let text = textParts(content)
-            let attachments = Self.fileNames(content)
+            let attachments = Self.attachmentNames(content)
             // A prompt whose only content is a file is still a message.
             guard !text.isEmpty || !attachments.isEmpty else { return nil }
             return ConversationMessage(
@@ -414,16 +414,26 @@ public struct ConversationBuilder: Sendable {
         }
     }
 
-    /// The names of the `file` parts of a message.
+    /// The names of the attached parts of a message — files and images alike.
+    ///
+    /// A durable `image` part looks like a `file` one once the host has resolved it
+    /// (`{type:"image",attachment:{attachmentId,mediaType,width,height,bytes,name}}`), so both
+    /// are read the same way and a picture is no longer invisible in the transcript.
     ///
     /// Skips a part with no name rather than inventing one: an unnamed attachment is one the
     /// host would not let a prompt cite either.
-    static func fileNames(_ content: JSONValue?) -> [String] {
+    static func attachmentNames(_ content: JSONValue?) -> [String] {
         guard let parts = content?.arrayValue else { return [] }
         return parts.compactMap { part in
-            guard part["type"]?.stringValue == "file" else { return nil }
-            // Either the durable form (`attachment.name`) or, before it settles, the receipt.
-            return part["attachment"]?["name"]?.stringValue ?? part["name"]?.stringValue
+            switch part["type"]?.stringValue {
+            case "file", "image":
+                // Either the durable form (`attachment.name`) or, before it settles, the receipt.
+                return part["attachment"]?["name"]?.stringValue
+                    ?? part["name"]?.stringValue
+                    ?? (part["type"]?.stringValue == "image" ? "Image" : nil)
+            default:
+                return nil
+            }
         }
     }
 

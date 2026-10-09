@@ -448,6 +448,44 @@ func promptCarriesFileReceipts() async throws {
     #expect(content[1]["attachmentId"] == nil)
 }
 
+@Test("a prompt carries inline images beside its text and files")
+func promptCarriesInlineImages() async throws {
+    let transport = StubRelayTransport(responsesByPath: [
+        "/api/session/prompt": .json(
+            status: 200,
+            Data(#"{"type":"server-response","rpcId":"t","result":{"ok":true,"value":{"accepted":true}}}"#.utf8)
+        ),
+    ])
+    let coordinator = ConnectionCoordinator(origin: origin(), makeTransport: { _ in transport })
+
+    try await coordinator.prompt(
+        requestId: "request-1",
+        sessionId: "session-1",
+        text: "what is this",
+        fileReceiptIds: ["receipt-a"],
+        images: [
+            PromptImage(
+                mediaType: "image/png",
+                data: Data([0x89, 0x50, 0x4E, 0x47]),
+                name: "shot.png",
+                pixelWidth: 10,
+                pixelHeight: 10
+            )
+        ]
+    )
+
+    let requests = await transport.recordedRequests
+    let request = try #require(requests.first)
+    let envelope = try JSONDecoder().decode(JSONValue.self, from: #require(request.body))
+    let arguments = try #require(envelope["payload"]?["args"]?["request"])
+    let content = try #require(arguments["content"]?.arrayValue)
+    #expect(content.map { $0["type"]?.stringValue } == ["text", "file", "image"])
+    // SPEC §9: the pixels travel in the prompt itself, base64, with the host's media type.
+    #expect(content[2]["mediaType"]?.stringValue == "image/png")
+    #expect(content[2]["data"]?.stringValue == Data([0x89, 0x50, 0x4E, 0x47]).base64EncodedString())
+    #expect(content[2]["name"]?.stringValue == "shot.png")
+}
+
 @Test("session/create sends the identity the phone chose, and adopts a partial success")
 func createSessionSendsTheCallersIdentity() async throws {
     let response = """

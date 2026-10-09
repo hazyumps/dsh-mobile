@@ -133,6 +133,16 @@ struct ConversationBuilderTests {
         ))
         #expect(onlyFile.messages.first?.attachments == ["probe.txt"])
         #expect(onlyFile.messages.first?.text == "")
+
+        // An image resolves the same way, with the host's own metadata — captured from the
+        // installed host on 2026-10-09, and previously invisible in the transcript.
+        var withImage = ConversationBuilder()
+        withImage.apply(event: try event(
+            "user/message",
+            seq: 3,
+            data: #"{"content":[{"type":"text","text":"what is this"},{"type":"image","attachment":{"attachmentId":"sha256:64cf6b08","mediaType":"image/png","width":300,"height":200,"bytes":107407,"name":"probe.png"}}],"source":{"kind":"user"}}"#
+        ))
+        #expect(withImage.messages.first?.attachments == ["probe.png"])
     }
 
     @Test("a jump forward sets the gap flag")
