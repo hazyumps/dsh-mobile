@@ -24,6 +24,7 @@ struct DrawerView: View {
     let openNewSession: () -> Void
 
     @State private var query = ""
+    @FocusState private var filterFocused: Bool
     @State private var expandedWorkspaceId: String?
     /// Whether the harness destinations are unfolded.
     @State private var showsDestinations = true
@@ -71,6 +72,11 @@ struct DrawerView: View {
                 .ignoresSafeArea(edges: .vertical)
         }
         .onAppear {
+            #if DEBUG
+            // Debug builds only: focus the filter, so the drawer can be reviewed with the
+            // keyboard up — the state that exposed the footer's dead strip on the phone.
+            if ProcessInfo.processInfo.environment["DSH_FILTER"] != nil { filterFocused = true }
+            #endif
             // The selected workspace is the expanded one, so the drawer opens where the
             // user already is rather than collapsed.
             if expandedWorkspaceId == nil { expandedWorkspaceId = model.selectedWorkspaceId }
@@ -208,6 +214,7 @@ struct DrawerView: View {
                     .foregroundStyle(DSHPalette.secondaryText)
                     .accessibilityHidden(true)
                 TextField("Filter workspaces and sessions", text: $query)
+                    .focused($filterFocused)
                     .font(.dshSupporting)
                     .foregroundStyle(DSHPalette.primaryText)
                     .autocorrectionDisabled()
