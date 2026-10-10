@@ -7,7 +7,7 @@ the hard way.
 ## Before you commit
 
 ```sh
-swift test --disable-sandbox                       # 450 tests, 31 suites, no simulator needed
+swift test --disable-sandbox                       # the whole suite: 459 tests, 32 suites today
 
 cd Apps/DSHRemote
 xcodegen generate                                  # the project is generated, never edited
@@ -21,6 +21,40 @@ Never hand-edit `Sources/DSHRemoteKit/Generated/` or `Apps/DSHRemote/DSHRemote.x
 Regenerate them (`Tools/generate-models.py`, `xcodegen generate`) and commit the result.
 
 A change is not done because it compiles. It is done when a test would fail without it.
+
+## One issue, one branch
+
+Work starts on **gitea**, on an issue. Each feature, fix and host gap gets its own issue and its
+own branch, and the issue is where the contract lives — what "done" means, what was rejected, what
+was learned. A branch without one is a branch nobody can review.
+
+```sh
+# `origin` is gitea
+git checkout -b issue-31-stop-waiting main
+```
+
+- **Branch from `main`**, named `issue-<number>-<slug>`. One issue per branch: a second unrelated
+  change gets a second issue and a second branch, even when it is a one-liner.
+- **Reference the issue in every commit** (`#31`). The commit body says what changed and why; the
+  issue holds the reasoning a commit message is too short for.
+- **`main` stays green.** `swift test --disable-sandbox` and the app build pass before you push to
+  a branch that will be merged. A red `main` blocks everyone, including whoever is mid-rebase.
+- **Finish it or park it — do not drift.**
+  - *Finish*: merge the branch and close the issue in the same motion. Gitea closes the issue from
+    the merge message, so write `Closes #31` and the link lives in the history instead of in
+    someone's memory.
+  - *Park*: push the branch, say so **on the issue** — what works, what does not, what is next —
+    and leave `main` alone. A parked branch is honest. A half-finished feature merged so the branch
+    can be tidied away is not, and it is how a "small" regression becomes somebody's afternoon.
+- **A pull request is the default door** rather than a direct push, once CI is running (Dan is
+  setting that up). CI is the first reviewer: a red branch is not ready, whatever it does on the
+  machine it was written on.
+- **Direct pushes to `main` are for documentation typos** and for getting a broken `main` working
+  again. Anything a user could notice goes through a branch.
+
+What CI has to be able to do, so that it keeps working: the Xcode project is generated
+(`xcodegen generate`, never committed) and the suite runs without Xcode
+(`swift test --disable-sandbox`). If either stops being true, CI is the first thing that breaks.
 
 ## Test-driven development
 
@@ -89,8 +123,9 @@ One version for the whole project — the app and the kit ship together.
   belongs` says what changed and what it was before.
 - **Sign every commit.** One logical change per commit; plumbing and behaviour in separate
   commits when it helps a reviewer see the behaviour.
-- Reference the issue (`#12`). Issues are the front door for features, host gaps and papercuts —
-  labels are `relay`, `parity`, `client`, `ux`, `device`, `blocked`.
+- Labels on the issue: `relay`, `parity`, `client`, `ux`, `device`, `blocked`, `bug`. They are
+  how a backlog of thirty stays legible, and how "what can I do without the harness" is a filter
+  rather than a memory test.
 - If you discovered something you could not fix, write it down — an issue, a comment next to the
   code, or a line in the commit body. A silent near-miss is found again by the next person.
 
