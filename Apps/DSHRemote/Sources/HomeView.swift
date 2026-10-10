@@ -91,6 +91,7 @@ struct HomeView: View {
             if ProcessInfo.processInfo.environment["DSH_SETTINGS"] != nil { isSettingsOpen = true }
             // Focus the composer, and open the drawer, so the keyboard-vs-drawer interaction can
             // be reproduced on a machine that cannot tap either one. Debug only.
+            if let seeded = ProcessInfo.processInfo.environment["DSH_DRAFT"] { draft = seeded }
             if ProcessInfo.processInfo.environment["DSH_FOCUS"] != nil {
                 try? await Task.sleep(for: .seconds(1.5))
                 focusRequest += 1
@@ -331,12 +332,18 @@ struct HomeView: View {
             }
             .background(DSHPalette.canvas)
             .scrollDismissesKeyboard(.interactively)
+            // The keyboard's inset does not reveal content that is not at the bottom of the
+            // screen, so the page moves instead. Both triggers matter: focus, and every keystroke
+            // after it — a draft that wraps to a second line makes the composer taller, and
+            // without the second the new line grows down under the keyboard. Reported from the
+            // phone twice, the second time after only the focus case was handled.
             .onChange(of: composerFocused) { _, focused in
-                // The keyboard's inset does not reveal content that is not at the bottom of the
-                // screen, so the page moves instead. Reported from the phone as the chat box
-                // sitting behind the keyboard.
                 guard focused else { return }
                 withAnimation(.snappy) { proxy.scrollTo(Self.composerAnchor, anchor: .bottom) }
+            }
+            .onChange(of: draft) { _, _ in
+                guard composerFocused else { return }
+                proxy.scrollTo(Self.composerAnchor, anchor: .bottom)
             }
         }
     }
@@ -519,7 +526,10 @@ struct HomeView: View {
                 }
             )
             .transition(.move(edge: .leading))
-            .frame(maxWidth: 340)
+            // Full height, not content height. Without this the panel is only as tall as its
+            // list, so on a phone with three workspaces the panel ends part-way down the screen
+            // and everything below it reads as drawer that is somehow too big and too empty.
+            .frame(maxWidth: 340, maxHeight: .infinity, alignment: .top)
             .dismissesKeyboardOnDownwardDrag()
             // Swipe the panel away to close it, the mirror of the edge drag that opens it.
             // Either direction: a panel that only leaves one way is a panel you have to learn,
