@@ -261,7 +261,10 @@ shipping app's normal flow is what runs by default.
 | `DSH_MODEL` | Stages a model for a launch-created session, as `provider/model` or `provider/model/effort`. |
 | `DSH_DESTINATION=home` | Shows Home rather than the restored conversation, which the app otherwise correctly reopens. |
 | `DSH_SETTINGS` | Opens Settings on launch — its only other door is a drawer row. |
-| `DSH_DIAGNOSTICS` | Opens Settings straight to the diagnostics preview. |
+| `DSH_DIAGNOSTICS` | Opens Settings straight to the diagnostics preview. Needs `DSH_SETTINGS` as well: the sheet it lives in has to be open for the flag to mean anything. |
+| `DSH_TELEMETRY` | Starts a conversation with the harness event stream shown rather than folded behind the toolbar toggle. |
+| `DSH_FOCUS` | Focuses the composer on Home, so the keyboard's interaction with the rest of the screen can be reviewed without a tap. |
+| `DSH_DRAWER` | Opens the drawer on Home, for the same reason. Pair it with `DSH_FOCUS` to reproduce the composer-focused-then-drawer-opened case. |
 | `DSH_DRAFT` | Prefills the conversation composer, so the `/` command suggestions can be seen on a machine that cannot type. |
 | `DSH_ATTACH` | Uploads this local path into the open conversation and stages its receipt, so the upload path can be exercised without a file importer. |
 | `DSH_IMAGE` | Stages this local image into the open conversation, so the inline-image path can be exercised without a photo picker. |
