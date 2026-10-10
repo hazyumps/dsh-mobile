@@ -326,6 +326,8 @@ public struct RelayPinningPolicy: Sendable, Hashable {
 /// like any other — never as a followed request.
 public final class URLSessionRelayTransport: NSObject, RelayTransport, @unchecked Sendable {
     private let session: URLSession
+    /// Sockets get their own session: see ``socketConfiguration(from:)``.
+    private let socketSession: URLSession
     private let pinning: RelayPinningPolicy
     private let delegate: TransportDelegate
 
@@ -345,11 +347,47 @@ public final class URLSessionRelayTransport: NSObject, RelayTransport, @unchecke
             delegate: delegate,
             delegateQueue: nil
         )
+        // A socket is not a request. `timeoutIntervalForRequest` bounds how long a task may go
+        // without receiving anything, and for a `URLSessionWebSocketTask` that means silence —
+        // so a client that sets a sensible read budget for unary calls (20 s, as this app does)
+        // would tear down its own idle mux connection on that budget, and the coordinator would
+        // reconnect forever while the connection looked healthy. A browser holds a WebSocket
+        // open indefinitely, which is why the relay's own web interface does not show this.
+        self.socketSession = URLSession(
+            configuration: Self.socketConfiguration(from: configuration),
+            delegate: delegate,
+            delegateQueue: nil
+        )
         super.init()
     }
 
     deinit {
         session.invalidateAndCancel()
+        socketSession.invalidateAndCancel()
+    }
+
+    /// The configuration a long-lived socket needs, given the one the caller uses for requests.
+    ///
+    /// Built field by field rather than by copying: `URLSessionConfiguration.copy()` returns an
+    /// object that shares the caller's settings, so adjusting the timeouts on it changed the
+    /// *request* session's budget too — a test caught that, which is the only reason it is not
+    /// in production.
+    ///
+    /// Internal so the property can be asserted directly: a socket must not inherit a request
+    /// timeout, however sensible that timeout is for a unary call.
+    static func socketConfiguration(from configuration: URLSessionConfiguration) -> URLSessionConfiguration {
+        let socket = URLSessionConfiguration.ephemeral
+        socket.httpAdditionalHeaders = configuration.httpAdditionalHeaders
+        socket.allowsCellularAccess = configuration.allowsCellularAccess
+        socket.allowsExpensiveNetworkAccess = configuration.allowsExpensiveNetworkAccess
+        socket.allowsConstrainedNetworkAccess = configuration.allowsConstrainedNetworkAccess
+        socket.httpMaximumConnectionsPerHost = configuration.httpMaximumConnectionsPerHost
+        socket.requestCachePolicy = configuration.requestCachePolicy
+        // A day, and a week for the resource: long enough that neither can be what closed an
+        // idle socket, which is the whole point of having a separate configuration.
+        socket.timeoutIntervalForRequest = 24 * 60 * 60
+        socket.timeoutIntervalForResource = 7 * 24 * 60 * 60
+        return socket
     }
 
     public func send(_ request: RelayHTTPRequest) async throws -> RelayHTTPResponse {
@@ -381,7 +419,7 @@ public final class URLSessionRelayTransport: NSObject, RelayTransport, @unchecke
     }
 
     public func openSocket(_ request: RelayHTTPRequest) async throws -> any RelaySocket {
-        let task = session.webSocketTask(with: Self.urlRequest(from: request))
+        let task = socketSession.webSocketTask(with: Self.urlRequest(from: request))
         task.resume()
         return URLSessionRelaySocket(task: task)
     }

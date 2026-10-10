@@ -1759,3 +1759,50 @@ func approvalOutcomeStrings() throws {
     #expect(allow["kind"]?.stringValue != "rejected")
     #expect(deny["kind"]?.stringValue != "rejected")
 }
+
+// MARK: - Socket lifetime
+
+// A `URLSessionWebSocketTask` is not a request. `timeoutIntervalForRequest` bounds how long a
+// task may sit without *receiving anything*, so a client that gives unary calls a sensible read
+// budget would tear down its own idle multiplexed socket on that same budget — and reconnect
+// forever while the connection looked healthy from the outside. Measured on a real phone: the
+// connection dropped while the app sat on Home doing nothing, at the interval the configuration
+// implies, and the relay's own web interface (a browser, which holds a WebSocket open for as
+// long as it likes) never showed it. 2026-10-09.
+
+@Test("a socket session does not inherit the read budget meant for requests")
+func socketSessionIgnoresTheRequestTimeout() {
+    let unary = URLSessionConfiguration.ephemeral
+    unary.timeoutIntervalForRequest = 20
+    unary.timeoutIntervalForResource = 60
+
+    let socket = URLSessionRelayTransport.socketConfiguration(from: unary)
+
+    #expect(socket.timeoutIntervalForRequest >= 3600)
+    #expect(socket.timeoutIntervalForResource >= 3600)
+}
+
+@Test("a socket session keeps the settings a request session needs")
+func socketSessionKeepsEphemeralStorage() {
+    let unary = URLSessionConfiguration.ephemeral
+    unary.httpAdditionalHeaders = ["X-Probe": "kept"]
+    // Set, not assumed: the first version of this test asserted 20 against `.ephemeral`'s
+    // default of 60 and failed for a reason that had nothing to do with the property.
+    unary.timeoutIntervalForRequest = 20
+    unary.timeoutIntervalForResource = 60
+
+    let socket = URLSessionRelayTransport.socketConfiguration(from: unary)
+
+    // The reason the app uses `.ephemeral` at all is that nothing about a host is cached on
+    // disk (SPEC §2), and that has to survive. Asserted against the shared cache rather than
+    // against `nil`: `.ephemeral` carries a memory-only cache, so `nil` was never the property.
+    #expect(socket.urlCache !== URLCache.shared)
+    #expect(socket.httpAdditionalHeaders?["X-Probe"] as? String == "kept")
+    // The caller's own configuration is not mutated by making a socket from it. This is the
+    // assertion that failed first, and it was a real bug rather than a bad test: `copy()`
+    // returned an object sharing the caller's storage, so the socket's timeouts became the
+    // request session's.
+    #expect(unary.timeoutIntervalForRequest == 20)
+    #expect(unary.timeoutIntervalForResource == 60)
+}
+
