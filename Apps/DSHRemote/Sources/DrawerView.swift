@@ -243,6 +243,10 @@ struct DrawerView: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.horizontal, DSHMetrics.spaceCard)
+        // Top spacing, because the divider that closes the Harness block sits immediately above
+        // this label: with only bottom padding, "Workspaces" read as if it belonged to the
+        // section above it rather than starting its own.
+        .padding(.top, DSHMetrics.spaceCard)
         .padding(.bottom, DSHMetrics.space)
     }
 
