@@ -31,6 +31,9 @@ struct ConversationView: View {
     @State private var photoSelection: PhotosPickerItem?
     @State private var isPickingPhoto = false
     @State private var didAnswerLaunchQuestion = false
+    /// Starts with the harness event stream shown, so both states can be reviewed on a machine
+    /// that cannot tap. Debug only.
+    @State private var showsTelemetry = ProcessInfo.processInfo.environment["DSH_TELEMETRY"] != nil
     @Environment(\.scenePhase) private var scenePhase
     @State private var followAttempt = 0
     @State private var didSendLaunchMessage = false
@@ -62,6 +65,28 @@ struct ConversationView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 StatusBadge(status: model.status)
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                // The host's own event stream, on demand. Everything durable that is not a
+                // message — turn and step boundaries, tool calls, results, injected context —
+                // is folded away behind this, and the count is on the control so it is obvious
+                // something is held back rather than missing.
+                Button {
+                    showsTelemetry.toggle()
+                } label: {
+                    // An explicit HStack rather than a `Label`: a toolbar button renders the
+                    // icon-only label style, which silently drops the count — and a toggle with
+                    // nothing folded away looks the same as one hiding twenty events.
+                    HStack(spacing: DSHMetrics.spaceSmall) {
+                        Image(systemName: showsTelemetry ? "waveform.path.ecg.rectangle.fill" : "waveform.path.ecg")
+                        if !snapshot.unmodelledEvents.isEmpty {
+                            Text("\(snapshot.unmodelledEvents.count)")
+                                .font(.dshMetadata)
+                                .monospacedDigit()
+                        }
+                    }
+                }
+                .accessibilityLabel(showsTelemetry ? "Hide harness events" : "Show harness events")
             }
         }
         .task(id: FollowKey(
@@ -238,6 +263,7 @@ struct ConversationView: View {
                         loadImage: { attachmentId in
                             await model.attachmentImage(sessionId: sessionId, attachmentId: attachmentId)
                         },
+                        showsTelemetry: showsTelemetry,
                         liveQuestions: liveQuestionRequests,
                         onAnswerLive: { eventId, answers in
                             Task { await answerLive(eventId, answers) }
@@ -249,7 +275,9 @@ struct ConversationView: View {
                 .padding(.vertical, DSHMetrics.spaceCard)
             }
             .background(DSHPalette.canvas)
-            .scrollDismissesKeyboard(.interactively)
+            // Any scroll hides the keyboard. The interactive mode needs a drag that starts on
+            // the content, and a short transcript gives it nothing to grab.
+            .scrollDismissesKeyboard(.immediately)
             .onChange(of: snapshot.hasSnapshot) { _, ready in
                 // A conversation opens at its newest message, not at its oldest. Without
                 // this the transcript sat on the harness's own early events and the last
@@ -636,6 +664,13 @@ struct ConversationView: View {
         }
         if let failure = await model.answerLive(eventId, with: replies) {
             sendError = failure
+            return
+        }
+        // The durable record of the same question is retired too. It has no way to learn that
+        // the live delivery was answered, so leaving it would put the card back on screen the
+        // moment the live one settles — the question appearing to be asked again.
+        for answer in answers {
+            await session?.markAnswered(questionId: answer.itemId)
         }
     }
 

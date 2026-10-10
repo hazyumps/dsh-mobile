@@ -63,7 +63,9 @@ struct Composer: View {
                 TextField(placeholder, text: $text, axis: .vertical)
                     .font(.body)
                     .foregroundStyle(DSHPalette.primaryText)
-                    .lineLimit(1...6)
+                    // Five lines then scroll: the box should look like a message field, not a
+                    // document.
+                    .lineLimit(1...5)
                     .focused($isFocused)
                     .accessibilityLabel(placeholder)
                 Button {
@@ -74,11 +76,14 @@ struct Composer: View {
                             .frame(minWidth: DSHMetrics.minimumHitTarget, minHeight: DSHMetrics.minimumHitTarget)
                     } else {
                         Image(systemName: "arrow.up")
-                            .font(.body.weight(.semibold))
+                            .font(.subheadline.weight(.semibold))
                             .foregroundStyle(sendEnabled ? DSHPalette.onPrimaryAction : DSHPalette.secondaryText)
-                            .frame(minWidth: DSHMetrics.minimumHitTarget, minHeight: DSHMetrics.minimumHitTarget)
+                            // Drawn smaller than it is tappable: the target stays 44 points, the
+                            // circle does not dominate the row.
+                            .frame(width: 34, height: 34)
                             .background(sendEnabled ? DSHPalette.primaryAction : DSHPalette.elevatedSurface)
                             .clipShape(Circle())
+                            .frame(minWidth: DSHMetrics.minimumHitTarget, minHeight: DSHMetrics.minimumHitTarget)
                             .contentShape(Circle())
                     }
                 }
@@ -104,7 +109,10 @@ struct Composer: View {
             guard focusRequest > 0 else { return }
             isFocused = true
         }
-        .padding(DSHMetrics.spaceCard)
+        // Tighter vertically than horizontally: the row's own controls already carry 44 points
+        // of height, so card padding on both axes made the composer a slab.
+        .padding(.horizontal, DSHMetrics.spaceCard)
+        .padding(.vertical, DSHMetrics.spaceSmall)
         .background(DSHPalette.card)
         .overlay(
             RoundedRectangle(cornerRadius: DSHMetrics.composerCornerRadius, style: .continuous)

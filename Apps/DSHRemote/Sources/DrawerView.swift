@@ -25,6 +25,8 @@ struct DrawerView: View {
 
     @State private var query = ""
     @State private var expandedWorkspaceId: String?
+    /// Whether the harness destinations are unfolded.
+    @State private var showsDestinations = true
 
     private var browse: BrowseState { model.browse }
 
@@ -137,9 +139,33 @@ struct DrawerView: View {
     /// the connected host does not answer them.
     private var destinations: some View {
         VStack(spacing: 0) {
-            destinationRow("Usage", symbol: "chart.bar", action: openUsage)
-            destinationRow("Plugins", symbol: "puzzlepiece.extension", action: openPlugins)
-            destinationRow("Scheduled tasks", symbol: "calendar.badge.clock", action: openSchedules)
+            // A folding header: these are places to go, not the point of the drawer, and the
+            // workspace list should not start below three rows of navigation on a small screen.
+            Button {
+                withAnimation(.snappy) { showsDestinations.toggle() }
+            } label: {
+                HStack(spacing: DSHMetrics.spaceSmall) {
+                    Text("Harness")
+                        .font(.dshMetadata.weight(.semibold))
+                        .foregroundStyle(DSHPalette.secondaryText)
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(DSHPalette.secondaryText)
+                        .rotationEffect(.degrees(showsDestinations ? 90 : 0))
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, DSHMetrics.spaceCard)
+                .frame(minHeight: DSHMetrics.minimumHitTarget)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(showsDestinations ? "Hide harness destinations" : "Show harness destinations")
+
+            if showsDestinations {
+                destinationRow("Usage", symbol: "chart.bar", action: openUsage)
+                destinationRow("Plugins", symbol: "puzzlepiece.extension", action: openPlugins)
+                destinationRow("Scheduled tasks", symbol: "calendar.badge.clock", action: openSchedules)
+            }
         }
         .padding(.horizontal, DSHMetrics.spaceSmall + 2)
         .padding(.bottom, DSHMetrics.spaceSmall)

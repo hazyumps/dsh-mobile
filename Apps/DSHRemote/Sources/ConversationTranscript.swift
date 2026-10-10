@@ -33,6 +33,14 @@ struct ConversationTranscript: View {
     /// Loads one attachment's pixels. Nil when the screen has no reader, in which case an
     /// image is listed by name rather than drawn.
     var loadImage: ((String) async -> DisplayImage?)?
+    /// Whether the host's own event stream is shown inline.
+    ///
+    /// Off by default, and that is the point: nearly every durable event is a card of its own —
+    /// turn and step boundaries, tool calls, tool results, injected context — so the transcript
+    /// read as machinery with the conversation buried in it. The chat stream shows messages and
+    /// the controls that need an answer; everything else is one toggle away, which is where the
+    /// desktop keeps it too.
+    var showsTelemetry = false
     var liveQuestions: [InteractionRequest] = []
     var onAnswerLive: ((String, [DecisionCard.Answer]) -> Void)?
 
@@ -73,9 +81,14 @@ struct ConversationTranscript: View {
 
     private var rows: [Row] {
         let messages = snapshot.messages.map(Row.message)
-        let activities = Self.activities(from: snapshot.unmodelledEvents).map(Row.activity)
+        let activities = showsTelemetry
+            ? Self.activities(from: snapshot.unmodelledEvents).map(Row.activity)
+            : []
         return (messages + activities).sorted { $0.order < $1.order }
     }
+
+    /// How many event cards the telemetry toggle is holding back.
+    var telemetryCount: Int { snapshot.unmodelledEvents.count }
 
     var body: some View {
         VStack(alignment: .leading, spacing: DSHMetrics.spaceCard) {
@@ -158,8 +171,21 @@ struct ConversationTranscript: View {
     @ViewBuilder
     private var decisions: some View {
         let groups = Dictionary(grouping: snapshot.pendingQuestions, by: \.callId)
+        // One question, one card. The durable fold and the live `$events` delivery both know
+        // about a question the host is waiting on, and rendering both put the same card on
+        // screen twice — the same question, asked twice, side by side.
+        //
+        // Keyed on the question's own id rather than the call id: the waterfall for a question
+        // carries no `callId` (only the durable `tool/call` does), so matching on calls left
+        // both sides unkeyed and deduped nothing. The question id is on both.
+        let liveQuestionIds = Set(
+            liveQuestions
+                .filter(\.state.isActionable)
+                .flatMap { QuestionBatch(request: $0.request)?.questions.map(\.id) ?? [] }
+        )
         ForEach(groups.keys.sorted(), id: \.self) { callId in
-            let questions = groups[callId] ?? []
+            // A card is only history once nothing live is answering it.
+            let questions = (groups[callId] ?? []).filter { !liveQuestionIds.contains($0.id) }
             if !questions.isEmpty {
                 DecisionCard(
                     content: .question(DecisionCard.Question(
