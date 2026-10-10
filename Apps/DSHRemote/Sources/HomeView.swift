@@ -180,6 +180,21 @@ struct HomeView: View {
                     .accessibilityHidden(true)
             }
         }
+        .simultaneousGesture(
+            // The mirror of the leading-edge drag: with the drawer out of the way, a leftward
+            // swipe on the content goes back to the conversation you were last in. Deliberately
+            // not an edge gesture — the leading edge belongs to the drawer, and a swipe that
+            // works from anywhere is the one that does not have to be aimed.
+            DragGesture(minimumDistance: 24)
+                .onEnded { value in
+                    guard !isDrawerOpen, path.isEmpty,
+                          value.translation.width < -60,
+                          abs(value.translation.height) < abs(value.translation.width),
+                          let last = model.selectedSessionId
+                    else { return }
+                    open(last)
+                }
+        )
         .onChange(of: isDrawerOpen) { _, open in
             if open {
                 // The drawer covers the screen, and the field it was opened over keeps first
