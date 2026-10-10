@@ -43,6 +43,8 @@ struct ConversationTranscript: View {
     var showsTelemetry = false
     var liveQuestions: [InteractionRequest] = []
     var onAnswerLive: ((String, [DecisionCard.Answer]) -> Void)?
+    /// Stops the agent's turn instead of answering the question it is parked on.
+    var onDecline: (() -> Void)?
 
     /// One durable event that is not a message, in the order it arrived.
     private struct Activity: Identifiable {
@@ -195,7 +197,9 @@ struct ConversationTranscript: View {
                     isStale: isStale,
                     isSubmitting: isSubmitting,
                     footnote: isStale ? "This request is no longer confirmed open. It is kept as history." : nil,
-                    onSubmit: onAnswer
+                    onSubmit: onAnswer,
+                    declineTitle: isStale ? nil : "Stop waiting",
+                    onDecline: onDecline
                 )
             }
         }
@@ -221,7 +225,9 @@ struct ConversationTranscript: View {
                     isStale: !request.state.isActionable,
                     isSubmitting: isSubmitting,
                     footnote: Self.footnote(for: request),
-                    onSubmit: { answers in onAnswerLive?(request.id, answers) }
+                    onSubmit: { answers in onAnswerLive?(request.id, answers) },
+                    declineTitle: request.state.isActionable ? "Stop waiting" : nil,
+                    onDecline: onDecline
                 )
             }
         }

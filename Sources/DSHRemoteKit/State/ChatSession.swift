@@ -150,6 +150,10 @@ public actor ChatSession {
     private let sessionId: String
     private let streamId: String
     private let loadPage: PageLoader?
+    /// Stops the turn this session is running. Optional for the same reason `loadPage` is: a
+    /// session folded from fixtures has no transport, and a cancel that cannot be attempted has
+    /// to say so rather than look like one that worked.
+    private let cancelRun: (() async throws -> Void)?
     public private(set) var hasSnapshot = false
     public private(set) var followError: String?
 
@@ -159,6 +163,9 @@ public actor ChatSession {
     /// cannot ask the same id without one shadowing the other, which is the right
     /// failure for a UI that has to show one card per question anyway.
     private var questions: [String: PendingQuestion] = [:]
+    /// The `(turn, step)` each pending question came from, so the event that settles it can be
+    /// recognised. The host does not repeat the call id on the result.
+    private var questionScope: [String: (turn: Int64, step: Int64)] = [:]
     /// Whether the host says older history exists. Seeded from the baseline's own
     /// `hasMore`, then governed by each page's answer — SPEC §7 makes that value the
     /// authority rather than an inference from how many records a page held.
@@ -173,10 +180,16 @@ public actor ChatSession {
     ///   - loadPage: fetches older history. Optional because a session that is only
     ///     being read does not need it, and a caller that never pages gets a
     ///     ``snapshot`` with `canLoadOlder` false rather than a silent no-op.
-    public init(client: MuxClient, sessionId: String, loadPage: PageLoader? = nil) {
+    public init(
+        client: MuxClient,
+        sessionId: String,
+        loadPage: PageLoader? = nil,
+        cancelRun: (() async throws -> Void)? = nil
+    ) {
         self.client = client
         self.sessionId = sessionId
         self.loadPage = loadPage
+        self.cancelRun = cancelRun
         // Generated, never reused: a cancelled stream's id must not be handed to
         // a later consumer, which is the leak rule the mux client tests assert.
         self.streamId = "follow-\(UUID().uuidString)"
@@ -200,6 +213,9 @@ public actor ChatSession {
                 // Through the coordinator, so a page inherits the connection's own
                 // status classification and the read path's retry policy.
                 try await coordinator.page(request)
+            },
+            cancelRun: {
+                try await coordinator.cancelSession(sessionId)
             }
         )
     }
@@ -329,6 +345,36 @@ public actor ChatSession {
     /// describe (SPEC §7). Concurrent duplicate loads are refused here rather than
     /// left to the caller.
     @discardableResult
+    /// Stops the running turn, which is the only way out of a question nobody wants to answer.
+    ///
+    /// `userQuestions` offers `answer` and `attachWait` and nothing else — there is no dismiss and
+    /// no decline — so a parked question is released by stopping the turn it belongs to. On
+    /// success every question this session was holding is cleared: the host stopped the work, so
+    /// nothing will ever answer them, and leaving the cards up would offer controls whose every
+    /// press is refused.
+    ///
+    /// Returns a message when the turn could not be stopped; `nil` when it was.
+    public func cancel() async -> String? {
+        guard let cancelRun else {
+            return "This session has no way to stop its turn."
+        }
+        do {
+            try await cancelRun()
+        } catch {
+            return Self.readableFailure(error)
+        }
+        for id in questions.keys { questions.removeValue(forKey: id) }
+        publish()
+        return nil
+    }
+
+    /// The host's own description where there is one, so a refusal is not flattened into a
+    /// generic sentence.
+    static func readableFailure(_ error: any Error) -> String {
+        if let refusal = error as? InteractionRefusal { return String(describing: refusal) }
+        return String(describing: error)
+    }
+
     public func loadOlder() async -> Bool {
         guard let loadPage, !isLoadingOlder, canLoadOlder, let throughSeq = builder.cursor else {
             return false
@@ -371,6 +417,7 @@ public actor ChatSession {
         // asked before you opened the conversation never produced a card.
         if let event = frame.value?.event {
             collectQuestions(from: event)
+            resolveQuestions(from: event)
         }
         if let snapshot = frame.value?.snapshot {
             hasSnapshot = true
@@ -380,6 +427,7 @@ public actor ChatSession {
             for record in snapshot.records {
                 if let event = record.event {
                     collectQuestions(from: event)
+                    resolveQuestions(from: event)
                 }
             }
         }
@@ -389,8 +437,54 @@ public actor ChatSession {
 
     private func collectQuestions(from event: DurableEventEnvelope) {
         guard let asked = PendingQuestion.questions(inToolCall: event.data) else { return }
+        let scope = Self.scope(of: event.data)
         for question in asked {
             questions[question.id] = question
+            questionScope[question.id] = scope
+        }
+    }
+
+    /// The `(turn, step)` an event belongs to.
+    ///
+    /// This is how a question is matched to the result that settled it: a `tool/result` carries
+    /// no `callId` — the captured payload is `{error, message, step, turn}` — so the call id
+    /// cannot be the join. Do not "fix" this by looking for a call id; there is not one.
+    private static func scope(of data: JSONValue) -> (turn: Int64, step: Int64)? {
+        guard let turn = data["turn"]?.intValue, let step = data["step"]?.intValue else {
+            return nil
+        }
+        return (turn, step)
+    }
+
+    /// Drops the question a `tool/result` settles.
+    ///
+    /// The host's result for the call that asked is the durable record that the question is over
+    /// — whether it was answered, cancelled, or abandoned. Nothing else marks it: the log after a
+    /// cancelled question reads `tool/call`, `tool/result`, `step/end`, `turn/end`. Without this
+    /// the fold kept every question it had ever seen and put the card back as *live* on the next
+    /// load, offering a Submit whose every press the host would refuse.
+    private func resolveQuestions(from event: DurableEventEnvelope) {
+        switch event.type {
+        case "tool/result":
+            // The result for the step that asked settles it, whatever it says: answered,
+            // refused, or errored.
+            guard let scope = Self.scope(of: event.data) else { return }
+            drop { self.questionScope[$0]?.turn == scope.turn && self.questionScope[$0]?.step == scope.step }
+        case "turn/end":
+            // A turn cannot end while the agent is parked on a question, so a turn that ends
+            // with one still open is a turn that was stopped. Captured after cancelling a parked
+            // question: `{"turn":1,"reason":{"kind":"aborted","reason":{"kind":"user"}}}`.
+            guard let turn = event.data["turn"]?.intValue else { return }
+            drop { self.questionScope[$0]?.turn == turn }
+        default:
+            break
+        }
+    }
+
+    private func drop(where matches: (String) -> Bool) {
+        for id in questions.keys where matches(id) {
+            questions.removeValue(forKey: id)
+            questionScope.removeValue(forKey: id)
         }
     }
 
@@ -399,9 +493,10 @@ public actor ChatSession {
         questions.values.sorted { $0.id < $1.id }
     }
 
-    /// Drops a question once its answer has been sent. The host keeps no record
-    /// of "answered" that this type can see, so the screen says so explicitly
-    /// rather than the card lingering until a reconnect.
+    /// Drops a question the moment its answer goes up, without waiting for the host's result to
+    /// come back down the stream. The result does arrive and clears it too (see
+    /// ``resolveQuestions(from:)``); this is what stops the card sitting there live for a round
+    /// trip.
     public func markAnswered(questionId: String) {
         questions.removeValue(forKey: questionId)
         publish()

@@ -590,6 +590,30 @@ public actor ConnectionCoordinator {
     /// conversation window, which is why the request carries them rather than this
     /// method deriving them.
     @discardableResult
+    /// Stops the turn a session is running.
+    ///
+    /// Nothing in `userQuestions` can decline a question — `answer` and `attachWait` are the whole
+    /// namespace — so this is how a question gets released without an answer.
+    public func cancelSession(_ sessionId: String) async throws {
+        let client = DshRpcClient(
+            baseURL: origin.baseURL,
+            authorization: origin.authorization,
+            transport: makeTransport(origin)
+        )
+        do {
+            _ = try await client.call(
+                Self.sessionCancelMethod,
+                args: SessionCancelArguments(request: SessionCancelRequest(sessionId: sessionId)),
+                returning: SessionCancelResponse.self
+            )
+        } catch {
+            let failure = Self.failure(from: error)
+            lastError = failure
+            applyCallFailure(failure)
+            throw failure
+        }
+    }
+
     public func page(_ request: ConversationPageRequest) async throws -> ConversationPage {
         let client = DshRpcClient(
             baseURL: origin.baseURL,
@@ -1096,6 +1120,7 @@ public actor ConnectionCoordinator {
     /// The unary endpoint SPEC §3.3's session list comes from.
     public static let sessionListMethod = "session/list"
     public static let sessionPageMethod = "session/page"
+    public static let sessionCancelMethod = "session/cancel"
     public static let sessionCreateMethod = "session/create"
     public static let sessionProjectionsMethod = "session/projections"
     public static let sessionPromptMethod = "session/prompt"

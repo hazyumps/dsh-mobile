@@ -267,7 +267,8 @@ struct ConversationView: View {
                         liveQuestions: liveQuestionRequests,
                         onAnswerLive: { eventId, answers in
                             Task { await answerLive(eventId, answers) }
-                        }
+                        },
+                        onDecline: { Task { await stopWaiting() } }
                     )
                     .id("transcript")
                 }
@@ -657,6 +658,24 @@ struct ConversationView: View {
     #endif
 
     /// Answers a live question delivery through `$events/result`.
+    /// Stops the turn the question belongs to.
+    ///
+    /// The alternative was a card with one way forward: `userQuestions` has no decline, so a
+    /// question you did not want to answer parked the session and the only exit was cancelling it
+    /// somewhere else. This is that cancel, next to the question that caused it.
+    private func stopWaiting() async {
+        isSubmittingAnswer = true
+        defer { isSubmittingAnswer = false }
+        guard let session else { return }
+        if let failure = await session.cancel() {
+            sendError = failure
+            return
+        }
+        // The live deliveries went with the turn. The host was not told anything about them —
+        // stopping the work is what ends them.
+        await model.withdrawQuestions(sessionId: sessionId)
+    }
+
     private func answerLive(_ eventId: String, _ answers: [DecisionCard.Answer]) async {
         isSubmittingAnswer = true
         defer { isSubmittingAnswer = false }

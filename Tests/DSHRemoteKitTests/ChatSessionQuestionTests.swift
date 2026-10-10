@@ -100,4 +100,96 @@ struct ChatSessionQuestionTests {
         try? await Task.sleep(for: .milliseconds(200))
         #expect(await chat.pendingQuestions.count == 1)
     }
+
+    /// The host's own record that the question is over.
+    ///
+    /// Captured from `~/.dsh/sessions/--Users-patrick-.dsh-profiles-desktop--/
+    /// session-3f46f792-…/session.v4.jsonl.zstd` after cancelling a parked question, 2026-10-09.
+    /// The shapes are the point, and the first version of this test invented a `callId` on the
+    /// result that the host never sends — so it passed while the app kept the card:
+    ///
+    ///   tool/call   → {"arguments", "callId", "name", "step", "turn"}
+    ///   tool/result → {"error", "message", "step", "turn"}          (no callId)
+    ///   turn/end    → {"turn": 1, "reason": {"kind": "aborted", …}}
+    private func pushEvent(
+        _ type: String,
+        data: JSONValue,
+        seq: Int64,
+        to socket: StubRelaySocket
+    ) async throws {
+        var frame = try #require(Self.frame.objectValue)
+        frame["streamId"] = .string(try await followStreamID(on: socket))
+        var value = try #require(frame["value"]?.objectValue)
+        value["event"] = .object([
+            "type": .string(type),
+            "seq": .int(seq),
+            "time": .int(1791430225693),
+            "data": data,
+        ])
+        frame["value"] = .object(value)
+        try await socket.push(json: .object(frame))
+    }
+
+    @Test("a tool result for the asking step clears the question")
+    func resultClearsTheQuestion() async throws {
+        let (chat, socket) = makeSession()
+        try await chat.start()
+        try await pushQuestion(to: socket)
+        #expect(await eventually { await !chat.pendingQuestions.isEmpty })
+
+        try await pushEvent(
+            "tool/result",
+            data: .object([
+                "turn": .int(1), "step": .int(1),
+                "error": .bool(true), "message": .string("stopped"),
+            ]),
+            seq: 22,
+            to: socket
+        )
+
+        #expect(await eventually { await chat.pendingQuestions.isEmpty },
+                "the question outlived the host's own result for it")
+    }
+
+    @Test("a turn that ends clears the question the turn was parked on")
+    func turnEndClearsTheQuestion() async throws {
+        let (chat, socket) = makeSession()
+        try await chat.start()
+        try await pushQuestion(to: socket)
+        #expect(await eventually { await !chat.pendingQuestions.isEmpty })
+
+        try await pushEvent(
+            "turn/end",
+            data: .object([
+                "turn": .int(1),
+                "reason": .object([ "kind": .string("aborted"),
+                                    "reason": .object(["kind": .string("user")]) ]),
+            ]),
+            seq: 24,
+            to: socket
+        )
+
+        #expect(await eventually { await chat.pendingQuestions.isEmpty },
+                "an aborted turn left its question on screen as if it were still open")
+    }
+
+    @Test("a result from another step leaves the question alone")
+    func anotherStepsResultDoesNotClear() async throws {
+        let (chat, socket) = makeSession()
+        try await chat.start()
+        try await pushQuestion(to: socket)
+        #expect(await eventually { await !chat.pendingQuestions.isEmpty })
+
+        // A different step in the same turn: the question is still open.
+        try await pushEvent(
+            "tool/result",
+            data: .object(["turn": .int(1), "step": .int(9)]),
+            seq: 22,
+            to: socket
+        )
+
+        try? await Task.sleep(for: .milliseconds(200))
+        #expect(await chat.pendingQuestions.count == 1,
+                "a result from an unrelated step cleared the question")
+    }
 }

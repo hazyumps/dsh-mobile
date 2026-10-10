@@ -353,6 +353,22 @@ public actor InteractionStore {
     }
 
 
+    /// Retires every open request for a session because the turn behind them was stopped.
+    ///
+    /// Not an answer: the host was told nothing about these requests. They are over because the
+    /// work that asked them is, and a card that outlives its turn is a card that cannot be acted
+    /// on.
+    public func withdraw(sessionId: String) {
+        var changed = false
+        for (id, var request) in requests
+        where request.sessionId == sessionId && request.state.isActionable {
+            request.state = .settled
+            requests[id] = request
+            changed = true
+        }
+        if changed { publish() }
+    }
+
     /// Forgets everything. Called when a conversation closes or a host is switched.
     public func removeAll() {
         requests.removeAll()

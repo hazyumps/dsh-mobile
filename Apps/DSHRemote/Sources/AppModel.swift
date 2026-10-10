@@ -595,6 +595,15 @@ final class AppModel {
         await submit { try await $0.answerLiveQuestions(id, with: answers) }
     }
 
+    /// Retires the live deliveries for a session whose turn was stopped.
+    ///
+    /// Local only, and deliberately so: the host was told nothing about these requests, because
+    /// there is nothing to tell it. They are over because the work that asked them is, and the
+    /// host's own `cancel` is what ended it.
+    func withdrawQuestions(sessionId: String) async {
+        await interactionStore?.withdraw(sessionId: sessionId)
+    }
+
     private func submit(_ work: (InteractionStore) async throws -> Void) async -> String? {
         guard let interactionStore else { return "This phone is not connected to the harness." }
         do {

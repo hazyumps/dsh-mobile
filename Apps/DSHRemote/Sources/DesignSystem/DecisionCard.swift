@@ -66,6 +66,10 @@ struct DecisionCard: View {
     var onAllowOnce: (() -> Void)?
     var onReject: (() -> Void)?
     var onSubmit: (([Answer]) -> Void)?
+    /// Stops the turn instead of answering it. Not a rejection: nothing is sent about the
+    /// question, the work behind it is ended.
+    var declineTitle: String?
+    var onDecline: (() -> Void)?
 
     /// Options marked chosen before the first tap. A transcript never passes it;
     /// the gallery does, because this machine has no Simulator GUI and nothing can
@@ -86,6 +90,8 @@ struct DecisionCard: View {
         onAllowOnce: (() -> Void)? = nil,
         onReject: (() -> Void)? = nil,
         onSubmit: (([Answer]) -> Void)? = nil,
+        declineTitle: String? = nil,
+        onDecline: (() -> Void)? = nil,
         initiallySelected: [String: [String]] = [:]
     ) {
         self.content = content
@@ -95,6 +101,8 @@ struct DecisionCard: View {
         self.onAllowOnce = onAllowOnce
         self.onReject = onReject
         self.onSubmit = onSubmit
+        self.declineTitle = declineTitle
+        self.onDecline = onDecline
         self.initiallySelected = initiallySelected
         _selections = State(initialValue: initiallySelected.mapValues(Set.init))
     }
@@ -188,6 +196,17 @@ struct DecisionCard: View {
         }
         decisionButtons {
             control(title: "Submit", prominent: true, isEnabled: canSubmit, action: submit)
+            if let declineTitle, let onDecline {
+                control(title: declineTitle, prominent: false, action: onDecline)
+            }
+        }
+        if declineTitle != nil {
+            // The consequence, next to the control that causes it: the question is not refused,
+            // the agent's turn is stopped.
+            Text("Stops the agent's turn. The question goes unanswered.")
+                .font(.dshMetadata)
+                .foregroundStyle(DSHPalette.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
