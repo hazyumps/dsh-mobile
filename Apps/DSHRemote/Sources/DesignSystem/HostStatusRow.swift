@@ -13,10 +13,15 @@ import SwiftUI
 struct HostStatusRow: View {
     let hostName: String
     let state: DSHHostState
+    /// How tall the row sits. 44 by default, because a row that can be tapped needs a target that
+    /// size; a caller showing a status line and nothing else can ask for less, and the drawer's
+    /// footer does — it is the bottom block of a panel, where 44 points of nothing is visible.
+    var minHeight: CGFloat = DSHMetrics.minimumHitTarget
 
-    init(hostName: String, state: DSHHostState) {
+    init(hostName: String, state: DSHHostState, minHeight: CGFloat = DSHMetrics.minimumHitTarget) {
         self.hostName = hostName
         self.state = state
+        self.minHeight = minHeight
     }
 
     /// Convenience for the plain "connected" case the mockups show.
@@ -39,7 +44,7 @@ struct HostStatusRow: View {
                 .fixedSize()
         }
         .padding(.horizontal, DSHMetrics.pageMargin)
-        .frame(minHeight: DSHMetrics.minimumHitTarget)
+        .frame(minHeight: minHeight)
         .background(DSHPalette.navigationSurface)
     }
 }
