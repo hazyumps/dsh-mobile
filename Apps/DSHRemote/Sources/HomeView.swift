@@ -479,10 +479,13 @@ struct HomeView: View {
             .frame(maxWidth: 340)
             .dismissesKeyboardOnDownwardDrag()
             // Swipe the panel away to close it, the mirror of the edge drag that opens it.
+            // Either direction: a panel that only leaves one way is a panel you have to learn,
+            // and the gesture people reach for first is the one that pushes it back where it
+            // came from.
             .gesture(
                 DragGesture(minimumDistance: 12)
                     .onEnded { value in
-                        guard value.translation.width < -44 else { return }
+                        guard abs(value.translation.width) > 44 else { return }
                         withAnimation(.snappy) { isDrawerOpen = false }
                     }
             )

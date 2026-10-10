@@ -66,6 +66,10 @@ struct Composer: View {
                 }
                 TextField(placeholder, text: $text, axis: .vertical)
                     .font(.body)
+                    // A field at its line limit scrolls instead of growing, so this is the case
+                    // where the keyboard had no way off: the drag below never reached the field,
+                    // and scrolling it did nothing.
+                    .scrollDismissesKeyboard(.immediately)
                     .foregroundStyle(DSHPalette.primaryText)
                     // Five lines then scroll: the box should look like a message field, not a
                     // document.
@@ -117,6 +121,7 @@ struct Composer: View {
         // of height, so card padding on both axes made the composer a slab.
         .padding(.horizontal, DSHMetrics.spaceCard)
         .padding(.vertical, DSHMetrics.spaceSmall)
+        .dismissesKeyboardOnDownwardDrag()
         .background(DSHPalette.card)
         .overlay(
             RoundedRectangle(cornerRadius: DSHMetrics.composerCornerRadius, style: .continuous)
