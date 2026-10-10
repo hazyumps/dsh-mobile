@@ -25,6 +25,10 @@ struct HomeView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var path: [Route] = []
     @State private var isDrawerOpen = false
+    /// Whether the composer holds focus, watched so the page can bring it above the keyboard.
+    @State private var composerFocused = false
+    /// The composer's scroll anchor.
+    static let composerAnchor = "home-composer"
     @State private var isWorkspacePickerOpen = false
     @State private var isSettingsOpen = false
     @State private var draft = ""
@@ -40,25 +44,7 @@ struct HomeView: View {
     var body: some View {
         NavigationStack(path: $path) {
             ZStack(alignment: .leading) {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: DSHMetrics.spaceGroup) {
-                        hostRow
-                        heading
-                        workspaceControl
-                        modelModeControls
-                        composer
-                        continueSection
-                    }
-                    .padding(.horizontal, DSHMetrics.pageMargin)
-                    .padding(.vertical, DSHMetrics.spaceCard)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                // A downward drag anywhere on Home puts the keyboard away, the same motion the
-                // drawer and the transcript accept.
-                .dismissesKeyboardOnDownwardDrag()
-                }
-                .background(DSHPalette.canvas)
-                .scrollDismissesKeyboard(.interactively)
-
+                page
                 if isDrawerOpen {
                     drawerLayer
                 }
@@ -165,21 +151,7 @@ struct HomeView: View {
         // Two targeted gestures rather than one on the root: a horizontal drag across the
         // transcript would compete with the scroll views, and edge-drag is the platform's own
         // answer to exactly this.
-        .overlay(alignment: .leading) {
-            if !isDrawerOpen {
-                Color.clear
-                    .frame(width: 22)
-                    .contentShape(Rectangle())
-                    .gesture(
-                        DragGesture(minimumDistance: 12)
-                            .onEnded { value in
-                                guard value.translation.width > 44 else { return }
-                                withAnimation(.snappy) { isDrawerOpen = true }
-                            }
-                    )
-                    .accessibilityHidden(true)
-            }
-        }
+        .overlay(alignment: .leading) { openDrawerEdge }
         .simultaneousGesture(
             // The mirror of the leading-edge drag: with the drawer out of the way, a leftward
             // swipe on the content goes back to the conversation you were last in. Deliberately
@@ -335,6 +307,61 @@ struct HomeView: View {
         return nil
     }
 
+    /// The scrolling page, in the order the design asks for: host, heading, workspace, the mode
+    /// and model controls, the composer, then recent sessions. The composer is *in* the page
+    /// rather than pinned to the bottom, which is why it needs help staying above the keyboard.
+    private var page: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: DSHMetrics.spaceGroup) {
+                    hostRow
+                    heading
+                    workspaceControl
+                    modelModeControls
+                    composer
+                        .id(Self.composerAnchor)
+                    continueSection
+                }
+                .padding(.horizontal, DSHMetrics.pageMargin)
+                .padding(.vertical, DSHMetrics.spaceCard)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                // A downward drag anywhere on Home puts the keyboard away, the same motion the
+                // drawer and the transcript accept.
+                .dismissesKeyboardOnDownwardDrag()
+            }
+            .background(DSHPalette.canvas)
+            .scrollDismissesKeyboard(.interactively)
+            .onChange(of: composerFocused) { _, focused in
+                // The keyboard's inset does not reveal content that is not at the bottom of the
+                // screen, so the page moves instead. Reported from the phone as the chat box
+                // sitting behind the keyboard.
+                guard focused else { return }
+                withAnimation(.snappy) { proxy.scrollTo(Self.composerAnchor, anchor: .bottom) }
+            }
+        }
+    }
+
+    /// The leading-edge drag that opens the drawer.
+    ///
+    /// Extracted from `body`, which the type-checker gave up on once the page also had a
+    /// `ScrollViewReader` around it — the expression, not the logic, was the problem.
+    @ViewBuilder
+    private var openDrawerEdge: some View {
+        if !isDrawerOpen {
+            Color.clear
+                .frame(width: 22)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 12)
+                        .onEnded { value in
+                            guard value.translation.width > 44 else { return }
+                            withAnimation(.snappy) { isDrawerOpen = true }
+                        }
+                )
+                .accessibilityHidden(true)
+        }
+    }
+
     private var composer: some View {
         VStack(alignment: .leading, spacing: DSHMetrics.spaceSmall) {
             if let error = model.newSessionError {
@@ -350,6 +377,7 @@ struct HomeView: View {
                 isSending: model.isStartingSession,
                 placeholder: "Start something new…",
                 focusRequest: focusRequest,
+                onFocusChange: { composerFocused = $0 },
                 onSend: { text in Task { await startSession(text) } }
             )
         }

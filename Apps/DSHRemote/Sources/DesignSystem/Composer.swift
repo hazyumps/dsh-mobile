@@ -38,6 +38,17 @@ struct Composer: View {
     /// Called with the trimmed draft. Clearing it stays the caller's decision,
     /// because the draft is cleared only after the host accepts the prompt
     /// (UX spec "Composer, commands, and attachments").
+    /// Told when the field takes or gives up focus.
+    ///
+    /// A caller that puts the composer inside a scrolling page needs this to bring it above the
+    /// keyboard: the keyboard's own inset does not move content that is not already at the bottom
+    /// of the screen, which is how the chat box ended up behind the keyboard on the phone.
+    ///
+    /// Declared beside `onSend` so the initialiser's order stays the order call sites read in —
+    /// memberwise initialisers follow declaration order, and a callback parked in the middle of
+    /// the layout options has to be passed in the middle of them.
+    var onFocusChange: ((Bool) -> Void)?
+
     var onSend: ((String) -> Void)?
 
     @FocusState private var isFocused
@@ -116,6 +127,9 @@ struct Composer: View {
         .onChange(of: focusRequest) { _, _ in
             guard focusRequest > 0 else { return }
             isFocused = true
+        }
+        .onChange(of: isFocused) { _, focused in
+            onFocusChange?(focused)
         }
         // Tighter vertically than horizontally: the row's own controls already carry 44 points
         // of height, so card padding on both axes made the composer a slab.

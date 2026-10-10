@@ -59,6 +59,10 @@ struct DrawerView: View {
             Divider().overlay(DSHPalette.divider)
             footer
         }
+        // The keyboard overlays the drawer rather than shrinking it. Without this the layout gave
+        // up the keyboard's height while typing in the filter, which pushed the host row and
+        // Settings up and left a dead strip below them.
+        .ignoresSafeArea(.keyboard, edges: .bottom)
         .background(DSHPalette.navigationSurface)
         .overlay(alignment: .trailing) {
             Rectangle()
