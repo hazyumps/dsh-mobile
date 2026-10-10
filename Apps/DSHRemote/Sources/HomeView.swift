@@ -52,6 +52,9 @@ struct HomeView: View {
                     .padding(.horizontal, DSHMetrics.pageMargin)
                     .padding(.vertical, DSHMetrics.spaceCard)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                // A downward drag anywhere on Home puts the keyboard away, the same motion the
+                // drawer and the transcript accept.
+                .dismissesKeyboardOnDownwardDrag()
                 }
                 .background(DSHPalette.canvas)
                 .scrollDismissesKeyboard(.interactively)
@@ -100,6 +103,16 @@ struct HomeView: View {
             // Debug builds only: open Settings on launch, so a screen whose only door is a row
             // in the drawer can be reviewed on a machine that cannot tap.
             if ProcessInfo.processInfo.environment["DSH_SETTINGS"] != nil { isSettingsOpen = true }
+            // Focus the composer, and open the drawer, so the keyboard-vs-drawer interaction can
+            // be reproduced on a machine that cannot tap either one. Debug only.
+            if ProcessInfo.processInfo.environment["DSH_FOCUS"] != nil {
+                try? await Task.sleep(for: .seconds(1.5))
+                focusRequest += 1
+            }
+            if ProcessInfo.processInfo.environment["DSH_DRAWER"] != nil {
+                try? await Task.sleep(for: .seconds(3))
+                isDrawerOpen = true
+            }
             #endif
         }
         .task(id: model.selectedSessionId) {
@@ -168,7 +181,17 @@ struct HomeView: View {
             }
         }
         .onChange(of: isDrawerOpen) { _, open in
-            if open { Task { await model.refreshSessions() } }
+            if open {
+                // The drawer covers the screen, and the field it was opened over keeps first
+                // responder — so the keyboard stayed up over the drawer's own content.
+                DSHKeyboard.dismiss()
+                Task { await model.refreshSessions() }
+            }
+        }
+        .onChange(of: path) { _, _ in
+            // Pushing a screen leaves the field behind it focused, which is how a keyboard ends
+            // up on top of a conversation nobody is typing into.
+            DSHKeyboard.dismiss()
         }
     }
 
@@ -454,6 +477,7 @@ struct HomeView: View {
             )
             .transition(.move(edge: .leading))
             .frame(maxWidth: 340)
+            .dismissesKeyboardOnDownwardDrag()
             // Swipe the panel away to close it, the mirror of the edge drag that opens it.
             .gesture(
                 DragGesture(minimumDistance: 12)

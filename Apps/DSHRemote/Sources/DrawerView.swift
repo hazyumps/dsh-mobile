@@ -304,8 +304,9 @@ struct DrawerView: View {
         // The footer is outside the scroll view, so the last workspace row can always be
         // scrolled clear of it (UX spec: "its footer must never cover the final row").
         .frame(maxHeight: .infinity)
-    }
-
+                // Sliding the list, or flicking the drawer away, puts the filter's keyboard away.
+            .scrollDismissesKeyboard(.immediately)
+        }
     private var footer: some View {
         VStack(spacing: DSHMetrics.space) {
             HostStatusRow(

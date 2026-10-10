@@ -278,6 +278,7 @@ struct ConversationView: View {
             // Any scroll hides the keyboard. The interactive mode needs a drag that starts on
             // the content, and a short transcript gives it nothing to grab.
             .scrollDismissesKeyboard(.immediately)
+            .dismissesKeyboardOnDownwardDrag()
             .onChange(of: snapshot.hasSnapshot) { _, ready in
                 // A conversation opens at its newest message, not at its oldest. Without
                 // this the transcript sat on the harness's own early events and the last
