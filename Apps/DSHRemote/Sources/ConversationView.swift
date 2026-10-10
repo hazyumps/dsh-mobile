@@ -33,6 +33,11 @@ struct ConversationView: View {
     @State private var didAnswerLaunchQuestion = false
     /// Starts with the harness event stream shown, so both states can be reviewed on a machine
     /// that cannot tap. Debug only.
+    /// Whether the composer holds focus, watched so the transcript follows the keyboard.
+    @State private var composerFocused = false
+    /// Bumped to focus the composer. Debug builds bump it at launch, so the keyboard-and-scroll
+    /// behaviour can be reviewed on a machine that cannot tap.
+    @State private var composerFocusRequest = 0
     @State private var showsTelemetry = ProcessInfo.processInfo.environment["DSH_TELEMETRY"] != nil
     @Environment(\.scenePhase) private var scenePhase
     @State private var followAttempt = 0
@@ -88,6 +93,14 @@ struct ConversationView: View {
                 }
                 .accessibilityLabel(showsTelemetry ? "Hide harness events" : "Show harness events")
             }
+        }
+        .task {
+            #if DEBUG
+            if ProcessInfo.processInfo.environment["DSH_FOCUS"] != nil {
+                try? await Task.sleep(for: .seconds(2.5))
+                composerFocusRequest += 1
+            }
+            #endif
         }
         .task(id: FollowKey(
             sessionId: sessionId,
@@ -286,6 +299,14 @@ struct ConversationView: View {
                 // exchange — the thing the screen exists for — was a long scroll away.
                 guard ready else { return }
                 proxy.scrollTo("transcript", anchor: .bottom)
+            }
+            .onChange(of: composerFocused) { _, focused in
+                // Tapping the field raises the keyboard, which shortens the visible area — and
+                // the transcript stays where it was, so the newest message ends up behind it.
+                // The bottom of the chat follows the keyboard instead. Reported from the phone:
+                // "when I click the text box it should move the bottom of the chat up".
+                guard focused else { return }
+                withAnimation(.snappy) { proxy.scrollTo("transcript", anchor: .bottom) }
             }
             .onChange(of: snapshot.messages.last?.text) { _, _ in
                 // Follow the live tail: the point of watching a reply arrive is to watch
@@ -500,6 +521,8 @@ struct ConversationView: View {
                 onAddImage: { isPickingPhoto = true },
                 attachmentLabel: "Add a file",
                 placeholder: "Message",
+                focusRequest: composerFocusRequest,
+                onFocusChange: { composerFocused = $0 },
                 onSend: { text in Task { await send(text) } }
             )
             .padding(.horizontal, DSHMetrics.pageMargin)
