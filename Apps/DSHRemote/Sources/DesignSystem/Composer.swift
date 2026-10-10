@@ -64,23 +64,6 @@ struct Composer: View {
                 if let onAddImage {
                     DSHIconAction(label: "Add a photo", symbol: "photo", action: onAddImage)
                 }
-                // The way back to typing. Stowing the keyboard is easy and deliberate; raising it
-                // again otherwise means finding the field and tapping it, which is exactly the
-                // target that is hard to hit when the field is one line tall.
-                if !isFocused {
-                    Button {
-                        isFocused = true
-                    } label: {
-                        Image(systemName: "keyboard")
-                            .font(.body)
-                            .foregroundStyle(DSHPalette.secondaryText)
-                            .frame(minWidth: DSHMetrics.minimumHitTarget, minHeight: DSHMetrics.minimumHitTarget)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Show the keyboard")
-                    .transition(.opacity)
-                }
                 TextField(placeholder, text: $text, axis: .vertical)
                     .font(.body)
                     // A field at its line limit scrolls instead of growing, so this is the case
