@@ -59,6 +59,26 @@ public struct ConversationMessage: Sendable, Hashable, Identifiable {
     /// The names alone, for a caller that just needs to say what was attached.
     public var attachmentNames: [String] { attachments.map(\.name) }
 
+    /// This message with another's reasoning appended.
+    ///
+    /// Returns nil for a message that carries anything a reader would notice — text or an
+    /// attachment — because merging into one of those would reorder what was said.
+    public func mergingReasoning(_ more: String) -> ConversationMessage? {
+        guard text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              attachments.isEmpty,
+              !more.isEmpty
+        else { return nil }
+        let combined = [reasoning, more].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "\n\n")
+        return ConversationMessage(
+            id: id,
+            role: role,
+            text: text,
+            isProvisional: isProvisional,
+            reasoning: combined,
+            attachments: attachments
+        )
+    }
+
     public init(
         id: String,
         role: Role,
@@ -267,6 +287,38 @@ public struct ConversationBuilder: Sendable {
             // is dropped instead of held forever.
             if let highestSeq, settled.seq <= highestSeq { continue }
             result.append(Self.preview(id: attempt, of: settled.preview))
+        }
+        return Self.collapsingReasoningRuns(result)
+    }
+
+    /// Collapses a run of messages that carry nothing but reasoning into the first of them.
+    ///
+    /// A turn that works through several steps records an assistant message per step, and a step
+    /// that answered nothing carries reasoning and no text. A long turn therefore arrived as a
+    /// column of identical collapsed "Reasoning" rows — one per step, four of them in the report
+    /// that prompted this — before the answer that made them worth reading. To a reader that is
+    /// one piece of thinking.
+    ///
+    /// Only messages with no text and no attachments are merged, so nothing that was said or sent
+    /// is ever dropped; the run keeps the first message's id, which is the one already on screen.
+    static func collapsingReasoningRuns(_ messages: [ConversationMessage]) -> [ConversationMessage] {
+        func isReasoningOnly(_ message: ConversationMessage) -> Bool {
+            message.role == .assistant
+                && message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && message.attachments.isEmpty
+                && !(message.reasoning ?? "").isEmpty
+        }
+
+        var result: [ConversationMessage] = []
+        for message in messages {
+            if isReasoningOnly(message),
+               let last = result.last,
+               isReasoningOnly(last),
+               let merged = last.mergingReasoning(message.reasoning ?? "") {
+                result[result.count - 1] = merged
+                continue
+            }
+            result.append(message)
         }
         return result
     }
