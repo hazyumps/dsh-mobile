@@ -322,11 +322,18 @@ struct DrawerView: View {
                 // Sliding the list, or flicking the drawer away, puts the filter's keyboard away.
             .scrollDismissesKeyboard(.immediately)
         }
+    /// The host and the Settings door, at the bottom of the panel.
+    ///
+    /// Sized to the content rather than to a comfortable tap target everywhere: the status row is
+    /// not tappable, so 44 points of it was height for nothing — measured at 120 points, this is
+    /// about 30% less — while the Settings row keeps its own 44-point target, because that one is
+    /// the thing a thumb has to hit.
     private var footer: some View {
-        VStack(spacing: DSHMetrics.space) {
+        VStack(spacing: DSHMetrics.spaceSmall) {
             HostStatusRow(
                 hostName: model.selectedHost?.displayName ?? "No host",
-                state: DSHHostState(model.status)
+                state: DSHHostState(model.status),
+                minHeight: 28
             )
             Button(action: openSettings) {
                 HStack(spacing: DSHMetrics.space) {
@@ -346,6 +353,9 @@ struct DrawerView: View {
             .buttonStyle(.plain)
         }
         .padding(.horizontal, DSHMetrics.spaceCard)
-        .padding(.vertical, DSHMetrics.spaceCard)
+        .padding(.top, DSHMetrics.spaceSmall + 2)
+        // No bottom padding: the panel's own safe-area inset already sits under this, and the
+        // extra 12 points on top of it was the largest single piece of the block being too tall.
+        .padding(.bottom, 0)
     }
 }
