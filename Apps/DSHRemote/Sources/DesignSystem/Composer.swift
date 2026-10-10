@@ -53,7 +53,11 @@ struct Composer: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: DSHMetrics.space) {
-            HStack(alignment: .bottom, spacing: DSHMetrics.space) {
+            // Centred rather than bottom-aligned: the controls beside the field are 44 points
+            // tall and a line of text is about 22, so aligning their bottoms dropped the text
+            // roughly 9 points below the buttons it sits between — visible as text hugging the
+            // bottom of the box in a single-line draft.
+            HStack(alignment: .center, spacing: DSHMetrics.space) {
                 if let onAttach {
                     DSHIconAction(label: attachmentLabel, symbol: "plus", action: onAttach)
                 }
