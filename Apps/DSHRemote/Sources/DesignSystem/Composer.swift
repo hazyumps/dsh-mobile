@@ -85,6 +85,11 @@ struct Composer: View {
                     } label: {
                         Image(systemName: "paperclip")
                             .font(.body)
+                            // `paperclip` fills its em box where `plus` and `photo` do not, so at the
+                            // same font size it drew about half again as large as the buttons it
+                            // replaced — "huge and ridiculous" on the phone. Small image scale puts
+                            // its ink back alongside the text.
+                            .imageScale(.small)
                             .foregroundStyle(DSHPalette.secondaryText)
                             .frame(minWidth: DSHMetrics.minimumHitTarget, minHeight: DSHMetrics.minimumHitTarget)
                             .contentShape(Rectangle())
