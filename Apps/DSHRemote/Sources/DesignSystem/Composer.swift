@@ -54,6 +54,7 @@ struct Composer: View {
     var onSend: ((String) -> Void)?
 
     @FocusState private var isFocused
+    @State private var isChoosingAttachment = false
 
     /// The model control's two shapes: a chooser with real options, or a label
     /// that says the selection lives somewhere else.
@@ -75,26 +76,37 @@ struct Composer: View {
                 // choices are the same either way; a menu states them instead of making the row
                 // carry a symbol per destination, and it is where a third source would go.
                 if onAttach != nil || onAddImage != nil {
-                    Menu {
-                        if let onAddImage {
-                            Button { onAddImage() } label: { Label("Photo", systemImage: "photo") }
-                        }
-                        if let onAttach {
-                            Button { onAttach() } label: { Label(fileMenuTitle, systemImage: "doc") }
-                        }
+                    // A plain button and a system action sheet, not a `Menu`.
+                    //
+                    // A `Menu` with a custom label is drawn with the platform's control chrome, and
+                    // on iOS 26 that is a Liquid Glass capsule: on the phone (26.6.2) the paperclip
+                    // arrived inside a large black circle, while the same code on the iOS 27
+                    // simulator drew nothing around it. A sheet has no chrome to draw, so the button
+                    // looks the same on both, and it is the ordinary iOS shape for choosing a
+                    // source anyway.
+                    Button {
+                        isChoosingAttachment = true
                     } label: {
                         Image(systemName: "paperclip")
                             .font(.body)
-                            // `paperclip` fills its em box where `plus` and `photo` do not, so at the
-                            // same font size it drew about half again as large as the buttons it
-                            // replaced — "huge and ridiculous" on the phone. Small image scale puts
-                            // its ink back alongside the text.
+                            // `paperclip` fills its em box where `plus` and `photo` did not, so at
+                            // the same font size it drew about half again as large as the buttons it
+                            // replaced. Small image scale puts its ink back alongside the text.
                             .imageScale(.small)
                             .foregroundStyle(DSHPalette.secondaryText)
                             .frame(minWidth: DSHMetrics.minimumHitTarget, minHeight: DSHMetrics.minimumHitTarget)
                             .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
                     .accessibilityLabel("Add an attachment")
+                    .confirmationDialog("Add an attachment", isPresented: $isChoosingAttachment) {
+                        if let onAddImage {
+                            Button("Photo") { onAddImage() }
+                        }
+                        if let onAttach {
+                            Button(fileMenuTitle) { onAttach() }
+                        }
+                    }
                 }
                 TextField(placeholder, text: $text, axis: .vertical)
                     .font(.body)
