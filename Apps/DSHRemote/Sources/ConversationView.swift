@@ -523,7 +523,7 @@ struct ConversationView: View {
                 isSending: isSending,
                 onAttach: { isImportingFile = true },
                 onAddImage: { isPickingPhoto = true },
-                attachmentLabel: "Add a file",
+                fileMenuTitle: "File",
                 placeholder: "Message",
                 focusRequest: composerFocusRequest,
                 onFocusChange: { composerFocused = $0 },
