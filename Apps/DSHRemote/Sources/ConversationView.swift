@@ -286,7 +286,11 @@ struct ConversationView: View {
                     .id("transcript")
                 }
                 .padding(.horizontal, DSHMetrics.pageMargin)
-                .padding(.vertical, DSHMetrics.spaceCard)
+                .padding(.top, DSHMetrics.spaceCard)
+                // No bottom padding here: the composer's inset already provides the gap below the
+                // last message, and having it in both places is what made the space above the box
+                // twice the space below it — "too thick, it should be the same on top and bottom".
+                .padding(.bottom, 0)
             }
             .background(DSHPalette.canvas)
             // Any scroll hides the keyboard. The interactive mode needs a drag that starts on
@@ -526,11 +530,10 @@ struct ConversationView: View {
                 onSend: { text in Task { await send(text) } }
             )
             .padding(.horizontal, DSHMetrics.pageMargin)
-            // A buffer above the box, not just below it. The transcript's last line was landing
-            // flush against the composer's top edge, so the newest thing said and the field to
-            // reply in read as one object. Reported from the phone.
-            .padding(.top, DSHMetrics.spaceCard)
-            .padding(.bottom, DSHMetrics.space)
+            // Equal space above and below the box. The content above contributes none of its own
+            // now, so these two numbers are the whole gap — one place to change it, and no way for
+            // the two sides to drift apart again.
+            .padding(.vertical, DSHMetrics.space)
         }
         .background(.bar)
     }
