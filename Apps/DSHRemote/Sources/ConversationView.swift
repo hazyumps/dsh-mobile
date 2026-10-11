@@ -526,6 +526,10 @@ struct ConversationView: View {
                 onSend: { text in Task { await send(text) } }
             )
             .padding(.horizontal, DSHMetrics.pageMargin)
+            // A buffer above the box, not just below it. The transcript's last line was landing
+            // flush against the composer's top edge, so the newest thing said and the field to
+            // reply in read as one object. Reported from the phone.
+            .padding(.top, DSHMetrics.spaceCard)
             .padding(.bottom, DSHMetrics.space)
         }
         .background(.bar)
