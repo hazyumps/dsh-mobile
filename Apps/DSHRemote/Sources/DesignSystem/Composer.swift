@@ -25,7 +25,9 @@ struct Composer: View {
     /// Non-nil only when images can actually be sent: a photo control with nowhere to go is
     /// absent, not greyed.
     var onAddImage: (() -> Void)?
-    var attachmentLabel = "Add an attachment"
+    /// The file entry's title in the attachment menu. A noun, because that is what a menu of
+    /// sources is — "Add a file" next to "Photo" reads like a sentence someone cut in half.
+    var fileMenuTitle = "File"
     /// Non-nil only when the host's model catalog actually backs the control.
     /// A read-only `modelName` renders as a label, which the spec requires to be
     /// visibly identified as such rather than looking like a menu.
@@ -69,11 +71,25 @@ struct Composer: View {
             // roughly 9 points below the buttons it sits between — visible as text hugging the
             // bottom of the box in a single-line draft.
             HStack(alignment: .center, spacing: DSHMetrics.space) {
-                if let onAttach {
-                    DSHIconAction(label: attachmentLabel, symbol: "plus", action: onAttach)
-                }
-                if let onAddImage {
-                    DSHIconAction(label: "Add a photo", symbol: "photo", action: onAddImage)
+                // One attachment button rather than two icons competing for the same strip. The
+                // choices are the same either way; a menu states them instead of making the row
+                // carry a symbol per destination, and it is where a third source would go.
+                if onAttach != nil || onAddImage != nil {
+                    Menu {
+                        if let onAddImage {
+                            Button { onAddImage() } label: { Label("Photo", systemImage: "photo") }
+                        }
+                        if let onAttach {
+                            Button { onAttach() } label: { Label(fileMenuTitle, systemImage: "doc") }
+                        }
+                    } label: {
+                        Image(systemName: "paperclip")
+                            .font(.body)
+                            .foregroundStyle(DSHPalette.secondaryText)
+                            .frame(minWidth: DSHMetrics.minimumHitTarget, minHeight: DSHMetrics.minimumHitTarget)
+                            .contentShape(Rectangle())
+                    }
+                    .accessibilityLabel("Add an attachment")
                 }
                 TextField(placeholder, text: $text, axis: .vertical)
                     .font(.body)
