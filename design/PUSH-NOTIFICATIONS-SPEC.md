@@ -7,8 +7,9 @@ the relay.
 Issue: #54. Slices are cut from it one branch at a time.
 
 **Status.** Slices 0, 1 and 2 are implemented and verified against the live host
-(§1). Slice 3 and slice 4 are not started; slice 4 additionally needs the Apple
-Developer team confirmed as paid before it can be tested at all.
+(§1), merged in PR #57. Slice 3 is parked as #58 — its logic is testable but its
+trigger is not, so it is a separate change. Slice 4 is parked as #59 and is
+blocked outright; §4 says why.
 
 Read [MOBILE-IMPLEMENTATION-SPEC.md](MOBILE-IMPLEMENTATION-SPEC.md) §10 for the
 scheduled-tasks surface this extends. Where this document contradicts it, this
@@ -198,10 +199,22 @@ pairing and on every relaunch, handle a payload with category
 `SCHEDULED_TASK_RUN` ("Open run" / "Open task"), and revoke the token on Forget.
 
 **Prerequisite, not a task: push notifications require a paid Apple Developer
-team.** A free Personal Team profile cannot carry the `aps-environment`
-entitlement, so slice 4 cannot even be tested until that is confirmed. The
-project already names `DEVELOPMENT_TEAM: U6LC736TBG`; confirm it is a paid team
-before scheduling the work.
+team, and this one is not.** Measured on 2026-10-12 from the device build's own
+signing profile rather than inferred from the account:
+
+```
+Name:            iOS Team Provisioning Profile: net.fernlabs.dshremote
+TeamIdentifier:  ['U6LC736TBG']
+CreationDate:    2026-10-08
+ExpirationDate:  2026-10-15          <- 7 days
+aps-environment: absent
+```
+
+A seven-day profile is the free Personal Team shape; a paid Developer Program
+profile is valid for a year. A Personal Team **cannot** carry `aps-environment`,
+so slice 4 cannot be built or tested until that changes — and the first step
+would be the one that fails. Do not start it before that is settled. Filed as
+#59.
 
 ## 5. Cross-repo boundaries
 
