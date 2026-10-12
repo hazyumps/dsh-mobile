@@ -292,20 +292,39 @@ public actor MuxClient {
     private func deliver(_ message: RelaySocketMessage) async {
         guard !isClosed else { return }
         let data: Data
+        let kind: String
         switch message {
-        case .text(let text): data = Data(text.utf8)
-        case .binary(let bytes): data = bytes
+        case .text(let text):
+            data = Data(text.utf8)
+            kind = "text"
+        case .binary(let bytes):
+            data = bytes
+            kind = "binary"
         }
 
         guard let frame = try? decoder.decode(MuxFrame.self, from: data) else {
             // A frame that is not a MuxFrame means the framing contract is gone;
-            // guessing past it would silently corrupt every stream.
+            // guessing past it would silently corrupt every stream. Keep the frame's
+            // *shape* — never its content — in the failure, so a relay heartbeat or
+            // stray binary frame can be identified instead of guessed at.
             await failAllStreams(
-                .protocolIncompatible(reason: "an inbound frame did not decode as a mux envelope")
+                .protocolIncompatible(
+                    reason: "an inbound frame did not decode as a mux envelope \(Self.describe(data, kind: kind))"
+                )
             )
             return
         }
         route(frame)
+    }
+
+    /// A content-free description of an undecodable frame's shape, for a diagnostic.
+    ///
+    /// The kind, byte length and first byte are enough to separate a relay heartbeat
+    /// from a stray binary frame or a malformed JSON object, without putting host
+    /// content or a token into a string the app shows or records.
+    static func describe(_ data: Data, kind: String) -> String {
+        let firstByte = data.first.map { String(format: "0x%02x", $0) } ?? "empty"
+        return "(\(kind), \(data.count) bytes, first byte \(firstByte))"
     }
 
     private func route(_ frame: MuxFrame) {
