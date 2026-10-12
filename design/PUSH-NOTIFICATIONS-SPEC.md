@@ -6,6 +6,10 @@ the relay.
 
 Issue: #54. Slices are cut from it one branch at a time.
 
+**Status.** Slices 0, 1 and 2 are implemented and verified against the live host
+(§1). Slice 3 and slice 4 are not started; slice 4 additionally needs the Apple
+Developer team confirmed as paid before it can be tested at all.
+
 Read [MOBILE-IMPLEMENTATION-SPEC.md](MOBILE-IMPLEMENTATION-SPEC.md) §10 for the
 scheduled-tasks surface this extends. Where this document contradicts it, this
 one is newer; where it contradicts the host, the host wins.
@@ -54,12 +58,22 @@ one `sessionId` per schedule). The plugin starts a **new session per run**, name
 `<task> — <YYYY-MM-DD>`, and records each run on the task. The union in §10's
 table describes the shipped one and will not decode a plugin row.
 
-**This is not yet verified over the relay.** The plugin declares itself callable
-from anything that can call `ctx.scheduledTasks`, and the relay forwards
-everything, so `/api/scheduledTasks/list` should answer. Probing it is the first
-task of the implementation, before any code, and the captured response is pinned
-in a test the way `AttachmentUploaderTests` pins its capture — date, command, and
-an excerpt of the real answer. Do not build on the assumption.
+**Verified over the relay on 2026-10-12.** `POST /api/scheduledTasks/list` with
+`{"args":{}}` answers `ok: true` and three live tasks against the running relay
+on `127.0.0.1:3443`. The same request to `/api/schedule/catalog` answers
+`404 not found`, which is the whole correction in one pair of calls. The captured
+response is `Fixtures/rpc-response-scheduled-tasks-list.json`; its decoder is
+pinned by `ScheduledTasksTests`, and the fixture's own `note` records the date,
+the request and what was redacted.
+
+The app's own confirmation, from `DSH_TRACE=1` against that host:
+
+```
+[dsh] scheduledTasks tasks=3 plan=3 auth=0 report=available
+```
+
+Three tasks read, three reminders planned, `auth=0` meaning permission has not
+been asked for — so nothing was scheduled, which is the honest state.
 
 ## 2. What a "scheduled task fires" looks like on this host
 
