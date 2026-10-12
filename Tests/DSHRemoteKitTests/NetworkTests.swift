@@ -1252,6 +1252,51 @@ func muxMalformedFrameFails() async throws {
     }
 }
 
+@Test("an undecodable frame's failure names its shape, not its content")
+func muxMalformedFrameReportsShape() async throws {
+    let transport = StubRelayTransport()
+    let socket = StubRelaySocket()
+    let mux = await makeMux(transport: transport, socket: socket)
+
+    let stream = try await mux.open(streamId: "1", endpoint: "$events")
+    var iterator = stream.makeAsyncIterator()
+
+    await socket.push(text: "ping")
+
+    let error = await #expect(throws: MuxStreamError.self) {
+        _ = try await iterator.next()
+    }
+    guard case .protocolIncompatible(let reason) = try #require(error) else {
+        Issue.record("expected a protocol incompatibility, got \(String(describing: error))")
+        return
+    }
+    // "ping" is four bytes of text. The reason must name the shape but never
+    // echo the content, so a stray heartbeat can be identified without leaking it.
+    #expect(reason.contains("text, 4 bytes, first byte 0x70"))
+    #expect(!reason.contains("ping"))
+}
+
+@Test("a binary frame that is not a mux envelope reports its kind")
+func muxBinaryFrameReportsKind() async throws {
+    let transport = StubRelayTransport()
+    let socket = StubRelaySocket()
+    let mux = await makeMux(transport: transport, socket: socket)
+
+    let stream = try await mux.open(streamId: "1", endpoint: "$events")
+    var iterator = stream.makeAsyncIterator()
+
+    await socket.push(.binary(Data([0x89, 0x50, 0x4e, 0x47])))
+
+    let error = await #expect(throws: MuxStreamError.self) {
+        _ = try await iterator.next()
+    }
+    guard case .protocolIncompatible(let reason) = try #require(error) else {
+        Issue.record("expected a protocol incompatibility, got \(String(describing: error))")
+        return
+    }
+    #expect(reason.contains("binary, 4 bytes, first byte 0x89"))
+}
+
 @Test("closing the client ends every stream and closes the socket")
 func muxCloseEndsEverything() async throws {
     let transport = StubRelayTransport()
