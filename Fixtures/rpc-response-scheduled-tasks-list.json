@@ -1,0 +1,138 @@
+{
+  "note": "Captured 2026-10-12 from the running relay (POST /api/scheduledTasks/list, rpcId probe-list-1), against DeepSeek Harness 0.2.0-rc.2 / host protocol 4, with task text, identifiers and session ids replaced by placeholders. The three task shapes - weekly on ISO weekdays, daily, and weekly on a single weekday - and every key name are as the host sent them.",
+  "type": "server-response",
+  "rpcId": "fixture-capture",
+  "result": {
+    "ok": true,
+    "value": {
+      "tasks": [
+        {
+          "id": "task-0001",
+          "title": "Morning brief",
+          "enabled": true,
+          "workspaceId": "workspace-0001",
+          "createdAt": "2026-10-01T14:02:11.000Z",
+          "updatedAt": "2026-10-12T12:00:00.202Z",
+          "schedule": {
+            "id": "task-0001",
+            "kind": "weekly",
+            "title": "Morning brief",
+            "prompt": "redacted",
+            "time": "07:00:00.000",
+            "timeZone": "America/Chicago",
+            "weekdays": [1, 2, 3, 4, 5],
+            "scheduledAt": "2026-10-13T12:00:00.000Z"
+          },
+          "target": {
+            "provider": "gaia-local",
+            "model": "Spark",
+            "effort": "medium",
+            "preset": ""
+          },
+          "lastRun": {
+            "occurrenceAt": "2026-10-12T12:00:00.000Z",
+            "sessionId": "session-0001",
+            "finishedAt": "2026-10-12T12:00:00.202Z",
+            "ok": true,
+            "error": null
+          },
+          "runs": [
+            {
+              "occurrenceAt": "2026-10-12T12:00:00.000Z",
+              "sessionId": "session-0001",
+              "finishedAt": "2026-10-12T12:00:00.202Z",
+              "ok": true,
+              "error": null
+            },
+            {
+              "occurrenceAt": "2026-10-09T12:00:00.000Z",
+              "sessionId": "session-0002",
+              "finishedAt": "2026-10-09T12:00:00.198Z",
+              "ok": true,
+              "error": null
+            }
+          ]
+        },
+        {
+          "id": "task-0002",
+          "title": "Daily reflection",
+          "enabled": true,
+          "workspaceId": "",
+          "createdAt": "2026-09-28T09:31:04.000Z",
+          "updatedAt": "2026-10-12T12:00:00.202Z",
+          "schedule": {
+            "id": "task-0002",
+            "kind": "daily",
+            "title": "Daily reflection",
+            "prompt": "redacted",
+            "time": "07:00:00.000",
+            "timeZone": "America/Chicago",
+            "scheduledAt": "2026-10-13T12:00:00.000Z"
+          },
+          "target": {
+            "provider": "gaia-local",
+            "model": "Spark",
+            "effort": "medium",
+            "preset": ""
+          },
+          "lastRun": {
+            "occurrenceAt": "2026-10-12T12:00:00.000Z",
+            "sessionId": "session-0003",
+            "finishedAt": "2026-10-12T12:00:00.202Z",
+            "ok": true,
+            "error": null
+          },
+          "runs": [
+            {
+              "occurrenceAt": "2026-10-12T12:00:00.000Z",
+              "sessionId": "session-0003",
+              "finishedAt": "2026-10-12T12:00:00.202Z",
+              "ok": true,
+              "error": null
+            }
+          ]
+        },
+        {
+          "id": "task-0003",
+          "title": "Weekly plan",
+          "enabled": true,
+          "workspaceId": "",
+          "createdAt": "2026-10-04T18:44:52.000Z",
+          "updatedAt": "2026-10-11T12:00:00.275Z",
+          "schedule": {
+            "id": "task-0003",
+            "kind": "weekly",
+            "title": "Weekly plan",
+            "prompt": "redacted",
+            "time": "07:00:00.000",
+            "timeZone": "America/Chicago",
+            "weekdays": [7],
+            "scheduledAt": "2026-10-18T12:00:00.000Z"
+          },
+          "target": {
+            "provider": "gaia-local",
+            "model": "Spark",
+            "effort": "medium",
+            "preset": ""
+          },
+          "lastRun": {
+            "occurrenceAt": "2026-10-11T12:00:00.000Z",
+            "sessionId": "session-0004",
+            "finishedAt": "2026-10-11T12:00:00.275Z",
+            "ok": true,
+            "error": null
+          },
+          "runs": [
+            {
+              "occurrenceAt": "2026-10-11T12:00:00.000Z",
+              "sessionId": "session-0004",
+              "finishedAt": "2026-10-11T12:00:00.275Z",
+              "ok": true,
+              "error": null
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

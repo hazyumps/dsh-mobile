@@ -579,9 +579,14 @@ private struct Section<Value: Sendable>: Sendable {
 /// opinion about connection ownership and can be exercised offline.
 public actor SecondaryReadStore {
     /// `namespace/method`, straight from `Protocol/endpoints.json`.
+    /// The shipped experimental service, absent from the desktop profile's bundle list —
+    /// every call on this host answers 404.
     public static let scheduleCatalogMethod = "schedule/catalog"
     public static let scheduleListMethod = "schedule/list"
     public static let scheduleHistoryMethod = "schedule/history"
+    /// The plugin the profile actually loads, and the one the Scheduled tasks screen reads.
+    /// Verified live on 2026-10-12: `{"tasks":[…]}` with three real tasks.
+    public static let scheduledTasksListMethod = "scheduledTasks/list"
     public static let pluginInventoryMethod = "pluginInventory/list"
 
     private let makeClient: @Sendable () -> DshRpcClient
@@ -590,6 +595,7 @@ public actor SecondaryReadStore {
     private var catalogSection = Section<[ScheduleEntry]>()
     private var listSection = Section<[ScheduleEntry]>()
     private var historySection = Section<ScheduleHistoryResult>()
+    private var taskSection = Section<[ScheduledTask]>()
     private var pluginSection = Section<PluginInventory>()
 
     /// - Parameter ledger: seeded by the caller so a capability learned on another screen
@@ -622,6 +628,11 @@ public actor SecondaryReadStore {
     /// The last history answer, page or refusal.
     public var scheduleHistory: ScheduleHistoryResult? { historySection.value }
     public var scheduleHistoryState: ResourceState? { historySection.state }
+
+    /// The last successfully read task list from `scheduledTasks/list`. Empty is "the host
+    /// has no tasks"; whether a read has happened at all is ``scheduledTasksState``.
+    public var scheduledTasks: [ScheduledTask] { taskSection.value ?? [] }
+    public var scheduledTasksState: ResourceState? { taskSection.state }
 
     /// Nil until a plugin read has succeeded — distinct from an inventory with no entries.
     public var pluginInventory: PluginInventory? { pluginSection.value }
@@ -706,6 +717,28 @@ public actor SecondaryReadStore {
             return .loaded(itemCount: itemCount)
         } catch {
             return fail(error, endpoint: endpoint, section: &historySection)
+        }
+    }
+
+    /// Reads `scheduledTasks/list`. Takes no arguments; the result wraps its array in a
+    /// `tasks` key, unlike `schedule/catalog`'s bare array.
+    @discardableResult
+    public func loadScheduledTasks() async -> SecondaryReadOutcome {
+        let endpoint = Self.scheduledTasksListMethod
+        if let gated = gate(endpoint) { return gated }
+        taskSection.beginLoad()
+        do {
+            let response = try await makeClient().call(
+                endpoint, args: RPCEmptyRequest(), returning: ScheduledTaskList.self
+            )
+            guard let list = response.result.value else {
+                throw DshRPCError.protocolIncompatible(reason: "scheduledTasks/list returned no list")
+            }
+            ledger.recordSuccess(of: endpoint)
+            taskSection.finishSuccess(list.tasks, itemCount: list.tasks.count)
+            return .loaded(itemCount: list.tasks.count)
+        } catch {
+            return fail(error, endpoint: endpoint, section: &taskSection)
         }
     }
 

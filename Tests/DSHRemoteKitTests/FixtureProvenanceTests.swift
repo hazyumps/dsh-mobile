@@ -57,6 +57,11 @@ enum FixtureProvenance {
             proto: capturedProtocol,
             basis: "the file's own source field: relay-cert.pem, captured 2026-10-07"
         ),
+        .rpcScheduledTasksList: .captured(
+            host: capturedHost,
+            proto: capturedProtocol,
+            basis: "the file's own note: POST /api/scheduledTasks/list against the live relay, 2026-10-12, task text and ids redacted"
+        ),
 
         // The rest are hand-built. The doc comments in `Sources/` say each is "proven by"
         // its fixture, which is the opposite direction: the fixture is how the test knows
@@ -131,6 +136,29 @@ struct FixtureProvenanceTests {
         "sk-", "ghp_", "gho_", "xoxb-", "xoxp-", "AKIA", "-----BEGIN",
     ]
 
+    /// Which credential prefixes appear in `text`, as the start of a token.
+    ///
+    /// A bare `contains` is not enough, and the harness proved it: scheduled-task ids are
+    /// `task-<uuid>`, so a faithful capture of one contains `sk-` inside `task-`, and a
+    /// substring test condemns the id as an OpenAI key. Requiring the prefix to begin a token
+    /// keeps the case the rule exists for — a leaked key is preceded by a quote, a space, an
+    /// `=`, or nothing at all — while an identifier that merely ends in those letters is not
+    /// evidence of anything. `credentialPrefixesAreCaughtAtTokenBoundaries` pins both halves.
+    static func credentialPrefixes(in text: String) -> [String] {
+        credentialPrefixes.filter { prefix in
+            var search = text.startIndex
+            while let range = text.range(of: prefix, range: search..<text.endIndex) {
+                if range.lowerBound == text.startIndex { return true }
+                let before = text[text.index(before: range.lowerBound)]
+                // `-` and `_` count as inside a token as well: they are what an identifier is
+                // made of, and a credential is a whole token of its own.
+                if !before.isLetter, !before.isNumber, before != "-", before != "_" { return true }
+                search = range.upperBound
+            }
+            return false
+        }
+    }
+
     private static func isPlaceholder(_ value: String) -> Bool {
         if value.isEmpty { return true }
         let upper = value.uppercased()
@@ -158,13 +186,28 @@ struct FixtureProvenanceTests {
     func noCredentialShapedStrings() throws {
         for file in Fixtures.File.allCases {
             let text = String(decoding: try Fixtures.data(file), as: UTF8.self)
-            for prefix in Self.credentialPrefixes {
-                #expect(
-                    !text.contains(prefix),
-                    "\(file.rawValue) contains a \(prefix) credential"
-                )
-            }
+            let found = Self.credentialPrefixes(in: text)
+            #expect(
+                found.isEmpty,
+                "\(file.rawValue) contains a credential-shaped string: \(found)"
+            )
         }
+    }
+
+    /// The refinement above has to catch a leak and has to ignore an identifier, and a rule
+    /// that only does the second is worse than no rule at all.
+    @Test("the credential-prefix guard catches a real key and ignores an identifier that ends in one")
+    func credentialPrefixesAreCaughtAtTokenBoundaries() {
+        #expect(Self.credentialPrefixes(in: #"{"apiKey":"sk-live-abc123"}"#) == ["sk-"])
+        #expect(Self.credentialPrefixes(in: "token=sk-abc123") == ["sk-"])
+        #expect(Self.credentialPrefixes(in: "sk-abc123") == ["sk-"])
+        #expect(Self.credentialPrefixes(in: "Authorization: Bearer -----BEGIN") == ["-----BEGIN"])
+        #expect(Self.credentialPrefixes(in: "AKIAIOSFODNN7EXAMPLE") == ["AKIA"])
+
+        // The false positive this exists for: `sk-` inside the ids the harness really emits.
+        #expect(Self.credentialPrefixes(in: #""task-9da6985a-0cec-49e4-b7d9-b3edf602bbbe""#).isEmpty)
+        #expect(Self.credentialPrefixes(in: "task-0001").isEmpty)
+        #expect(Self.credentialPrefixes(in: "mask-note").isEmpty)
     }
 
     @Test("no fixture carries a private host path")

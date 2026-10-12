@@ -14,6 +14,7 @@ enum Fixtures {
         case pairingClaimResponse = "pairing-claim-response.json"
         case rpcRequest = "rpc-request.json"
         case rpcSessionList = "rpc-response-session-list.json"
+        case rpcScheduledTasksList = "rpc-response-scheduled-tasks-list.json"
         case rpcTypedError = "rpc-response-typed-error.json"
         case forbiddenUnpaired = "forbidden-unpaired.json"
         case muxStreamFrames = "mux-stream-frames.json"

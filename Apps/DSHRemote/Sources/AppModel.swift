@@ -77,9 +77,13 @@ final class AppModel {
     /// distinct from an inventory with no entries.
     private(set) var plugins: PluginInventory?
     private(set) var pluginsReport: SecondaryReport = .unknown
-    /// The host's schedule catalog, once read. Empty means the host lists none.
-    private(set) var schedules: [ScheduleEntry] = []
-    private(set) var schedulesReport: SecondaryReport = .unknown
+    /// The host's scheduled tasks, once read. Empty means the host has none.
+    ///
+    /// `scheduledTasks/list`, not `schedule/catalog`: the latter is served only by the
+    /// experimental schedule bundle, which this host does not load, so every call 404s
+    /// (PUSH-NOTIFICATIONS-SPEC §1).
+    private(set) var scheduledTasks: [ScheduledTask] = []
+    private(set) var scheduledTasksReport: SecondaryReport = .unknown
 
     /// Every decision this generation has delivered: approvals and questions.
     ///
@@ -126,6 +130,10 @@ final class AppModel {
     private let imageCache = SessionImageCache()
     private var interactionStore: InteractionStore?
     private var statusTask: Task<Void, Never>?
+    /// The phone's own reminders for scheduled tasks. Owned here rather than by the screen so
+    /// they survive leaving it, and so a tap can be routed through the same navigation state
+    /// as everything else.
+    let taskNotifications = TaskNotificationScheduler()
     private var snapshotTask: Task<Void, Never>?
     private var eventsTask: Task<Void, Never>?
     private var interactionsTask: Task<Void, Never>?
@@ -318,8 +326,8 @@ final class AppModel {
         secondaryStore = nil
         plugins = nil
         pluginsReport = .unknown
-        schedules = []
-        schedulesReport = .unknown
+        scheduledTasks = []
+        scheduledTasksReport = .unknown
         modelModeStore = nil
         commandStore = nil
         attachmentUploader = nil
@@ -415,6 +423,9 @@ final class AppModel {
             await restoreNavigation(for: host)
             // After the stored destination, so an explicit launch target wins over it.
             applyLaunchSessionOverride()
+            // After both, so a notification tap beats the restored conversation: the user
+            // asked for that screen, the restore is a convenience.
+            replayDeferredNotification()
             guard selection == selectionID else { return }
             recovery.setForeground(isForeground)
         } catch {
@@ -800,21 +811,34 @@ final class AppModel {
         return SecondaryReport(outcome)
     }
 
-    /// Reads the host's schedule catalog.
+    /// Reads the host's scheduled tasks, then re-plans the phone's own reminders from them.
     ///
-    /// A host that does not expose `schedule/*` answers 404, which the store records as
+    /// A host without `scheduledTasks/*` answers 404, which the store records as
     /// *unavailable* rather than as a failure — and that is what this screen shows.
-    func loadSchedules() async {
+    ///
+    /// The re-plan is here rather than on the screen because the catalog has no stream: it is
+    /// read on entry and on pull-to-refresh, and every read is a chance to notice that a task
+    /// was edited on the desktop, so it is also the only place a stale reminder can be
+    /// corrected.
+    func loadScheduledTasks() async {
         guard let secondaryStore else { return }
-        schedulesReport = .loading
-        let outcome = await secondaryStore.loadScheduleCatalog()
-        schedules = await secondaryStore.scheduleCatalog
-        schedulesReport = await Self.report(
+        scheduledTasksReport = .loading
+        let outcome = await secondaryStore.loadScheduledTasks()
+        scheduledTasks = await secondaryStore.scheduledTasks
+        scheduledTasksReport = await Self.report(
             outcome,
-            endpoint: SecondaryReadStore.scheduleCatalogMethod,
+            endpoint: SecondaryReadStore.scheduledTasksListMethod,
             store: secondaryStore
         )
         recordResourceStates()
+        let plan = TaskNotificationPlan.build(tasks: scheduledTasks, now: Date())
+        #if DEBUG
+        // `DSH_TRACE=1` prints this to stdout, which `simctl launch --console-pty` shows. The
+        // plan is otherwise invisible: a simulator cannot be granted notification permission,
+        // so the pending requests it produces can never be observed there.
+        DSHBeacon.note("scheduledTasks tasks=\(scheduledTasks.count) plan=\(plan.count) auth=\(taskNotifications.authorization.rawValue) report=\(scheduledTasksReport.kind)")
+        #endif
+        await taskNotifications.apply(plan: plan)
     }
 
     // MARK: - Model and mode (SPEC §6)
@@ -1281,7 +1305,7 @@ final class AppModel {
             ("session/list", browse.sessionsState.diagnosticName),
         ]
         states.append(("pluginInventory/list", Self.diagnosticName(pluginsReport.kind)))
-        states.append(("schedule/catalog", Self.diagnosticName(schedulesReport.kind)))
+        states.append(("scheduledTasks/list", Self.diagnosticName(scheduledTasksReport.kind)))
 
         for (resource, name) in states {
             guard lastResourceStates[resource] != name else { continue }
@@ -1360,6 +1384,12 @@ final class AppModel {
     func setForeground(_ active: Bool) {
         isForeground = active
         recovery?.setForeground(active)
+        guard active, secondaryStore != nil else { return }
+        // Coming back is the only moment a reminder can be corrected. An occurrence that
+        // fired while the app was away has left the pending set, and the host has already
+        // advanced the task's `scheduledAt` — so the next one can only be learned by reading
+        // the list again. This is also the re-plan: `loadScheduledTasks` applies the new plan.
+        Task { await loadScheduledTasks() }
     }
 
     // MARK: - Navigation
@@ -1379,6 +1409,56 @@ final class AppModel {
         guard selectedSessionId != nil else { return }
         selectedSessionId = nil
         persistNavigation()
+    }
+
+    // MARK: - Notification taps
+
+    /// A tap that arrived before there was a host to route it to.
+    ///
+    /// A notification launches the app, and the delegate fires before `restoreLastHost` has
+    /// run. Routing then would set a session id that `restoreNavigation` immediately
+    /// overwrites — the same shape of bug as publishing a host before its stores exist, and
+    /// silent for the same reason.
+    private var deferredNotification: TaskNotificationPayload?
+
+    /// A drawer destination a tap asked for, until the navigation path consumes it.
+    ///
+    /// The path is owned by `HomeView`; this is the intent, not the path.
+    private(set) var pendingDrawerDestination: String?
+
+    /// Consumes and clears the pending destination.
+    func consumeDrawerDestination() -> String? {
+        defer { pendingDrawerDestination = nil }
+        return pendingDrawerDestination
+    }
+
+    /// Routes a notification the user tapped.
+    ///
+    /// A run that had a session opens it. A reminder for a task that has not run yet — which
+    /// is every reminder this build schedules — opens the task list, because there is no
+    /// conversation to open and pretending otherwise would land on the wrong one.
+    func handleTaskNotification(_ payload: TaskNotificationPayload) {
+        guard selectedHost != nil else {
+            deferredNotification = payload
+            return
+        }
+        switch payload.destination {
+        case .conversation(let sessionId):
+            openSession(sessionId)
+        case .taskList:
+            pendingDrawerDestination = "schedules"
+        case nil:
+            // A payload this build cannot place does nothing. Opening an arbitrary screen
+            // would be worse than the tap being ignored.
+            break
+        }
+    }
+
+    /// Replays a tap held until a host existed.
+    private func replayDeferredNotification() {
+        guard let payload = deferredNotification else { return }
+        deferredNotification = nil
+        handleTaskNotification(payload)
     }
 
     private func restoreNavigation(for host: SavedHost) async {
@@ -1631,8 +1711,8 @@ final class AppModel {
         secondaryStore = nil
         plugins = nil
         pluginsReport = .unknown
-        schedules = []
-        schedulesReport = .unknown
+        scheduledTasks = []
+        scheduledTasksReport = .unknown
         modelModeStore = nil
         catalog = nil
         catalogState = nil
