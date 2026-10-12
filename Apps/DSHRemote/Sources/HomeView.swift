@@ -105,6 +105,12 @@ struct HomeView: View {
         .task(id: model.selectedSessionId) {
             // Navigation is restored from the same value the store persists, so a cold
             // launch reopens the last conversation instead of the workspace list.
+            // A notification tap wins over both: the user asked for that screen, and the
+            // restored conversation is only ever a convenience.
+            if let route = Self.launchRoute(for: model.consumeDrawerDestination()) {
+                path = [route]
+                return
+            }
             // An explicit launch destination wins over the restored conversation: it is the
             // only way to reach a drawer screen on a machine that cannot tap, and the
             // restored session would otherwise always get there first.
@@ -147,6 +153,12 @@ struct HomeView: View {
             // Leaving the conversation is what clears the stored destination; the
             // workspace stays selected, which is where the user lands.
             if next.isEmpty, model.selectedSessionId != nil { model.closeSession() }
+        }
+        .onChange(of: model.pendingDrawerDestination) { _, next in
+            // The tap that arrives while this screen is already up: `selectedSessionId` has
+            // not changed, so the navigation task above does not re-run for it.
+            guard let route = Self.launchRoute(for: model.consumeDrawerDestination() ?? next) else { return }
+            path = [route]
         }
         // Swiping right from the leading edge opens the drawer; swiping left on it closes it.
         // Two targeted gestures rather than one on the root: a horizontal drag across the

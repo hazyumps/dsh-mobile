@@ -29,6 +29,7 @@ struct SettingsView: View {
                 hostSection
                 connectionSection
                 identitySection
+                remindersSection
                 diagnosticsSection
             }
             .navigationDestination(for: String.self) { _ in DiagnosticsView() }
@@ -165,6 +166,49 @@ struct SettingsView: View {
             Text("This phone")
         } footer: {
             Text("The name this phone uses when it pairs with a harness.")
+        }
+    }
+
+    /// Reminders for scheduled tasks.
+    ///
+    /// The permission lives here as well as on the Scheduled tasks screen, because that
+    /// screen only exists once a host with tasks is selected — and a notification permission
+    /// that can only be reached from a screen you might never see is one nobody grants.
+    ///
+    /// `denied` is stated, never silent, and the only offered action is iOS Settings: there is
+    /// no API to re-ask, and a second `requestAuthorization` returns the same refusal without
+    /// showing anything, so a button that called it would do nothing at all.
+    private var remindersSection: some View {
+        Section {
+            LabeledContent("Notifications") {
+                Text(model.taskNotifications.authorization.dshDescription)
+                    .multilineTextAlignment(.trailing)
+                    .foregroundStyle(DSHPalette.secondaryText)
+            }
+            switch model.taskNotifications.authorization {
+            case .notDetermined:
+                Button("Turn on") {
+                    Task { await model.taskNotifications.requestAuthorization() }
+                }
+            case .denied:
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    Link("Open iOS Settings", destination: url)
+                }
+            default:
+                EmptyView()
+            }
+            if model.taskNotifications.pendingCount > 0 {
+                LabeledContent("Planned") {
+                    Text(model.taskNotifications.pendingCount == 1
+                         ? "1 reminder"
+                         : "\(model.taskNotifications.pendingCount) reminders")
+                        .foregroundStyle(DSHPalette.secondaryText)
+                }
+            }
+        } header: {
+            Text("Reminders")
+        } footer: {
+            Text("A reminder is posted when a scheduled task's next run is due. It says the task is due — not that it ran, which the harness only reports afterwards.")
         }
     }
 }

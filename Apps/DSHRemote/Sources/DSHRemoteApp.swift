@@ -1,5 +1,7 @@
+import DSHRemoteKit
 import Foundation
 import SwiftUI
+import UserNotifications
 
 /// The app's entry point.
 ///
@@ -10,6 +12,7 @@ import SwiftUI
 @main
 struct DSHRemoteApp: App {
     @State private var model = AppModel()
+    @State private var notifications = TaskNotificationDelegate()
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
@@ -39,6 +42,12 @@ struct DSHRemoteApp: App {
                 }
             }
             .task {
+                // The delegate must be installed before the app finishes launching, or a tap
+                // that launched it is dropped on the floor with no error anywhere.
+                notifications.onTap = { [model] payload in model.handleTaskNotification(payload) }
+                UNUserNotificationCenter.current().delegate = notifications
+                await model.taskNotifications.refreshAuthorization()
+
                 // Verification affordance, debug builds only: a harness can
                 // seed pairing by passing `DSH_PAIRING_PAYLOAD`, so the whole
                 // flow can be exercised on a simulator with no keyboard and no
@@ -56,6 +65,23 @@ struct DSHRemoteApp: App {
                 guard !model.shouldShowScreenGalleryOnLaunch,
                       !model.shouldShowDesignGalleryOnLaunch
                 else { return }
+                #if DEBUG
+                // `simctl` cannot tap a notification, so the tap is injected as the payload
+                // the delegate would have handed over — `DSH_NOTIFICATION=task:<id>` or
+                // `session:<id>`. Injected *before* the host is restored on purpose: that is
+                // the cold-launch case, where the tap has to be held until there is somewhere
+                // to route it.
+                if let probe = ProcessInfo.processInfo.environment["DSH_NOTIFICATION"] {
+                    let parts = probe.split(separator: ":", maxSplits: 1).map(String.init)
+                    if parts.count == 2 {
+                        switch parts[0] {
+                        case "task": model.handleTaskNotification(TaskNotificationPayload(taskId: parts[1], sessionId: nil))
+                        case "session": model.handleTaskNotification(TaskNotificationPayload(taskId: nil, sessionId: parts[1]))
+                        default: break
+                        }
+                    }
+                }
+                #endif
                 await model.restoreLastHost()
             }
         }
