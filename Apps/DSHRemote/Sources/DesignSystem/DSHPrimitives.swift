@@ -121,6 +121,107 @@ struct DSHIconAction: View {
     }
 }
 
+/// A titled group on a scrolling page: "Recents", "Projects", "Today".
+///
+/// The heading is metadata-weight rather than a heading font because these are labels
+/// inside a list, not sections of a document — and Home has several of them stacked,
+/// which a hierarchy of headline sizes would turn into a ladder.
+struct DSHGroupHeader: View {
+    let title: String
+    /// A count or a secondary action's label, on the trailing edge.
+    var trailing: String?
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: DSHMetrics.space) {
+            Text(title)
+                .font(.dshMetadata.weight(.semibold))
+                .foregroundStyle(DSHPalette.secondaryText)
+            Spacer(minLength: DSHMetrics.space)
+            if let trailing {
+                Text(trailing)
+                    .font(.dshMetadata)
+                    .foregroundStyle(DSHPalette.secondaryText)
+            }
+        }
+    }
+}
+
+/// The visual line a context row draws: what is being decided, and what it is set to.
+///
+/// Split from ``DSHContextRow`` so a decision that is a *menu* and one that needs a
+/// searchable sheet — the project list, which can run to dozens — render identically while
+/// presenting differently. The shape is the component; the presentation is the caller's.
+struct DSHContextLabel: View {
+    let title: String
+    let symbol: String
+    let value: String
+    var isStaged = false
+
+    var body: some View {
+        HStack(spacing: DSHMetrics.space) {
+            Image(systemName: symbol)
+                .font(.body)
+                .foregroundStyle(DSHPalette.secondaryText)
+                .frame(width: 26, alignment: .leading)
+                .accessibilityHidden(true)
+            Text(title)
+                .font(.dshMessageBody)
+                .foregroundStyle(DSHPalette.secondaryText)
+            Spacer(minLength: DSHMetrics.space)
+            HStack(spacing: DSHMetrics.spaceSmall + 2) {
+                Text(value)
+                    .font(.dshMessageBody)
+                    .foregroundStyle(DSHPalette.primaryText)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                if isStaged {
+                    Circle()
+                        .fill(DSHPalette.primaryActionText)
+                        .frame(width: 6, height: 6)
+                        .accessibilityHidden(true)
+                }
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption2)
+                    .foregroundStyle(DSHPalette.secondaryText)
+                    .accessibilityHidden(true)
+            }
+        }
+        .frame(minHeight: DSHMetrics.minimumHitTarget)
+        .contentShape(Rectangle())
+    }
+}
+
+/// One line of the new-session context: what is being decided, and what it is set to.
+///
+/// A row rather than a chip, because the four decisions are read as a list before typing
+/// and a strip of capsules cannot carry the label that says which is which. The whole row
+/// is the control, so the target is the row rather than the chevron.
+///
+/// The label is a `Menu` with custom content. On iOS 26 a `Menu` draws Liquid Glass chrome
+/// around a custom label, which is why `Composer` moved its icon-only attachment button to
+/// a plain button and a sheet; a full-width row label is a different shape and has not been
+/// seen on the phone yet. If the phone draws a capsule around these rows, this is the place
+/// to change — not the call sites.
+struct DSHContextRow<MenuContent: View>: View {
+    let title: String
+    let symbol: String
+    let value: String
+    /// Whether the choice differs from the host's default, marked as it is elsewhere.
+    var isStaged = false
+    @ViewBuilder var menu: () -> MenuContent
+
+    var body: some View {
+        Menu {
+            menu()
+        } label: {
+            DSHContextLabel(title: title, symbol: symbol, value: value, isStaged: isStaged)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(title). \(value).")
+        .accessibilityHint("Change \(title.lowercased())")
+    }
+}
+
 /// The compact brand lockup: whale placeholder, "deepseek", and the HARNESS
 /// tag. Shown on Home and in the drawer (UX spec "Identity and color").
 ///

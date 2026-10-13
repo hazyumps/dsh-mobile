@@ -156,24 +156,18 @@ struct ComponentGalleryView: View {
     }
 
     private var workspaceSection: some View {
-        section("Drawer rows") {
+        section("Rows and headings") {
             VStack(spacing: DSHMetrics.spaceSmall) {
-                WorkspaceRow(name: "chats", toggle: note("Selected chats"))
-                WorkspaceRow(
-                    name: "dsh-mobile",
-                    isSelected: true,
-                    isExpanded: expandedWorkspace,
-                    sessionCount: 2,
-                    toggle: {
-                        expandedWorkspace.toggle()
-                        note("Toggled dsh-mobile")()
-                    }
-                )
-                if expandedWorkspace {
-                    DrawerSessionRow(title: "Reconnect handling", state: .running, open: note("Opened Reconnect handling"))
-                    DrawerSessionRow(title: "Polish the mobile UI", open: note("Opened Polish the mobile UI"))
-                }
-                WorkspaceRow(name: "A workspace with a name long enough to test the row", sessionCount: 12, toggle: note("Selected the long workspace"))
+                ProjectRow(title: "chats", sessionCount: 12, activeCount: 2, open: note("Opened chats"))
+                ProjectRow(title: "A workspace with a name long enough to test the row", sessionCount: 0, open: note("Opened the long project"))
+                ProjectRow(title: "cortex", sessionCount: 1, open: note("Opened cortex"))
+
+                DSHGroupHeader(title: "Today")
+                DSHGroupHeader(title: "Projects", trailing: "4")
+
+                DSHContextLabel(title: "Host", symbol: "laptopcomputer", value: "Mac.fernlabs.net")
+                DSHContextLabel(title: "Project", symbol: "folder", value: "homelab")
+                DSHContextLabel(title: "Model", symbol: "cpu", value: "Ember · medium", isStaged: true)
             }
             .padding(DSHMetrics.spaceSmall)
             .background(DSHPalette.navigationSurface)

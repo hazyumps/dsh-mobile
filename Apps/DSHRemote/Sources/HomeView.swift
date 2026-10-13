@@ -1,103 +1,70 @@
 import DSHRemoteKit
 import SwiftUI
 
-/// Home: the current host's work, with a drawer for switching context.
+/// Home: the work, newest first, with the harness behind the drawer.
 ///
-/// UX spec "Home and starting a session" orders the page — toolbar, host row,
-/// workspace context, the heading, workspace control, composer, recent sessions —
-/// and this follows that order. The composer is present and honest about the one
-/// thing it cannot do yet: creating a session is SPEC §5's transaction, which is a
-/// later slice. Send is disabled with its reason rather than enabled and broken.
+/// The page is two lists and a composer. Recents is the last few sessions across every
+/// project, because "return to work" does not care which project the work was in; projects
+/// are the hierarchy, as a destination rather than a disclosure, so a workspace with thirty
+/// sessions has the whole screen to list them on. The composer is an inset at the bottom
+/// rather than a section in the scroll, so it is never the thing that scrolled away.
+///
+/// The host row that used to head this page is gone: it said "Connected — Mac.fernlabs.net"
+/// on every launch, which is a fact you need once and not forty times a day. The unhealthy
+/// case still gets the top of the page, as a banner.
 struct HomeView: View {
     @Environment(AppModel.self) private var model
 
     /// What a tap in this stack can lead to.
+    ///
+    /// The harness destinations are here rather than in the drawer's own stack: the drawer
+    /// closes as it navigates, so the screen it opens belongs to Home's path and inherits
+    /// the same back button and the same restoration rules.
     enum Route: Hashable {
         case session(String)
-        /// `nil` lists every session the host reported.
-        case sessions(String?)
-        /// The capability-gated drawer destinations (SPEC §10).
+        case project(String)
+        case newSession
+        case modelDefaults
         case usage
         case plugins
         case schedules
+        case hosts
+        case thisPhone
+        case reminders
+        case diagnostics
     }
 
     @Environment(\.scenePhase) private var scenePhase
     @State private var path: [Route] = []
     @State private var isDrawerOpen = false
-    /// Whether the composer holds focus, watched so the page can bring it above the keyboard.
-    @State private var composerFocused = false
-    /// The composer's scroll anchor.
-    static let composerAnchor = "home-composer"
-    @State private var isWorkspacePickerOpen = false
-    @State private var isSettingsOpen = false
-    @State private var draft = ""
-    /// Bumped by the drawer's New session, so the field is focused without a second tap.
-    @State private var focusRequest = 0
 
     private var browse: BrowseState { model.browse }
-
-    private var workspace: BrowseWorkspace? {
-        browse.workspace(id: model.selectedWorkspaceId) ?? browse.workspaces.first
-    }
 
     var body: some View {
         NavigationStack(path: $path) {
             ZStack(alignment: .leading) {
                 page
-                if isDrawerOpen {
-                    drawerLayer
-                }
+                if isDrawerOpen { drawerLayer }
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbar }
             .navigationDestination(for: Route.self) { route in
-                switch route {
-                case .session(let sessionId):
-                    ConversationView(sessionId: sessionId)
-                case .sessions(let workspaceId):
-                    SessionBrowserView(workspaceId: workspaceId)
-                case .usage:
-                    UsageView(sessionId: model.selectedSessionId, title: "Usage")
-                case .plugins:
-                    PluginsView()
-                case .schedules:
-                    SchedulesView()
-                }
+                destination(route)
             }
-        }
-        .sheet(isPresented: $isWorkspacePickerOpen) {
-            WorkspacePickerView(
-                workspaces: browse.workspaces,
-                selectedId: model.selectedWorkspaceId,
-                select: { workspaceId in
-                    model.selectWorkspace(workspaceId)
-                    isWorkspacePickerOpen = false
-                },
-                cancel: { isWorkspacePickerOpen = false }
-            )
-        }
-        .sheet(isPresented: $isSettingsOpen) {
-            // Debug builds can open straight to the diagnostics preview, which is otherwise
-            // two taps away and unreachable on a machine that cannot tap.
-            SettingsView(startsAtDiagnostics: ProcessInfo.processInfo.environment["DSH_DIAGNOSTICS"] != nil)
         }
         .task {
-            // The catalog is what the mode and model controls render, and it does not stream.
+            // The catalog labels the composer's model chip and backs the new-session
+            // screen, and it does not stream.
             if model.catalog == nil { await model.loadModelCatalog() }
             #if DEBUG
-            // Debug builds only: open Settings on launch, so a screen whose only door is a row
-            // in the drawer can be reviewed on a machine that cannot tap.
-            if ProcessInfo.processInfo.environment["DSH_SETTINGS"] != nil { isSettingsOpen = true }
-            // Focus the composer, and open the drawer, so the keyboard-vs-drawer interaction can
-            // be reproduced on a machine that cannot tap either one. Debug only.
-            if let seeded = ProcessInfo.processInfo.environment["DSH_DRAFT"] { draft = seeded }
-            if ProcessInfo.processInfo.environment["DSH_FOCUS"] != nil {
-                try? await Task.sleep(for: .seconds(1.5))
-                focusRequest += 1
+            // Debug builds only: a screen whose only door is a tap needs a way in on a
+            // machine that cannot tap. `DSH_NEW_SESSION` replaces the old `DSH_FOCUS` and
+            // `DSH_DRAFT`, which pointed at the composer that has moved.
+            if ProcessInfo.processInfo.environment["DSH_NEW_SESSION"] != nil {
+                path = [.newSession]
             }
             if ProcessInfo.processInfo.environment["DSH_DRAWER"] != nil {
-                try? await Task.sleep(for: .seconds(3))
+                try? await Task.sleep(for: .seconds(2))
                 isDrawerOpen = true
             }
             #endif
@@ -111,14 +78,10 @@ struct HomeView: View {
                 path = [route]
                 return
             }
-            // An explicit launch destination wins over the restored conversation: it is the
-            // only way to reach a drawer screen on a machine that cannot tap, and the
-            // restored session would otherwise always get there first.
             if let route = Self.launchRoute(for: model.launchDestination) {
                 #if DEBUG
-                // A destination like Usage needs a session to report on, and selecting one is a
-                // separate action from navigating to a conversation. A launch that names both
-                // gets both, which is how a screen behind two taps gets reviewed here.
+                // A destination like Usage needs a session to report on, and selecting one
+                // is a separate action from navigating to a conversation.
                 if let named = model.launchSessionId, model.selectedSessionId != named {
                     model.openSession(named)
                 }
@@ -127,17 +90,19 @@ struct HomeView: View {
                 return
             }
             guard let sessionId = model.selectedSessionId else {
-                path.removeAll()
+                // Back on Home closes the session, which is what the drawer's absence of a
+                // session list means: leaving a conversation is leaving it.
+                if !path.contains(where: { if case .session = $0 { true } else { false } }) {
+                    path.removeAll()
+                }
                 return
             }
             if path.last != .session(sessionId) { path = [.session(sessionId)] }
         }
         .task(id: model.selectedHost?.id) {
-            // SPEC §4: "refresh `session/list` on foreground, opening the drawer,
+            // SPEC §4: refresh `session/list` on foreground, opening the drawer,
             // pull-to-refresh, and at most every 15 seconds while the recent list is
-            // visible." The recent list is *this* screen, so the timer lives here — the drawer
-            // already refreshes when it opens, and the open/highlighted fields are the only
-            // other reasons to re-read the index.
+            // visible. The recent list is *this* screen.
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(15))
                 guard !Task.isCancelled else { return }
@@ -149,49 +114,52 @@ struct HomeView: View {
             // list may be hours stale and the timer did not run while the app was suspended.
             if phase == .active { Task { await model.refreshSessions() } }
         }
-        .onChange(of: path) { _, next in
-            // Leaving the conversation is what clears the stored destination; the
-            // workspace stays selected, which is where the user lands.
-            if next.isEmpty, model.selectedSessionId != nil { model.closeSession() }
-        }
         .onChange(of: model.pendingDrawerDestination) { _, next in
             // The tap that arrives while this screen is already up: `selectedSessionId` has
             // not changed, so the navigation task above does not re-run for it.
             guard let route = Self.launchRoute(for: model.consumeDrawerDestination() ?? next) else { return }
             path = [route]
         }
-        // Swiping right from the leading edge opens the drawer; swiping left on it closes it.
-        // Two targeted gestures rather than one on the root: a horizontal drag across the
-        // transcript would compete with the scroll views, and edge-drag is the platform's own
-        // answer to exactly this.
-        .overlay(alignment: .leading) { openDrawerEdge }
-        .simultaneousGesture(
-            // The mirror of the leading-edge drag: with the drawer out of the way, a leftward
-            // swipe on the content goes back to the conversation you were last in. Deliberately
-            // not an edge gesture — the leading edge belongs to the drawer, and a swipe that
-            // works from anywhere is the one that does not have to be aimed.
-            DragGesture(minimumDistance: 24)
-                .onEnded { value in
-                    guard !isDrawerOpen, path.isEmpty,
-                          value.translation.width < -60,
-                          abs(value.translation.height) < abs(value.translation.width),
-                          let last = model.selectedSessionId
-                    else { return }
-                    open(last)
-                }
-        )
         .onChange(of: isDrawerOpen) { _, open in
             if open {
-                // The drawer covers the screen, and the field it was opened over keeps first
-                // responder — so the keyboard stayed up over the drawer's own content.
+                // The drawer covers the screen, and whatever had first responder keeps it —
+                // so the keyboard stayed up over the drawer's own content.
                 DSHKeyboard.dismiss()
                 Task { await model.refreshSessions() }
             }
         }
         .onChange(of: path) { _, _ in
-            // Pushing a screen leaves the field behind it focused, which is how a keyboard ends
-            // up on top of a conversation nobody is typing into.
+            // Pushing a screen leaves any field behind it focused, which is how a keyboard
+            // ends up on top of a screen nobody is typing into.
             DSHKeyboard.dismiss()
+        }
+    }
+
+    @ViewBuilder
+    private func destination(_ route: Route) -> some View {
+        switch route {
+        case .session(let sessionId):
+            ConversationView(sessionId: sessionId)
+        case .project(let workspaceId):
+            ProjectSessionsView(workspaceId: workspaceId, startSession: { path.append(.newSession) })
+        case .newSession:
+            NewSessionView(onCreated: { sessionId in path = [.session(sessionId)] })
+        case .modelDefaults:
+            ModelModeDefaultsView()
+        case .usage:
+            UsageView(sessionId: model.selectedSessionId, title: "Usage")
+        case .plugins:
+            PluginsView()
+        case .schedules:
+            SchedulesView()
+        case .hosts:
+            HostsPairingView()
+        case .thisPhone:
+            ThisPhoneView()
+        case .reminders:
+            RemindersView()
+        case .diagnostics:
+            DiagnosticsView()
         }
     }
 
@@ -211,33 +179,65 @@ struct HomeView: View {
         ToolbarItem(placement: .principal) {
             DSHBrandLockup()
         }
-        ToolbarItem(placement: .topBarTrailing) {
-            Menu {
-                Button("View all sessions", systemImage: "list.bullet") {
-                    path.append(.sessions(model.selectedWorkspaceId))
-                }
-                Button("Refresh", systemImage: "arrow.clockwise") {
-                    Task { await model.refreshSessions() }
-                }
-                Divider()
-                Button("Settings", systemImage: "gearshape") { isSettingsOpen = true }
-            } label: {
-                Image(systemName: "ellipsis.circle")
+    }
+
+    // MARK: - The page
+
+    private var page: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: DSHMetrics.spaceGroup) {
+                if !model.status.isUsable { offlineBanner }
+                failureCards
+                content
             }
-            .accessibilityLabel("More")
+            .padding(.horizontal, DSHMetrics.pageMargin)
+            .padding(.top, DSHMetrics.spaceCard)
+            // Room for the composer inset, which sits outside this scroll view.
+            .padding(.bottom, DSHMetrics.space)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .background(DSHPalette.canvas)
+        .scrollDismissesKeyboard(.immediately)
+        .refreshable { await model.refreshSessions() }
+        .safeAreaInset(edge: .bottom, spacing: 0) { composerBar }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if browse.isLoadingFirstTime {
+            HStack(spacing: DSHMetrics.space) {
+                ProgressView()
+                Text("Reading sessions…").foregroundStyle(DSHPalette.secondaryText)
+            }
+            .font(.dshSupporting)
+        } else if browse.sessionCount == 0 {
+            emptyState
+        } else {
+            recents
+            projects
         }
     }
 
-    // MARK: - Sections
-
-    private var hostRow: some View {
-        HostStatusRow(
-            hostName: model.selectedHost?.displayName ?? "No host",
-            state: DSHHostState(model.status)
-        )
+    /// Shown when the state is not connected, and only then.
+    private var offlineBanner: some View {
+        Label {
+            Text("\(DSHHostState(model.status).text) — showing what this phone last loaded.")
+                .fixedSize(horizontal: false, vertical: true)
+        } icon: {
+            Image(systemName: "bolt.horizontal.circle")
+        }
+        .font(.dshSupporting)
+        .foregroundStyle(DSHPalette.attention)
+        .padding(DSHMetrics.spaceCard)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .dshCard()
     }
 
-    private var heading: some View {
+    /// The whale, where it introduces the product instead of pushing work off the screen.
+    ///
+    /// UX spec "Home" item 4 puts the heading on Home unconditionally; the revised layout
+    /// keeps it for the state where there is nothing else to say. Recorded in the spec.
+    private var emptyState: some View {
         VStack(alignment: .leading, spacing: DSHMetrics.space) {
             Image(systemName: "sparkles")
                 .font(.system(size: 40, weight: .light))
@@ -247,202 +247,80 @@ struct HomeView: View {
                 .font(.dshHomeTitle)
                 .foregroundStyle(DSHPalette.primaryText)
                 .fixedSize(horizontal: false, vertical: true)
+            Text("No sessions yet. Start one on your computer and it will appear here.")
+                .font(.dshSupporting)
+                .foregroundStyle(DSHPalette.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.top, DSHMetrics.space)
     }
 
-    @ViewBuilder
-    private var workspaceControl: some View {
-        if let workspace {
-            Button {
-                isWorkspacePickerOpen = true
-            } label: {
-                HStack(spacing: DSHMetrics.space) {
-                    Image(systemName: "folder")
-                        .foregroundStyle(DSHPalette.secondaryText)
-                        .accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(workspace.title)
-                            .font(.dshCardTitle)
-                            .foregroundStyle(DSHPalette.primaryText)
-                            .lineLimit(1)
-                        if let path = workspace.path, !path.isEmpty {
-                            Text(path)
-                                .font(.dshMetadata)
-                                .foregroundStyle(DSHPalette.secondaryText)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                        }
-                    }
-                    Spacer(minLength: DSHMetrics.space)
-                    Text("\(workspace.sessionCount)")
-                        .font(.dshMetadata)
-                        .foregroundStyle(DSHPalette.secondaryText)
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.caption2)
-                        .foregroundStyle(DSHPalette.secondaryText)
-                        .accessibilityHidden(true)
-                }
-                .padding(DSHMetrics.spaceCard)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .dshCard()
-                .contentShape(RoundedRectangle(cornerRadius: DSHMetrics.cardCornerRadius, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .accessibilityHint("Chooses the workspace to work in")
-        }
-    }
-
-    /// The mode and model a new session will start in (SPEC §6).
-    private var modelModeControls: some View {
-        ModelModeControls(
-            catalog: model.catalog,
-            isLoading: model.catalogState == .loading,
-            failure: {
-                if case .failed(let reason) = model.catalogState { return reason }
-                return nil
-            }(),
-            selectedMode: model.effectiveMode,
-            selectedModel: model.effectiveModel,
-            // The mark means "not the host's default", so a default selection carries none.
-            isModeStaged: model.stagedMode != nil,
-            isModelStaged: model.stagedModel != nil,
-            onSelectMode: { model.stageMode($0) },
-            onSelectModel: { model.stageModel($0) },
-            onRefresh: { Task { await model.loadModelCatalog() } }
-        )
-    }
-
-    /// Why Send is not available, or `nil` when it is.
-    private var sendBlockedReason: String? {
-        if !model.status.isUsable { return "Offline — reconnect to send." }
-        if model.selectedWorkspaceId == nil { return "Choose a workspace first." }
-        return nil
-    }
-
-    /// The scrolling page, in the order the design asks for: host, heading, workspace, the mode
-    /// and model controls, the composer, then recent sessions. The composer is *in* the page
-    /// rather than pinned to the bottom, which is why it needs help staying above the keyboard.
-    private var page: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: DSHMetrics.spaceGroup) {
-                    hostRow
-                    heading
-                    workspaceControl
-                    modelModeControls
-                    composer
-                        .id(Self.composerAnchor)
-                    continueSection
-                }
-                .padding(.horizontal, DSHMetrics.pageMargin)
-                .padding(.vertical, DSHMetrics.spaceCard)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                // A downward drag anywhere on Home puts the keyboard away, the same motion the
-                // drawer and the transcript accept.
-                .dismissesKeyboardOnDownwardDrag()
-            }
-            .background(DSHPalette.canvas)
-            .scrollDismissesKeyboard(.interactively)
-            // The keyboard's inset does not reveal content that is not at the bottom of the
-            // screen, so the page moves instead. Both triggers matter: focus, and every keystroke
-            // after it — a draft that wraps to a second line makes the composer taller, and
-            // without the second the new line grows down under the keyboard. Reported from the
-            // phone twice, the second time after only the focus case was handled.
-            .onChange(of: composerFocused) { _, focused in
-                guard focused else { return }
-                withAnimation(.snappy) { proxy.scrollTo(Self.composerAnchor, anchor: .bottom) }
-            }
-            .onChange(of: draft) { _, _ in
-                guard composerFocused else { return }
-                proxy.scrollTo(Self.composerAnchor, anchor: .bottom)
-            }
-        }
-    }
-
-    /// The leading-edge drag that opens the drawer.
-    ///
-    /// Extracted from `body`, which the type-checker gave up on once the page also had a
-    /// `ScrollViewReader` around it — the expression, not the logic, was the problem.
-    @ViewBuilder
-    private var openDrawerEdge: some View {
-        if !isDrawerOpen {
-            Color.clear
-                .frame(width: 22)
-                .contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 12)
-                        .onEnded { value in
-                            guard value.translation.width > 44 else { return }
-                            withAnimation(.snappy) { isDrawerOpen = true }
-                        }
+    private var recents: some View {
+        VStack(alignment: .leading, spacing: DSHMetrics.space) {
+            DSHGroupHeader(title: "Recents")
+            ForEach(browse.recent(limit: Self.recentLimit)) { session in
+                SessionCard(
+                    title: session.title,
+                    supportingLine: supportingLine(for: session),
+                    state: session.needsInput ? .needsInput : (session.running ? .running : nil),
+                    lastActivity: nil,
+                    open: { open(session.id) }
                 )
-                .accessibilityHidden(true)
+            }
         }
     }
 
-    private var composer: some View {
-        VStack(alignment: .leading, spacing: DSHMetrics.spaceSmall) {
-            if let error = model.newSessionError {
-                Label(error, systemImage: "exclamationmark.triangle")
-                    .font(.dshMetadata)
-                    .foregroundStyle(DSHPalette.attention)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Composer(
-                text: $draft,
-                canSend: sendBlockedReason == nil,
-                sendBlockedReason: sendBlockedReason,
-                isSending: model.isStartingSession,
-                placeholder: "Start something new…",
-                focusRequest: focusRequest,
-                onFocusChange: { composerFocused = $0 },
-                onSend: { text in Task { await startSession(text) } }
+    /// Four: enough to fill the first screen at this density, and the rest are one tap away
+    /// under the project they belong to.
+    private static let recentLimit = 4
+
+    /// Where the session came from, and when it last moved.
+    private func supportingLine(for session: BrowseSession) -> String? {
+        var parts: [String] = []
+        if let project = projectTitle(for: session.id) { parts.append(project) }
+        if let activity = session.lastActivity { parts.append(activity) }
+        if !session.isLoaded { parts.append("Details didn’t load") }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private func projectTitle(for sessionId: String) -> String? {
+        browse.workspaces.first { $0.sessions.contains { $0.id == sessionId } }?.title
+    }
+
+    private var projects: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            DSHGroupHeader(
+                title: "Projects",
+                trailing: browse.projects.count == 1 ? "1" : "\(browse.projects.count)"
             )
-        }
-    }
-
-    /// Starts a session with the first prompt, and clears the field only if the prompt was
-    /// accepted — the transaction owns the rest (SPEC §5).
-    private func startSession(_ text: String) async {
-        guard let workspaceId = model.selectedWorkspaceId else { return }
-        let started = await model.startSession(workspaceId: workspaceId, text: text)
-        if started != nil, model.newSessionError == nil { draft = "" }
-    }
-
-    private var continueSection: some View {
-        VStack(alignment: .leading, spacing: DSHMetrics.spaceCard) {
-            HStack {
-                Text("Continue a session")
-                    .font(.dshCardTitle)
-                    .foregroundStyle(DSHPalette.primaryText)
-                Spacer()
-                Button("View all") {
-                    path.append(.sessions(model.selectedWorkspaceId))
+            .padding(.bottom, DSHMetrics.spaceSmall)
+            ForEach(Array(browse.projects.enumerated()), id: \.element.id) { index, workspace in
+                if index > 0 { Divider().overlay(DSHPalette.divider) }
+                ProjectRow(
+                    title: workspace.title,
+                    sessionCount: workspace.visibleSessionCount,
+                    activeCount: workspace.activeCount
+                ) {
+                    path.append(.project(workspace.id))
                 }
-                .font(.dshSupporting)
-                .foregroundStyle(DSHPalette.primaryActionText)
             }
-            recentBody
         }
     }
 
+    /// The failures that leave rows on screen unexplained, said out loud.
+    ///
+    /// A failed session index still leaves the registry standing, and this host has failed
+    /// the index outright over one corrupt session log — presenting registry ids as loaded
+    /// sessions is exactly what this prevents.
     @ViewBuilder
-    private var recentBody: some View {
-        let recent = browse.recent()
-
-        // The session index failing is said out loud even when rows are on screen. The
-        // workspace registry names sessions the index may never deliver — this host
-        // fails `session/list` outright over one corrupt session log — and a screen that
-        // showed those rows without the failure would present them as loaded sessions.
+    private var failureCards: some View {
         if let reason = browse.sessionIndexFailure {
             VStack(alignment: .leading, spacing: DSHMetrics.space) {
                 Label("Couldn’t load sessions", systemImage: "exclamationmark.triangle")
                     .font(.dshSupporting)
                     .foregroundStyle(DSHPalette.error)
-                // The host's reason is kept, but behind a disclosure: it quotes full
-                // private paths, and the UX spec asks for "Retry the list; inspect error
-                // details" — details on request, not a wall of them over the sessions.
+                // The host's reason is kept verbatim but behind a disclosure: it quotes full
+                // private paths, and the UX spec asks for details on request.
                 ErrorDetails(reason: reason)
                 Button("Try again") { Task { await model.refreshSessions() } }
                     .font(.dshSupporting)
@@ -451,23 +329,11 @@ struct HomeView: View {
             .padding(DSHMetrics.spaceCard)
             .frame(maxWidth: .infinity, alignment: .leading)
             .dshCard()
-        }
-
-        if browse.isLoadingFirstTime {
-            HStack(spacing: DSHMetrics.space) {
-                ProgressView()
-                Text("Reading sessions…").foregroundStyle(DSHPalette.secondaryText)
-            }
-            .font(.dshSupporting)
-        } else if recent.isEmpty, let reason = browse.workspaceFailure {
+        } else if browse.workspaceFailure != nil {
             VStack(alignment: .leading, spacing: DSHMetrics.space) {
-                Label("Couldn’t load workspaces", systemImage: "exclamationmark.triangle")
+                Label("Couldn’t load projects", systemImage: "exclamationmark.triangle")
                     .font(.dshSupporting)
                     .foregroundStyle(DSHPalette.error)
-                Text(reason)
-                    .font(.dshMetadata)
-                    .foregroundStyle(DSHPalette.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
                 Button("Try again") { Task { await model.refreshSessions() } }
                     .font(.dshSupporting)
                     .foregroundStyle(DSHPalette.primaryActionText)
@@ -475,25 +341,57 @@ struct HomeView: View {
             .padding(DSHMetrics.spaceCard)
             .frame(maxWidth: .infinity, alignment: .leading)
             .dshCard()
-        } else if recent.isEmpty {
-            Text("No sessions yet. Start one on your computer and it will appear here.")
-                .font(.dshSupporting)
-                .foregroundStyle(DSHPalette.secondaryText)
-                .fixedSize(horizontal: false, vertical: true)
-        } else {
-            VStack(spacing: DSHMetrics.space) {
-                ForEach(recent) { session in
-                    SessionCard(
-                        title: session.title,
-                        supportingLine: session.isLoaded ? nil : "Details didn’t load",
-                        state: session.needsInput ? .needsInput : (session.running ? .running : nil),
-                        lastActivity: session.running || !session.isLoaded ? nil : session.lastActivity
-                    ) {
-                        open(session.id)
-                    }
+        }
+    }
+
+    // MARK: - Composer
+
+    /// The composer, as a control rather than a field.
+    ///
+    /// Tapping opens the new-session screen, where the host, project, preset and model are
+    /// read before the text is written. Keeping a live text field here would mean the
+    /// keyboard covers the recents the screen exists to show, and it would put the same
+    /// draft in two places.
+    private var composerBar: some View {
+        Button {
+            path.append(.newSession)
+        } label: {
+            HStack(spacing: DSHMetrics.space) {
+                Image(systemName: "plus")
+                    .font(.body)
+                    .foregroundStyle(DSHPalette.primaryText)
+                    .frame(width: 34, height: 34)
+                    .background(DSHPalette.card)
+                    .clipShape(Circle())
+                Text("Ask DeepSeek…")
+                    .font(.dshMessageBody)
+                    .foregroundStyle(DSHPalette.secondaryText)
+                Spacer(minLength: DSHMetrics.space)
+                if let name = model.effectiveModel?.name {
+                    Text(name)
+                        .font(.dshMetadata)
+                        .foregroundStyle(DSHPalette.secondaryText)
+                        .lineLimit(1)
+                        .padding(.horizontal, DSHMetrics.spaceCard)
+                        .padding(.vertical, DSHMetrics.spaceSmall)
+                        .background(DSHPalette.card)
+                        .clipShape(Capsule())
                 }
             }
+            .padding(DSHMetrics.spaceSmall + 2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(DSHPalette.elevatedSurface)
+            .clipShape(Capsule())
+            .overlay(Capsule().strokeBorder(DSHPalette.cardEdge, lineWidth: 1))
+            .contentShape(Capsule())
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Ask DeepSeek")
+        .accessibilityHint("Opens a new session, where the project and model are chosen")
+        .padding(.horizontal, DSHMetrics.pageMargin)
+        .padding(.vertical, DSHMetrics.space)
+        .background(DSHPalette.canvas)
+        .overlay(alignment: .top) { Divider().overlay(DSHPalette.divider) }
     }
 
     // MARK: - Drawer
@@ -508,45 +406,18 @@ struct HomeView: View {
 
             DrawerView(
                 close: { withAnimation(.snappy) { isDrawerOpen = false } },
-                openSession: { sessionId in
+                open: { destination in
                     withAnimation(.snappy) { isDrawerOpen = false }
-                    open(sessionId)
-                },
-                openWorkspace: { workspaceId in
-                    withAnimation(.snappy) { isDrawerOpen = false }
-                    model.selectWorkspace(workspaceId)
-                },
-                openSettings: {
-                    withAnimation(.snappy) { isDrawerOpen = false }
-                    isSettingsOpen = true
-                },
-                openPlugins: {
-                    withAnimation(.snappy) { isDrawerOpen = false }
-                    path.append(.plugins)
-                },
-                openSchedules: {
-                    withAnimation(.snappy) { isDrawerOpen = false }
-                    path.append(.schedules)
-                },
-                openUsage: {
-                    withAnimation(.snappy) { isDrawerOpen = false }
-                    path.append(.usage)
-                },
-                openNewSession: {
-                    withAnimation(.snappy) { isDrawerOpen = false }
-                    focusRequest += 1
+                    path.append(Self.route(for: destination))
                 }
             )
             .transition(.move(edge: .leading))
             // Full height, not content height. Without this the panel is only as tall as its
-            // list, so on a phone with three workspaces the panel ends part-way down the screen
-            // and everything below it reads as drawer that is somehow too big and too empty.
+            // list, so the panel ends part-way down the screen and everything below it reads
+            // as a drawer that is somehow both too big and too empty.
             .frame(maxWidth: 340, maxHeight: .infinity, alignment: .top)
             .dismissesKeyboardOnDownwardDrag()
             // Swipe the panel away to close it, the mirror of the edge drag that opens it.
-            // Either direction: a panel that only leaves one way is a panel you have to learn,
-            // and the gesture people reach for first is the one that pushes it back where it
-            // came from.
             .gesture(
                 DragGesture(minimumDistance: 12)
                     .onEnded { value in
@@ -557,12 +428,28 @@ struct HomeView: View {
         }
     }
 
-    /// A launch destination, in the drawer's own terms.
+    private static func route(for destination: DrawerView.Destination) -> Route {
+        switch destination {
+        case .modelDefaults: .modelDefaults
+        case .plugins: .plugins
+        case .usage: .usage
+        case .schedules: .schedules
+        case .hosts: .hosts
+        case .thisPhone: .thisPhone
+        case .reminders: .reminders
+        case .diagnostics: .diagnostics
+        }
+    }
+
+    /// A launch destination, in Home's own terms.
     private static func launchRoute(for destination: String?) -> Route? {
         switch destination {
         case "usage": .usage
         case "plugins": .plugins
         case "schedules": .schedules
+        case "hosts": .hosts
+        case "diagnostics": .diagnostics
+        case "new": .newSession
         default: nil
         }
     }
@@ -607,74 +494,6 @@ struct ErrorDetails: View {
                     .foregroundStyle(DSHPalette.secondaryText)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-}
-
-/// The workspace selector: a searchable list of the host's registry.
-///
-/// A sheet rather than a menu because the registry can be long, and because the
-/// identifier it returns is the host's own — never one derived from a title or a
-/// phone-side directory (SPEC §4).
-struct WorkspacePickerView: View {
-    let workspaces: [BrowseWorkspace]
-    let selectedId: String?
-    let select: (String) -> Void
-    let cancel: () -> Void
-
-    @State private var query = ""
-
-    private var matches: [BrowseWorkspace] {
-        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !needle.isEmpty else { return workspaces }
-        return workspaces.filter { $0.title.localizedCaseInsensitiveContains(needle) }
-    }
-
-    var body: some View {
-        NavigationStack {
-            List {
-                ForEach(matches) { workspace in
-                    Button {
-                        select(workspace.id)
-                    } label: {
-                        HStack(spacing: DSHMetrics.space) {
-                            Image(systemName: "folder")
-                                .foregroundStyle(DSHPalette.secondaryText)
-                                .accessibilityHidden(true)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(workspace.title)
-                                    .foregroundStyle(DSHPalette.primaryText)
-                                if let path = workspace.path, !path.isEmpty {
-                                    Text(path)
-                                        .font(.dshMetadata)
-                                        .foregroundStyle(DSHPalette.secondaryText)
-                                        .lineLimit(1)
-                                        .truncationMode(.middle)
-                                }
-                            }
-                            Spacer(minLength: DSHMetrics.space)
-                            if workspace.id == selectedId {
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(DSHPalette.primaryActionText)
-                                    .accessibilityLabel("Selected")
-                            }
-                        }
-                    }
-                }
-            }
-            .searchable(text: $query, prompt: "Filter workspaces")
-            .navigationTitle("Workspace")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel", action: cancel)
-                }
-            }
-            .overlay {
-                if matches.isEmpty {
-                    ContentUnavailableView.search(text: query)
-                }
             }
         }
     }
