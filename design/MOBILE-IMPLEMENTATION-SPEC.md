@@ -161,6 +161,28 @@ Remaining liveness work: add an injectable network-path observer and a bounded W
 
 ## 4. Home, workspaces, and session cards
 
+### What Home is (revised 2026-10-12)
+
+Home is two lists and a composer, and the shape is normative for the client:
+
+- **Recents** — `BrowseState.recent(limit: 4)`: every project's sessions in one list, newest
+  first, subagents excluded, ties broken on session id so a re-render cannot reorder them.
+- **Projects** — `BrowseState.projects`: every workspace the registry reports, ordered by its
+  most recent session. A workspace nothing is dated in keeps its registry position behind the
+  dated ones: an empty workspace is unknown, not old. The ungrouped sentinel sorts last — it is
+  reachable, but it is not a project.
+- **A project screen** — `BrowseState.groupedSessions(in:)`, bucketed Today / Yesterday /
+  Earlier against a supplied `now` and `Calendar`, with `.undated` for a session the index never
+  dated. Empty spans are omitted.
+
+Those four rules live in `BrowsePresentation.swift` in the kit, not in the app target, and are
+covered by `BrowsePresentationTests`. They were app-target code until this change, which meant the
+ordering and filtering could not be tested at all.
+
+The counts a row reports and the list its screen shows come from the same accessors
+(`visibleSessionCount`, `sessions(in:)`), including the subagent exclusion, so they cannot
+disagree.
+
 ### Data and subscriptions
 
 `workspace/follow` starts with:
@@ -187,6 +209,7 @@ Use control projections for `title`, `agentPreset`, `modelSelection`, `permissio
 - Recent cards use host timestamps and real titles, with an explicit untitled fallback. Workspace names come from the registry.
 - “Needs input” comes from current interaction channels/projections. A historical `ask_user_question` tool call does not produce this badge by itself.
 - Running status initially comes from the list and selected-session lifecycle events. Until a verified event-to-list invalidation map exists, refresh `session/list` on foreground, opening the drawer, pull-to-refresh, and at most every 15 seconds while the recent list is visible. Do not invent a `running` control projection.
+- Home's recents are cross-project on purpose: "return to work" does not depend on which project the work was in. The project is chosen when something is started, on the new-session screen, not when it is resumed.
 - Local search covers loaded sessions and workspaces. Do not label local filtering as full transcript search; the host does expose `session/search {request:{query}}`, which searches current visible message content without activating a matching session. That endpoint is deferred here rather than overlooked, so the first slice stays local and honest about its scope.
 - Cached cards remain visible during refresh. An empty loading result, an empty successful workspace, and a failed session list are different screens.
 
@@ -444,13 +467,18 @@ Decode the command result's `success`/`error` variant, optional text, and option
 
 These destinations should become useful read-only surfaces first. A drawer label is not evidence of a supported API.
 
+**The drawer is the harness panel (2026-10-12).** It holds the host card and these destinations,
+plus Hosts & pairing, This phone, Reminders and the version; it holds no workspaces and no
+sessions. A row's trailing value is omitted when the phone has not read it — an unread count is
+unknown, and `0` would be a measurement that was never taken.
+
 | Destination | Initial wiring | What remains gated |
 | --- | --- | --- |
 | Plugins | `pluginInventory/list {}` → entries with module/title, enabled state, fiber phase, errors; optional preset rows | Installation, enable/disable, removal and `pluginManager` actions need separate mutation UX and tests; `managementAvailable` must be honored |
 | Scheduled tasks | `schedule/catalog {}` for host catalog; `schedule/list {request:{sessionId}}` for a session; `schedule/history {request:{sessionId,id,limit:20,before?}}` for delivery history | Creating/editing/deleting tasks is a later slice; do not reinterpret a delivery prompt as an instruction to the phone |
 | MCP | No dedicated inventory endpoint established by the inspected descriptor | Keep unavailable or omit until the real service/configuration surface is traced; plugin presence is not server health |
 | Usage | Session-level usage only where durable assistant events or verified projections supply it | No verified host-wide usage endpoint here; do not treat account balance as token usage or estimate totals from a partial transcript |
-| Settings | Saved-host selection, connection details, pairing/forget, appearance, diagnostic export | Live relay/VPN/DNS changes and server secret management are separate authorized work |
+| Settings | No longer a screen: its sections are the harness panel's rows (Hosts & pairing, This phone, Reminders). Saved-host selection, connection details, pairing/forget, diagnostic export | Live relay/VPN/DNS changes and server secret management are separate authorized work |
 
 Schedule catalog entries include `sessionId`, `status`, schedule kind/parameters, and optional `lastDelivery`. Honor their actual time zone and timestamps. Do not assume there is a schedule stream; refresh on entry, pull-to-refresh, and foreground return while that screen is visible.
 

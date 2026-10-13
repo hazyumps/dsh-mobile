@@ -16,19 +16,33 @@ struct ScreensGalleryView: View {
     @Environment(AppModel.self) private var model
 
     /// Which screen to draw. `simctl` cannot tap, so the choice is made at launch:
-    /// `DSH_SCREEN_GALLERY=drawer` draws the drawer, anything else draws Home.
+    /// `DSH_SCREEN_GALLERY=drawer|project|new` draws one of those, anything else draws Home.
     private var screen: String {
         ProcessInfo.processInfo.environment["DSH_SCREEN_GALLERY"] ?? "home"
     }
 
     var body: some View {
         Group {
-            if screen == "drawer" {
-                drawer
-            } else if screen == "conversation" {
-                conversation
-            } else {
-                HomeView()
+            switch screen {
+            case "drawer": drawer
+            case "conversation": conversation
+            // The two screens the redesign added, reachable by tap in the app and by
+            // environment variable here, because a simulator cannot tap.
+            // Both of these are pushed screens in the app, so they are wrapped in the
+            // stack that gives them their bar — reviewed without it they draw no title at
+            // all, which is a fact about the harness rather than about the screen.
+            case "project":
+                NavigationStack {
+                    ProjectSessionsView(
+                        workspaceId: "workspace-dsh-mobile",
+                        startSession: {}
+                    )
+                }
+            case "new":
+                NavigationStack {
+                    NewSessionView(onCreated: { _ in })
+                }
+            default: HomeView()
             }
         }
         .task { model.seedForScreensGallery() }
@@ -150,13 +164,7 @@ struct ScreensGalleryView: View {
             DSHPalette.canvas.ignoresSafeArea()
             DrawerView(
                 close: {},
-                openSession: { _ in },
-                openWorkspace: { _ in },
-                openSettings: {},
-                openPlugins: {},
-                openSchedules: {},
-                openUsage: {},
-                openNewSession: {}
+                open: { _ in }
             )
             .frame(maxWidth: 340)
         }

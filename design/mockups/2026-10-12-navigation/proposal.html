@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DSH Remote — navigation proposal</title>
+<style>
+  :root{
+    --canvas:#141416; --nav:#1D1D1F; --card:#2A2A2D; --elev:#323237;
+    --text:#F5F5F7; --text2:#B0B2BB; --div:#3B3D43;
+    --accent:#526B96; --accentText:#8AA6D4; --ok:#41C86A; --attn:#E8A23A; --err:#F07878;
+    --page:#0B0B0C;
+  }
+  *{box-sizing:border-box; -webkit-font-smoothing:antialiased;}
+  html,body{margin:0;padding:0;background:var(--page);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Helvetica,Arial,sans-serif;}
+  body{padding:34px 34px 46px;}
+  h1{font-size:22px;font-weight:600;letter-spacing:-.2px;margin:0 0 6px;}
+  .sub{color:var(--text2);font-size:14px;line-height:1.5;max-width:1180px;margin:0 0 26px;}
+  .sub b{color:var(--text);font-weight:600;}
+
+  .board{display:flex;gap:30px;align-items:flex-start;}
+  .col{display:flex;flex-direction:column;gap:12px;}
+  .cap{font-size:13px;color:var(--text2);padding-left:6px;letter-spacing:.1px;}
+  .cap b{color:var(--text);font-weight:600;display:block;font-size:14px;margin-bottom:3px;}
+  .cap i{font-style:normal;color:#7d7f88;}
+
+  /* ---------- phone ---------- */
+  .frame{
+    width:390px;height:844px;border-radius:54px;position:relative;overflow:hidden;
+    background:var(--canvas);border:1px solid #33333a;
+    box-shadow:0 0 0 11px #17171a, 0 0 0 12px #2c2c31, 0 30px 70px rgba(0,0,0,.75);
+  }
+  .screen{position:absolute;inset:0;display:flex;flex-direction:column;overflow:hidden;}
+
+  .statusbar{height:54px;flex:0 0 54px;display:flex;position:relative;z-index:3;align-items:flex-end;justify-content:space-between;
+    padding:0 30px 6px;font-size:15px;font-weight:600;letter-spacing:.2px;}
+  .sb-r{display:flex;align-items:center;gap:6px;}
+  .sig{display:flex;align-items:flex-end;gap:2px;height:11px;}
+  .sig i{width:3px;background:var(--text);border-radius:1px;display:block;}
+  .sig i:nth-child(1){height:4px}.sig i:nth-child(2){height:6px}.sig i:nth-child(3){height:8.5px}.sig i:nth-child(4){height:11px}
+  .wifi{width:15px;height:11px;}
+  .batt{width:25px;height:12px;border:1.4px solid var(--text);border-radius:3.5px;position:relative;opacity:.9}
+  .batt:after{content:"";position:absolute;right:-4px;top:3.4px;width:2px;height:5px;background:var(--text);border-radius:0 1px 1px 0;opacity:.6}
+  .batt i{position:absolute;inset:1.6px;width:70%;background:var(--text);border-radius:1.6px;display:block}
+  .home-ind{position:absolute;bottom:9px;left:50%;transform:translateX(-50%);width:140px;height:5px;border-radius:3px;background:#F5F5F7;opacity:.55}
+
+  /* ---------- navbar ---------- */
+  .nav{flex:0 0 52px;display:flex;align-items:center;gap:8px;padding:0 12px;}
+  .nav .title{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;font-size:17px;font-weight:600;letter-spacing:-.2px}
+  .iconbtn{width:40px;height:40px;display:flex;align-items:center;justify-content:center;border-radius:20px;color:var(--text);flex:0 0 auto}
+  .iconbtn.dim{color:var(--text2)}
+  svg.i{width:22px;height:22px;display:block}
+  svg.i.sm{width:18px;height:18px}
+  svg.i.xs{width:14px;height:14px}
+  .chev{color:#7d7f88}
+
+  /* ---------- generic ---------- */
+  .body{flex:1;overflow:hidden;padding:0 16px;}
+  .grouplabel{display:flex;align-items:center;justify-content:space-between;
+    font-size:13px;font-weight:600;letter-spacing:.35px;color:var(--text2);
+    text-transform:none;padding:14px 4px 8px;}
+  .link{color:var(--accentText);font-size:15px;font-weight:400}
+  .card{background:var(--card);border-radius:16px;padding:13px 14px;}
+  .hairline{height:1px;background:var(--div);opacity:.75}
+
+  .chip{font-size:12px;font-weight:600;padding:4px 9px;border-radius:999px;white-space:nowrap;
+    display:inline-flex;align-items:center;gap:5px;line-height:1.25}
+  .chip.attn{color:var(--attn);background:rgba(232,162,58,.15)}
+  .chip.ok{color:var(--ok);background:rgba(65,200,106,.14)}
+  .chip.err{color:var(--err);background:rgba(240,120,120,.15)}
+  .dot{width:7px;height:7px;border-radius:4px;display:block}
+
+  /* ---------- home ---------- */
+  .srow{display:flex;align-items:center;gap:12px;padding:13px 14px;margin-bottom:8px}
+  .srow .t{font-size:16px;font-weight:500;letter-spacing:-.15px;line-height:1.25;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .srow .m{font-size:13px;color:var(--text2);margin-top:3px;display:flex;align-items:center;gap:6px}
+  .prow{display:flex;align-items:center;gap:12px;padding:12px 4px;}
+  .prow .t{font-size:16px;font-weight:500;letter-spacing:-.15px}
+  .prow .m{font-size:13px;color:var(--text2);margin-top:3px}
+  .prow .ic{color:var(--text2);display:flex;align-items:center}
+
+  /* floating composer */
+  .floatwrap{position:absolute;left:0;right:0;bottom:0;padding:0 14px 26px;
+    background:linear-gradient(to top, var(--canvas) 62%, rgba(20,20,22,0));}
+  .pill{display:flex;align-items:center;gap:10px;height:56px;border-radius:28px;
+    background:var(--elev);border:1px solid #43434a;padding:0 8px 0 14px;
+    box-shadow:0 10px 26px rgba(0,0,0,.45);}
+  .pill .ph{flex:1;font-size:16px;color:#8b8d96}
+  .pbtn{width:40px;height:40px;border-radius:20px;display:flex;align-items:center;justify-content:center;
+    background:var(--card);color:var(--text)}
+  .modelchip{font-size:12.5px;font-weight:600;color:var(--text2);background:var(--card);
+    padding:6px 10px;border-radius:999px;white-space:nowrap}
+
+  /* ---------- drawer ---------- */
+  .scrim{position:absolute;inset:0;background:rgba(0,0,0,.45)}
+  .panel{position:absolute;left:0;top:0;bottom:0;width:344px;background:var(--nav);
+    border-right:1px solid var(--div);display:flex;flex-direction:column;}
+  .phead{display:flex;align-items:center;gap:9px;padding:60px 12px 10px 16px;}
+  .brand{flex:1;display:flex;align-items:center;gap:8px;font-size:16px;font-weight:600;letter-spacing:-.2px}
+  .hostcard{margin:4px 12px 6px;background:var(--card);border-radius:14px;padding:11px 12px;display:flex;align-items:center;gap:10px}
+  .hostcard .n{font-size:15px;font-weight:600;letter-spacing:-.1px}
+  .hostcard .m{font-size:12.5px;color:var(--text2);margin-top:2px}
+  .sect{font-size:12px;font-weight:700;letter-spacing:.7px;color:#84868f;padding:16px 18px 6px}
+  .drow{display:flex;align-items:center;gap:12px;padding:0 16px;height:50px;}
+  .drow .ic{color:var(--text2);flex:0 0 22px;display:flex}
+  .drow .t{font-size:16px;letter-spacing:-.1px;flex:1}
+  .drow .v{font-size:13.5px;color:var(--text2);white-space:nowrap}
+  .panel .scroll{flex:1;overflow:hidden}
+
+  /* ---------- new session ---------- */
+  .ctxrow{display:flex;align-items:center;gap:12px;height:54px;padding:0 4px;}
+  .ctxrow .ic{color:var(--text2);flex:0 0 22px;display:flex}
+  .ctxrow .l{font-size:16px;color:var(--text2);flex:1;display:flex;align-items:center;gap:8px}
+  .ctxrow .l b{color:var(--text);font-weight:500}
+  .ctxrow .v{font-size:16px;color:var(--text);display:flex;align-items:center;gap:8px;letter-spacing:-.1px}
+  .ctxdiv{height:1px;background:var(--div);margin:6px 4px 10px;opacity:.7}
+  .composerbox{background:var(--card);border-radius:20px;padding:11px 12px 9px;}
+  .composerbox .ph{font-size:17px;color:#8b8d96;padding:2px 2px 12px}
+  .composerbox .bar{display:flex;align-items:center;gap:8px}
+  .cbtn{width:36px;height:36px;border-radius:18px;display:flex;align-items:center;justify-content:center;color:var(--text2)}
+  .sendbtn{width:34px;height:34px;border-radius:17px;background:var(--accent);color:#fff;
+    display:flex;align-items:center;justify-content:center;margin-left:auto}
+
+  /* ---------- keyboard ---------- */
+  .kb{flex:0 0 auto;background:#26262a;padding:8px 5px 22px;border-top:1px solid #333338}
+  .kbsug{display:flex;justify-content:space-around;padding:2px 0 10px;font-size:16px;color:#e9e9ec}
+  .kbrow{display:flex;justify-content:center;gap:6px;margin-bottom:11px}
+  .key{width:33px;height:43px;border-radius:6px;background:#5b5b60;
+    display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:400;color:#fff;
+    box-shadow:0 1px 0 rgba(0,0,0,.45)}
+  .key.wide{width:43px}
+  .key.space{flex:1;font-size:15px;color:#c9c9cd}
+  .key.mod{flex:0 0 82px;background:#3c3c41;font-size:15px;color:#e9e9ec}
+  .key.ret{flex:0 0 86px;background:#3c3c41;font-size:15px;color:#e9e9ec}
+  .kbrow.last{gap:8px;padding:0 4px;margin-bottom:0}
+
+  /* ---------- project screen ---------- */
+  .pathline{font-size:13px;color:var(--text2);padding:0 4px 10px;display:flex;align-items:center;gap:7px}
+  .filter{display:flex;align-items:center;gap:9px;height:40px;background:var(--card);
+    border-radius:12px;padding:0 11px;color:#8b8d96;font-size:15px}
+  .newsession{display:flex;align-items:center;gap:10px;background:var(--elev);border-radius:14px;
+    padding:12px 14px;font-size:16px;font-weight:500;margin:10px 0 4px;border:1px solid #43434a}
+  .dategroup{font-size:12px;font-weight:700;letter-spacing:.7px;color:#84868f;padding:16px 4px 8px}
+
+  /* ---------- notes ---------- */
+  .notes{margin-top:52px;max-width:1180px}
+  .notes h2{font-size:16px;font-weight:600;margin:0 0 12px}
+  table{border-collapse:collapse;width:100%;font-size:14px}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid #232327;vertical-align:top;line-height:1.45}
+  th{color:#84868f;font-weight:600;font-size:12px;letter-spacing:.5px}
+  td:first-child{color:var(--text2);white-space:nowrap}
+  .q{margin-top:22px;font-size:14px;line-height:1.6;color:var(--text2)}
+  .q b{color:var(--text)}
+  .q ol{margin:10px 0 0;padding-left:22px}
+  .q li{margin-bottom:8px}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <g id="ic-sidebar"><path d="M3.2 6.8A2.3 2.3 0 015.5 4.5h13a2.3 2.3 0 012.3 2.3v10.4a2.3 2.3 0 01-2.3 2.3h-13a2.3 2.3 0 01-2.3-2.3z"/><path d="M9.6 4.5v15"/></g>
+    <g id="ic-search"><circle cx="11" cy="11" r="6.4"/><path d="M15.8 15.8l4.6 4.6"/></g>
+    <g id="ic-chevR"><path d="M9.5 5.5l6.5 6.5-6.5 6.5"/></g>
+    <g id="ic-chevL"><path d="M14.5 5.5L8 12l6.5 6.5"/></g>
+    <g id="ic-updown"><path d="M8.4 9.4L12 5.8l3.6 3.6"/><path d="M8.4 14.6L12 18.2l3.6-3.6"/></g>
+    <g id="ic-folder"><path d="M3.4 7.1A2.1 2.1 0 015.5 5h3.1c.6 0 1.1.2 1.5.7l1.2 1.5h7.2a2.1 2.1 0 012.1 2.1v7.6a2.1 2.1 0 01-2.1 2.1H5.5a2.1 2.1 0 01-2.1-2.1z"/></g>
+    <g id="ic-ellipsis"><circle cx="5.4" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="18.6" cy="12" r="1.5" fill="currentColor" stroke="none"/></g>
+    <g id="ic-plus"><path d="M12 5.2v13.6M5.2 12h13.6"/></g>
+    <g id="ic-arrowup"><path d="M12 19V5.4M6 11.4L12 5.4l6 6"/></g>
+    <g id="ic-laptop"><rect x="3.6" y="5.2" width="16.8" height="10.4" rx="1.7"/><path d="M1.9 18.6h20.2"/></g>
+    <g id="ic-phone"><rect x="7.6" y="2.9" width="8.8" height="18.2" rx="2.2"/><path d="M10.6 5.3h2.8"/></g>
+    <g id="ic-plugins"><rect x="3.4" y="3.4" width="7.4" height="7.4" rx="2"/><rect x="13.2" y="3.4" width="7.4" height="7.4" rx="2"/><rect x="3.4" y="13.2" width="7.4" height="7.4" rx="2"/><rect x="13.2" y="13.2" width="7.4" height="7.4" rx="2"/></g>
+    <g id="ic-usage"><path d="M5.4 20V11.4M12 20V4.4M18.6 20v-6.2"/></g>
+    <g id="ic-calendar"><rect x="3.3" y="5.2" width="17.4" height="15.4" rx="2.4"/><path d="M3.3 10.2h17.4M8.2 3.1v4.2M15.8 3.1v4.2"/></g>
+    <g id="ic-activity"><path d="M2.9 12.4h3.7l2.5-6.6 3.9 12.4 2.5-6.6h4.6"/></g>
+    <g id="ic-sliders"><path d="M4 8.4h9.2M18.4 8.4h1.7M4 15.6h3.2M12.4 15.6h7.7"/><circle cx="15.9" cy="8.4" r="2.3"/><circle cx="9.9" cy="15.6" r="2.3"/></g>
+    <g id="ic-bell"><path d="M6.7 10.2a5.3 5.3 0 1110.6 0c0 3.8 1.5 5.4 1.5 5.4H5.2s1.5-1.6 1.5-5.4z"/><path d="M10.3 18.8a1.9 1.9 0 003.4 0"/></g>
+    <g id="ic-info"><circle cx="12" cy="12" r="8.6"/><path d="M12 11.2v5M12 8.2v.1"/></g>
+    <g id="ic-write"><path d="M16.9 3.9l3.2 3.2L10.4 16.8l-4.1 1 1-4.1z"/><path d="M4.4 20.6h9.4"/></g>
+    <g id="ic-sparkle"><path d="M12 3.6l1.7 4.7 4.7 1.7-4.7 1.7L12 16.4l-1.7-4.7L5.6 10l4.7-1.7z"/></g>
+    <g id="ic-keyshield"><path d="M12 3.2l7.2 2.6v6.1c0 4.3-3 7.5-7.2 8.9-4.2-1.4-7.2-4.6-7.2-8.9V5.8z"/><path d="M9.4 12.2l1.9 1.9 3.5-3.9"/></g>
+  </defs>
+</svg>
+
+<h1>DSH Remote — drawer becomes the harness, Home becomes your work</h1>
+<p class="sub">Four proposed screens, dark (the primary reference). <b>1</b> Home: recents, then projects, with a floating composer.
+<b>2</b> The drawer, now only harness administration — no workspaces, no sessions. <b>3</b> New session: host / project / preset / model as
+context rows above the composer, with the keyboard up. <b>4</b> A project opens as a full screen, newest first.
+Everything drawn here uses the existing tokens and symbols; the brand, whale and identity marks are illustrative stand-ins.</p>
+
+<div class="board">
+
+  <!-- ================= 1. HOME ================= -->
+  <div class="col">
+  <div class="frame" id="home">
+    <div class="screen">
+      <div class="statusbar"><span>7:42</span><span class="sb-r">
+        <span class="sig"><i></i><i></i><i></i><i></i></span>
+        <svg class="wifi" viewBox="0 0 16 12" fill="none" stroke="#F5F5F7" stroke-width="1.4" stroke-linecap="round"><path d="M1.3 4.1a10 10 0 0113.4 0M3.7 6.7a6.6 6.6 0 018.6 0"/><circle cx="8" cy="9.8" r="1.15" fill="#F5F5F7" stroke="none"/></svg>
+        <span class="batt"><i></i></span></span></div>
+
+      <div class="nav">
+        <div class="iconbtn"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-sidebar"/></svg></div>
+        <div class="title"><svg class="i sm" viewBox="0 0 24 24" fill="none" stroke="#8AA6D4" stroke-width="1.6" stroke-linejoin="round"><use href="#ic-sparkle"/></svg>DeepSeek Harness</div>
+        <div class="iconbtn"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-search"/></svg></div>
+      </div>
+
+      <div class="body">
+        <div class="grouplabel"><span>Recents</span><span class="link">See all</span></div>
+
+        <div class="card srow">
+          <div style="flex:1;min-width:0">
+            <div class="t">Find NAS disk activity</div>
+            <div class="m"><span>homelab</span><span style="opacity:.5">·</span><span>2 min ago</span></div>
+          </div>
+          <span class="chip attn"><span class="dot" style="background:var(--attn)"></span>Needs input</span>
+        </div>
+
+        <div class="card srow">
+          <div style="flex:1;min-width:0">
+            <div class="t">Rewrite the BGP lecture beats</div>
+            <div class="m"><span>nst</span><span style="opacity:.5">·</span><span>31 min ago</span></div>
+          </div>
+          <span class="chip ok"><span class="dot" style="background:var(--ok)"></span>Running</span>
+        </div>
+
+        <div class="card srow">
+          <div style="flex:1;min-width:0">
+            <div class="t">Investigate Kiln03 GPU electrical z</div>
+            <div class="m"><span>homelab</span><span style="opacity:.5">·</span><span>2 hours ago</span></div>
+          </div>
+        </div>
+
+        <div class="card srow" style="margin-bottom:0">
+          <div style="flex:1;min-width:0">
+            <div class="t">Design Thrifter AI resale app</div>
+            <div class="m"><span>thrifter</span><span style="opacity:.5">·</span><span>Yesterday</span></div>
+          </div>
+        </div>
+
+        <div class="grouplabel" style="padding-top:26px"><span>Projects</span><span class="link">4</span></div>
+
+        <div class="prow">
+          <div class="ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><use href="#ic-folder"/></svg></div>
+          <div style="flex:1"><div class="t">homelab</div><div class="m">9 sessions · 2 active</div></div>
+          <div class="ic"><svg class="i sm chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-chevR"/></svg></div>
+        </div>
+        <div class="hairline"></div>
+        <div class="prow">
+          <div class="ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><use href="#ic-folder"/></svg></div>
+          <div style="flex:1"><div class="t">nst</div><div class="m">6 sessions · 1 active</div></div>
+          <div class="ic"><svg class="i sm chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-chevR"/></svg></div>
+        </div>
+        <div class="hairline"></div>
+        <div class="prow">
+          <div class="ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><use href="#ic-folder"/></svg></div>
+          <div style="flex:1"><div class="t">dsh-mobile</div><div class="m">4 sessions</div></div>
+          <div class="ic"><svg class="i sm chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-chevR"/></svg></div>
+        </div>
+        <div class="hairline"></div>
+        <div class="prow">
+          <div class="ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><use href="#ic-folder"/></svg></div>
+          <div style="flex:1"><div class="t">thrifter</div><div class="m">2 sessions</div></div>
+          <div class="ic"><svg class="i sm chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-chevR"/></svg></div>
+        </div>
+      </div>
+
+      <div class="floatwrap">
+        <div class="pill">
+          <div class="pbtn"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><use href="#ic-plus"/></svg></div>
+          <div class="ph">Ask DeepSeek…</div>
+          <span class="modelchip">Ember</span>
+        </div>
+      </div>
+      <div class="home-ind"></div>
+    </div>
+  </div>
+  <div class="cap"><b>1 · Home</b>Recents first — the four you touched last, cross-project, with live state.
+  Then projects. The composer floats over the list and never scrolls away. <i>Whale heading returns only when there is nothing to show.</i></div>
+  </div>
+
+  <!-- ================= 2. DRAWER ================= -->
+  <div class="col">
+  <div class="frame" id="panel">
+    <div class="screen">
+      <div class="statusbar"><span>7:42</span><span class="sb-r">
+        <span class="sig"><i></i><i></i><i></i><i></i></span>
+        <svg class="wifi" viewBox="0 0 16 12" fill="none" stroke="#F5F5F7" stroke-width="1.4" stroke-linecap="round"><path d="M1.3 4.1a10 10 0 0113.4 0M3.7 6.7a6.6 6.6 0 018.6 0"/><circle cx="8" cy="9.8" r="1.15" fill="#F5F5F7" stroke="none"/></svg>
+        <span class="batt"><i></i></span></span></div>
+
+      <div class="nav" style="opacity:.35">
+        <div class="iconbtn"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-sidebar"/></svg></div>
+        <div class="title">DeepSeek Harness</div>
+        <div class="iconbtn"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-search"/></svg></div>
+      </div>
+
+      <div class="scrim"></div>
+      <div class="panel">
+        <div class="phead">
+          <div class="brand"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="#8AA6D4" stroke-width="1.6" stroke-linejoin="round"><use href="#ic-sparkle"/></svg>DeepSeek Harness</div>
+          <div class="iconbtn dim"><svg class="i sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></div>
+        </div>
+
+        <div class="hostcard">
+          <span class="dot" style="background:var(--ok);width:8px;height:8px"></span>
+          <div style="flex:1;min-width:0">
+            <div class="n">Mac.fernlabs.net</div>
+            <div class="m">Connected · 95 sessions</div>
+          </div>
+          <svg class="i sm chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-updown"/></svg>
+        </div>
+
+        <div class="scroll">
+          <div class="sect">HARNESS</div>
+          <div class="drow"><span class="ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><use href="#ic-sliders"/></svg></span><span class="t">Model &amp; mode</span><span class="v">Ember · medium</span><svg class="i xs chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-chevR"/></svg></div>
+          <div class="drow"><span class="ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><use href="#ic-plugins"/></svg></span><span class="t">Plugins</span><span class="v">186 enabled</span><svg class="i xs chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-chevR"/></svg></div>
+          <div class="drow"><span class="ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><use href="#ic-usage"/></svg></span><span class="t">Usage</span><span class="v">369k tokens</span><svg class="i xs chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-chevR"/></svg></div>
+          <div class="drow"><span class="ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><use href="#ic-calendar"/></svg></span><span class="t">Scheduled tasks</span><span class="v">3</span><svg class="i xs chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-chevR"/></svg></div>
+          <div class="drow"><span class="ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-activity"/></svg></span><span class="t">Diagnostics</span><span class="v">12 records</span><svg class="i xs chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-chevR"/></svg></div>
+
+          <div class="sect">HOST</div>
+          <div class="drow"><span class="ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><use href="#ic-laptop"/></svg></span><span class="t">Hosts &amp; pairing</span><span class="v">2 hosts</span><svg class="i xs chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-chevR"/></svg></div>
+          <div class="drow"><span class="ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><use href="#ic-phone"/></svg></span><span class="t">This phone</span><span class="v">Patrick’s iPhone</span><svg class="i xs chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-chevR"/></svg></div>
+          <div class="drow"><span class="ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-bell"/></svg></span><span class="t">Reminders</span><span class="v">On · 3 planned</span><svg class="i xs chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-chevR"/></svg></div>
+
+          <div class="sect">ABOUT</div>
+          <div class="drow"><span class="ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><use href="#ic-info"/></svg></span><span class="t">Version</span><span class="v">0.4.0 (512)</span><svg class="i xs chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-chevR"/></svg></div>
+        </div>
+      </div>
+      <div class="home-ind"></div>
+    </div>
+  </div>
+  <div class="cap"><b>2 · The drawer, now harness-only</b>Host at the top, then everything you configure rather than everything you write.
+  Workspaces and sessions are gone from here. <i>Settings as a separate screen folds into these rows — one panel, one place.</i></div>
+  </div>
+
+  <!-- ================= 3. NEW SESSION ================= -->
+  <div class="col">
+  <div class="frame" id="new">
+    <div class="screen">
+      <div class="statusbar"><span>7:42</span><span class="sb-r">
+        <span class="sig"><i></i><i></i><i></i><i></i></span>
+        <svg class="wifi" viewBox="0 0 16 12" fill="none" stroke="#F5F5F7" stroke-width="1.4" stroke-linecap="round"><path d="M1.3 4.1a10 10 0 0113.4 0M3.7 6.7a6.6 6.6 0 018.6 0"/><circle cx="8" cy="9.8" r="1.15" fill="#F5F5F7" stroke="none"/></svg>
+        <span class="batt"><i></i></span></span></div>
+
+      <div class="nav" style="height:58px;flex:0 0 58px">
+        <div class="iconbtn" style="align-self:flex-start"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-chevL"/></svg></div>
+        <div class="title" style="flex-direction:column;gap:2px;padding-top:2px">
+          <span>New session</span>
+          <span style="font-size:11.5px;font-weight:400;color:#7d7f88;letter-spacing:0">Nothing reaches the host until you send</span>
+        </div>
+        <div class="iconbtn" style="opacity:0;align-self:flex-start"><svg class="i" viewBox="0 0 24 24"><use href="#ic-plus"/></svg></div>
+      </div>
+
+      <div class="body" style="padding:0 16px 10px;display:flex;flex-direction:column;justify-content:flex-end">
+        <div class="ctxrow">
+          <span class="ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><use href="#ic-laptop"/></svg></span>
+          <span class="l">Host</span>
+          <span class="v">Mac.fernlabs.net <svg class="i xs chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-updown"/></svg></span>
+        </div>
+        <div class="ctxrow">
+          <span class="ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><use href="#ic-folder"/></svg></span>
+          <span class="l">Project</span>
+          <span class="v">homelab <svg class="i xs chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-updown"/></svg></span>
+        </div>
+        <div class="ctxrow">
+          <span class="ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><use href="#ic-sliders"/></svg></span>
+          <span class="l">Preset</span>
+          <span class="v">Standard <svg class="i xs chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-updown"/></svg></span>
+        </div>
+        <div class="ctxrow">
+          <span class="ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="#8AA6D4" stroke-width="1.6" stroke-linejoin="round"><use href="#ic-sparkle"/></svg></span>
+          <span class="l">Model</span>
+          <span class="v">Ember · medium <svg class="i xs chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-updown"/></svg></span>
+        </div>
+
+        <div class="ctxdiv"></div>
+
+        <div class="composerbox">
+          <div class="ph">Ask DeepSeek…</div>
+          <div class="bar">
+            <div class="cbtn"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><use href="#ic-plus"/></svg></div>
+            <div class="cbtn"><svg class="i sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><use href="#ic-keyshield"/></svg></div>
+            <div class="cbtn"><svg class="i sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M5 7l14 5-14 5 3-5z"/></svg></div>
+            <div class="sendbtn"><svg class="i sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-arrowup"/></svg></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="kb">
+        <div class="kbsug"><span>the</span><span>I</span><span>to</span></div>
+        <div class="kbrow">
+          <div class="key">Q</div><div class="key">W</div><div class="key">E</div><div class="key">R</div><div class="key">T</div><div class="key">Y</div><div class="key">U</div><div class="key">I</div><div class="key">O</div><div class="key">P</div>
+        </div>
+        <div class="kbrow" style="padding:0 20px">
+          <div class="key">A</div><div class="key">S</div><div class="key">D</div><div class="key">F</div><div class="key">G</div><div class="key">H</div><div class="key">J</div><div class="key">K</div><div class="key">L</div>
+        </div>
+        <div class="kbrow" style="padding:0 6px">
+          <div class="key wide">⇧</div><div class="key">Z</div><div class="key">X</div><div class="key">C</div><div class="key">V</div><div class="key">B</div><div class="key">N</div><div class="key">M</div><div class="key wide">⌫</div>
+        </div>
+        <div class="kbrow last">
+          <div class="key mod">123</div><div class="key space">space</div><div class="key ret">return</div>
+        </div>
+      </div>
+      <div class="home-ind"></div>
+    </div>
+  </div>
+  <div class="cap"><b>3 · New session (the composer, opened)</b>Tapping the pill opens this: the four things that decide where the work runs,
+  then the field. Every row is a real control the host already answers. <i>Preset and Model replace the Codex reference's execution and branch rows.</i></div>
+  </div>
+
+  <!-- ================= 4. PROJECT ================= -->
+  <div class="col">
+  <div class="frame" id="project">
+    <div class="screen">
+      <div class="statusbar"><span>7:42</span><span class="sb-r">
+        <span class="sig"><i></i><i></i><i></i><i></i></span>
+        <svg class="wifi" viewBox="0 0 16 12" fill="none" stroke="#F5F5F7" stroke-width="1.4" stroke-linecap="round"><path d="M1.3 4.1a10 10 0 0113.4 0M3.7 6.7a6.6 6.6 0 018.6 0"/><circle cx="8" cy="9.8" r="1.15" fill="#F5F5F7" stroke="none"/></svg>
+        <span class="batt"><i></i></span></span></div>
+
+      <div class="nav">
+        <div class="iconbtn"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-chevL"/></svg></div>
+        <div class="title">homelab</div>
+        <div class="iconbtn"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><use href="#ic-ellipsis"/></svg></div>
+      </div>
+
+      <div class="body">
+        <div class="pathline">
+          <svg class="i xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><use href="#ic-folder"/></svg>
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">~/repo/homelab</span>
+          <span>9 sessions</span>
+        </div>
+
+        <div class="filter">
+          <svg class="i sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><use href="#ic-search"/></svg>
+          <span>Filter sessions</span>
+        </div>
+
+        <div class="newsession">
+          <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><use href="#ic-write"/></svg>
+          New session in homelab
+        </div>
+
+        <div class="dategroup">TODAY</div>
+        <div class="card srow">
+          <div style="flex:1;min-width:0">
+            <div class="t">Find NAS disk activity</div>
+            <div class="m"><span>2 min ago</span></div>
+          </div>
+          <span class="chip attn"><span class="dot" style="background:var(--attn)"></span>Needs input</span>
+        </div>
+        <div class="card srow">
+          <div style="flex:1;min-width:0">
+            <div class="t">Investigate Kiln03 GPU electrical z</div>
+            <div class="m"><span>2 hours ago</span></div>
+          </div>
+        </div>
+
+        <div class="dategroup">YESTERDAY</div>
+        <div class="card srow">
+          <div style="flex:1;min-width:0">
+            <div class="t">Explain cortex memory system</div>
+            <div class="m"><span>Yesterday, 4:18 pm</span></div>
+          </div>
+        </div>
+        <div class="card srow">
+          <div style="flex:1;min-width:0">
+            <div class="t">Troubleshoot CVP streaming status</div>
+            <div class="m"><span>Yesterday, 11:02 am</span></div>
+          </div>
+        </div>
+
+        <div class="dategroup">EARLIER</div>
+        <div class="card srow" style="margin-bottom:0">
+          <div style="flex:1;min-width:0">
+            <div class="t">Create Codex-style OpenCode theme</div>
+            <div class="m"><span>11 Oct</span></div>
+          </div>
+        </div>
+
+        <div style="text-align:center;font-size:15px;color:var(--accentText);padding:18px 0 10px">Show 4 older sessions</div>
+      </div>
+      <div class="home-ind"></div>
+    </div>
+  </div>
+  <div class="cap"><b>4 · A project, opened</b>The same workspace tree, as a destination instead of a disclosure — so there is room for every
+  session, grouped by date, newest first. <i>This is what the drawer's nested rows become.</i></div>
+  </div>
+
+</div>
+
+<div class="notes">
+  <h2>What moves where</h2>
+  <table>
+    <tr><th>Today</th><th>Proposed</th><th>Why</th></tr>
+    <tr>
+      <td>Drawer: workspace tree with sessions nested</td>
+      <td>Gone from the drawer. Projects are a section on Home; a project opens full-screen (4).</td>
+      <td>The tree needed the screen it did not have — expand state was lost every time, and reaching a session took four steps behind a modal.</td>
+    </tr>
+    <tr>
+      <td>Drawer: New session row + its explanatory caption</td>
+      <td>Gone. The floating composer (1) and the project screen's New session (4).</td>
+      <td>The drawer was a third way to do the same thing, and the caption existed to explain a button that should not need one.</td>
+    </tr>
+    <tr>
+      <td>Drawer: Harness fold (Usage, Plugins, Scheduled tasks) + Settings row</td>
+      <td>The whole drawer: Host, Harness (5 rows), Host (3 rows), About (2).</td>
+      <td>Rare, wide, administrative — exactly what a slide-over is for. Settings stops being a separate screen and becomes these rows.</td>
+    </tr>
+    <tr>
+      <td>Home: whale heading, host row, workspace card, mode controls, composer, "Continue a session"</td>
+      <td>Recents, then Projects. Composer floats. Workspace/preset/model move into the new-session screen (3).</td>
+      <td>Six stacked sections before the first session left no room for the sessions. The controls that only matter when creating now live where creating happens.</td>
+    </tr>
+    <tr>
+      <td>Home: host/status row across the top</td>
+      <td>Host and state live in the drawer's host card and the new-session Host row. Home shows a banner only when the state is not connected.</td>
+      <td>“Connected — Mac.fernlabs.net” was the first thing on the page every single time. The healthy case needs no space; the broken one does.</td>
+    </tr>
+    <tr>
+      <td>Home: recent sessions from the selected workspace only</td>
+      <td>Recents across every project, newest first, with live state.</td>
+      <td>"Return to work" does not care which project the work was in. The project is chosen when you start something, not when you resume it.</td>
+    </tr>
+    <tr>
+      <td>Session browser (a screen reachable two taps deep)</td>
+      <td>The project screen itself (4), with date groups and a filter.</td>
+      <td>Same idea, one less step: the project row on Home goes straight there.</td>
+    </tr>
+  </table>
+
+  <div class="q">
+    <b>Five calls I need from you — everything else I can decide.</b>
+    <ol>
+      <li><b>The whale / “Into the Unknown” heading.</b> Proposal: show it only when Home has nothing to list — it introduces the product instead of pushing your work below the fold. That is a deviation from UX spec “Home” item 4, so it is yours to call. Alternative: keep it, compact, above Recents.</li>
+      <li><b>Four recents, or more?</b> Four fills the first screen at this density. A “See all” link (drawn) covers the rest.</li>
+      <li><b>Pinned.</b> Not drawn. Codex has it; we currently have no pin concept. It slots above Recents if you want it, and it would need a host-side or phone-side store — say the word and I will price it.</li>
+      <li><b>New session: screen or sheet?</b> Drawn as a pushed screen with a back chevron, matching your second screenshot. A sheet is also possible — faster to dismiss, but the preset and model pickers nest badly.</li>
+      <li><b>Host in the toolbar?</b> I kept the DeepSeek Harness wordmark centred, per the UX spec, and put host plus connection in the drawer's host card and the new-session Host row. If you would rather see which Mac you are on from Home, the toolbar centre becomes the host name with a chevron — that is your reference screenshot's own arrangement.</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+  // #home, #panel, #new, #project render one frame alone (for per-screen captures).
+  const id = location.hash.slice(1);
+  if (id && document.getElementById(id)) {
+    document.body.classList.add('single');
+    document.querySelector('h1').style.display = 'none';
+    document.querySelector('.sub').style.display = 'none';
+    document.querySelector('.notes').style.display = 'none';
+    document.querySelectorAll('.col').forEach(function (c) {
+      if (!c.querySelector('#' + id)) c.style.display = 'none';
+    });
+    document.querySelector('.board').style.gap = '0';
+    var f = document.getElementById(id);
+    f.style.boxShadow = 'none';
+    f.style.border = 'none';
+    f.style.borderRadius = '0';
+    document.querySelectorAll('.cap').forEach(function (c) { c.style.display = 'none'; });
+    document.body.style.padding = '0';
+    document.body.style.background = '#141416';
+  }
+</script>
+</body>
+</html>

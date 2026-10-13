@@ -95,99 +95,51 @@ enum DSHSessionState: Equatable {
     var symbol: String? { nil }
 }
 
-/// A workspace row in the drawer: folder, name, and an expansion control
-/// (UX spec "Workspace drawer and session browser").
+/// A project row on Home: folder, name, what is in it, and where it goes.
 ///
-/// Selection and expansion are one action here, because that is what the
-/// drawer's rows do — expand the workspace and make it current. Splitting them
-/// would put two small targets in one row.
-struct WorkspaceRow: View {
-    let name: String
-    var isSelected = false
-    var isExpanded = false
-    var sessionCount: Int?
-    let toggle: () -> Void
-
-    var body: some View {
-        Button(action: toggle) {
-            HStack(spacing: DSHMetrics.space) {
-                Image(systemName: isExpanded ? "folder.fill" : "folder")
-                    .foregroundStyle(isSelected ? DSHPalette.primaryActionText : DSHPalette.secondaryText)
-                    .accessibilityHidden(true)
-                Text(name)
-                    .font(.dshSupporting)
-                    .foregroundStyle(DSHPalette.primaryText)
-                    .lineLimit(1)
-                if let sessionCount {
-                    Text("\(sessionCount)")
-                        .font(.dshMetadata)
-                        .foregroundStyle(DSHPalette.secondaryText)
-                        .accessibilityLabel("\(sessionCount) sessions")
-                }
-                Spacer(minLength: DSHMetrics.space)
-                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                    .font(.footnote)
-                    .foregroundStyle(DSHPalette.secondaryText)
-                    .accessibilityHidden(true)
-            }
-            .padding(.horizontal, DSHMetrics.spaceCard)
-            .padding(.vertical, DSHMetrics.space + 2)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            // A selected row is the elevated surface, per the token table.
-            .background(isSelected ? DSHPalette.elevatedSurface : Color.clear)
-            .clipShape(RoundedRectangle(cornerRadius: DSHMetrics.spaceCard, style: .continuous))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isButton)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
-        .accessibilityHint(isExpanded ? "Collapses this workspace" : "Expands this workspace")
-    }
-}
-
-/// A session row nested under its workspace: conversation icon and title,
-/// indented with one guide line rather than a deep tree.
-struct DrawerSessionRow: View {
+/// A row rather than a card, so the list of projects stays visually quieter than the
+/// sessions above it: cards are things you talk to, rows are places they live. The count
+/// comes from the same value the project's own screen lists, so the two cannot disagree.
+struct ProjectRow: View {
     let title: String
-    var state: DSHSessionState?
-    var isSelected = false
+    let sessionCount: Int
+    var activeCount = 0
     let open: () -> Void
+
+    private var supporting: String {
+        let sessions = sessionCount == 1 ? "1 session" : "\(sessionCount) sessions"
+        // "0 active" is a measurement of nothing; it is left out rather than drawn.
+        return activeCount > 0 ? "\(sessions) · \(activeCount) active" : sessions
+    }
 
     var body: some View {
         Button(action: open) {
             HStack(spacing: DSHMetrics.space) {
-                // The guide line carries the hierarchy; the indent is the
-                // spec's "modest indent", not a nested disclosure.
-                Rectangle()
-                    .fill(DSHPalette.divider)
-                    .frame(width: 1)
-                    .frame(height: 28)
+                Image(systemName: "folder")
+                    .foregroundStyle(DSHPalette.secondaryText)
                     .accessibilityHidden(true)
-                Image(systemName: "text.bubble")
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title.isEmpty ? "Untitled project" : title)
+                        .font(.dshCardTitle)
+                        .foregroundStyle(DSHPalette.primaryText)
+                        .lineLimit(1)
+                    Text(supporting)
+                        .font(.dshMetadata)
+                        .foregroundStyle(DSHPalette.secondaryText)
+                }
+                Spacer(minLength: DSHMetrics.space)
+                Image(systemName: "chevron.right")
                     .font(.footnote)
                     .foregroundStyle(DSHPalette.secondaryText)
                     .accessibilityHidden(true)
-                Text(title.isEmpty ? "Untitled session" : title)
-                    .font(.dshSupporting)
-                    .foregroundStyle(DSHPalette.primaryText)
-                    .lineLimit(2)
-                Spacer(minLength: DSHMetrics.space)
-                if let state {
-                    DSHStatusChip(state.text, tone: state.tone, symbol: state.symbol)
-                        .fixedSize()
-                }
             }
-            .padding(.horizontal, DSHMetrics.spaceCard)
-            .padding(.vertical, DSHMetrics.space)
+            .padding(.vertical, DSHMetrics.space + 2)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(isSelected ? DSHPalette.elevatedSurface : Color.clear)
-            .clipShape(RoundedRectangle(cornerRadius: DSHMetrics.spaceCard, style: .continuous))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityHint("Opens this project")
     }
 }
