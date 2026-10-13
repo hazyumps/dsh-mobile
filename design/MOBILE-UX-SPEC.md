@@ -106,7 +106,13 @@ Use brief native transitions when opening the drawer, expanding a card, or chang
 
 ## Navigation and returning to work
 
-The root is the current host’s work, with a drawer for switching context. Host administration moves into Settings and the host row; it is not the normal landing screen after pairing.
+The root is the current host's work, organised by project. The drawer holds harness
+administration and nothing else: workspaces and sessions left it in the 2026-10-12 redesign,
+because a two-level tree behind a modal needed the screen it did not have — reaching one
+session took four steps and the expand state was lost every time the drawer closed.
+
+Two shapes, and the split is the whole idea. Work is frequent and deep, so it gets the full
+screen. Administration is rare and wide, so it keeps the slide-over.
 
 | Situation | Destination |
 | --- | --- |
@@ -120,7 +126,9 @@ The root is the current host’s work, with a drawer for switching context. Host
 
 Persist host, workspace, and last-session identifiers separately. An address change must not create a new logical host or move drafts into a different account. Switching hosts is an explicit action and closes the previous host’s connection.
 
-Use standard navigation and sheets for details. There is no required bottom tab bar. The drawer contains global destinations, workspaces, and recent sessions; the composer remains the dominant bottom control while chatting.
+Use standard navigation and sheets for details. There is no required bottom tab bar. The drawer
+contains the host and the harness destinations; the composer remains the dominant bottom control
+while chatting.
 
 ## Home and starting a session
 
@@ -128,17 +136,33 @@ Use standard navigation and sheets for details. There is no required bottom tab 
 
 From top to bottom:
 
-1. Compact toolbar: drawer control, DeepSeek Harness identity, contextual menu.
-2. Host/status row showing the selected host and a text state.
-3. Selected workspace context, where it adds useful orientation.
-4. Whale and “Into the Unknown” heading, with generous but responsive spacing.
-5. Workspace and mode controls.
-6. Large rounded composer.
-7. “Continue a session” with recent-session cards and “View all sessions.”
+1. Compact toolbar: drawer control and DeepSeek Harness identity.
+2. A non-connected banner, when the state is not connected. Nothing in the healthy case.
+3. “Recents”: the last four sessions across every project, newest first, each with its project
+   and its live state. Four fills the first screen at this density; “See all” is not offered,
+   because the projects below are the way to everything else.
+4. “Projects”: one row per workspace, most recently worked in first, with its session count and
+   how many are running.
+5. The composer, as a bottom inset rather than a section of the page.
 
-The “Preview” badge in the reference is optional release metadata. Show it only when it describes the actual app release. Do not reserve a permanent badge solely to match the image.
+**Correction to this section (2026-10-12):** items 2, 3, 5 and 6 of the previous ordering — the
+host row, the selected-workspace context, the workspace and mode controls, and the scroll-position
+composer — are on the new-session screen instead, at `Home → composer`. The reason is that all
+four only matter when something is being started, and stacking them on Home put six sections
+between the app opening and the first session. The composer moved out of the scroll because it is
+the one control that must not scroll away.
 
-With the keyboard open, reduce the decorative heading area and prioritize the composer. On smaller phones, allow the page to scroll rather than squeezing controls. Stack workspace and mode selectors if they do not fit at accessible text sizes.
+**Correction, whale heading:** the heading is now drawn on Home only when there is nothing to
+list. It introduces the product in the state that has nothing else to say; above a list of work it
+only pushed the work down. This reverses the earlier "unconditionally" wording, deliberately.
+
+The “Preview” badge in the reference is optional release metadata. Show it only when it describes
+the actual app release. Do not reserve a permanent badge solely to match the image.
+
+With the keyboard open, Home has no field, so there is nothing to reduce. The new-session screen
+anchors its context rows and composer to the bottom, above the keyboard, and scrolls when the text
+size makes the block taller than the space. On smaller phones the page scrolls rather than
+squeezing controls. Stack workspace and mode selectors if they do not fit at accessible text sizes.
 
 ### Workspace and mode
 
@@ -158,25 +182,49 @@ If creation or delivery has an unknown outcome, preserve the draft and reconcile
 
 If session creation is unsupported by the connected host, keep the existing-session experience usable and show “Start this session on your computer.” Do not show an enabled Send that cannot work.
 
-## Workspace drawer and session browser
+## The harness panel and projects
 
-The drawer follows the web app’s organization:
+The drawer is the harness panel. From top to bottom:
 
 - Brand lockup and a clearly reachable close control.
-- Prominent New session button.
-- Plugins, Scheduled tasks, MCP, and Usage when supported by the delivered app and connected host.
-- Workspaces heading with search.
-- Folder rows, with the selected workspace highlighted and expanded.
-- Session rows nested under the expanded workspace.
-- Host/status row and Settings at the bottom.
+- The host card: the selected host, its connection state and session count, and the control
+  that switches hosts. This is the one fact the panel must never bury.
+- **Harness**: Model & mode, Plugins, Usage, Scheduled tasks, Diagnostics.
+- **Host**: Hosts & pairing, This phone, Reminders.
+- **About**: Version, read from the bundle rather than written into the view.
 
-Use a leading overlay approximately 85–90% of the screen width, bounded to a sensible maximum on larger layouts. Keep a visible dismiss area and support tapping outside. At accessibility sizes, use a full-width presentation if the overlay would clip content. The drawer’s content scrolls; its footer must never cover the final workspace row.
+A row's trailing value is optional, and its absence means unknown, not zero. A count this phone
+has not read is not "0".
 
-Workspace rows have a folder icon, name, and expansion control. Session rows have a conversation icon and title. Keep the hierarchy clear with a modest indent and one optional guide line, not a deeply nested tree.
+**Correction (2026-10-12):** the previous contents of this section — the workspaces heading and
+search, folder rows with expansion, nested session rows, the New session button, and the host and
+Settings footer — are gone. Workspaces and sessions are Home's Projects section and the project
+screen below. Settings is no longer a screen: its sections *are* the drawer's rows, so there is
+one place to look rather than a screen that lists doors to other screens.
 
-Search initially filters loaded workspace names and session titles. Label the scope; do not imply full-history server search. An empty search shows the query and a clear reset action.
+Use a leading overlay approximately 85–90% of the screen width, bounded to a sensible maximum on
+larger layouts. Keep a visible dismiss area and support tapping outside. At accessibility sizes,
+use a full-width presentation if the overlay would clip content. The panel's content scrolls.
 
-“View all sessions” opens the selected workspace’s complete available list, with pagination if the host supplies it. Preserve list scroll position when returning from a conversation. A session card shows title, a short supporting line when available, and a meaningful status or last activity. Do not invent summaries from unread content.
+### A project
+
+A project row opens the project's own screen, which is what the drawer's tree used to be:
+
+- The workspace path and its session count.
+- A local filter over the loaded session titles, labelled as local rather than presented as a
+  host-side search.
+- New session, in that project.
+- Every session the project holds, newest first, under **Today**, **Yesterday**, **Earlier**
+  headings. A span with nothing in it is omitted rather than drawn empty, and a session the host
+  did not date gets its own **No date reported** heading — "Earlier" would assert it is old, and
+  the host never said that.
+
+Subagent sessions are excluded from Home's recents and from a project's list, and from the count
+the project row reports, so the row and the screen it opens agree. They count towards a project's
+recency: they are the project being worked in.
+
+A session card shows title, a short supporting line when available, and a meaningful status or
+last activity. Do not invent summaries from unread content.
 
 | Session state | Presentation |
 | --- | --- |
@@ -186,7 +234,24 @@ Search initially filters loaded workspace names and session titles. Label the sc
 | Inactive | Relative last activity, if supplied |
 | Connection stale | Neutral cached presentation; do not keep asserting live running status |
 
-Use the workspace registry as the source of organization. Grouping solely by session `cwd`, as the current app does, is a fallback and can miss empty workspaces or renamed labels.
+Use the workspace registry as the source of organization. Grouping solely by session `cwd`, as the
+current app does, is a fallback and can miss empty workspaces or renamed labels.
+
+### New session
+
+The composer on Home opens a screen of four context rows above the field:
+
+| Row | What it decides |
+| --- | --- |
+| Host | Which harness the session runs on |
+| Project | The workspace it belongs to |
+| Preset | The agent preset, which the host locks once a turn has started |
+| Model | The model and its reasoning effort |
+
+The rows are read top to bottom before anything is typed, and the screen says that nothing reaches
+the host until Send. Opening it creates nothing (SPEC §5). Each row is a real control the host
+answers, and a row whose data has not been read says so with a way to load it — never a control
+that silently disappears.
 
 ## Conversation screen
 
@@ -299,9 +364,14 @@ Never include credentials, pairing codes, draft text, messages, or tool argument
 
 ## Settings and secondary sections
 
+**Correction (2026-10-12):** there is no Settings screen. Its contents are the harness panel's
+rows, one destination each: Hosts & pairing (host selection, pairing, connection details and the
+pinned key), This phone (display name), Reminders (the notification permission), Model & mode,
+Diagnostics, and the version in About.
+
 | Destination | First useful implementation | Later expansion |
 | --- | --- | --- |
-| Settings | Appearance, host selection/pairing, display name, version, connection details, redacted diagnostics | Additional preferences justified by actual use |
+| Hosts & pairing | Host selection/pairing, connection details, display name, redacted diagnostics | Appearance and further preferences justified by actual use |
 | Plugins | Read installed plugin names and available status through a verified endpoint | Enable/disable/install only after supported write behavior and consequences are designed |
 | Scheduled tasks | Read schedules, next-run data, and history when returned by the host | Create/edit/pause after the scheduling contract is exercised |
 | MCP | Read host-reported server/tool status when an appropriate API is verified | Configuration management as a separate scoped feature |
