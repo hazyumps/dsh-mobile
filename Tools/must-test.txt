@@ -1,0 +1,19 @@
+# Files whose line coverage may not fall below a floor, whatever the kit total does.
+# These are the security-critical and data-loss-critical paths (docs/process/RISK-FLAGS.md).
+#
+# <path under Sources/DSHRemoteKit>      <floor %>   # why
+# Floors are set a few points under the coverage measured on 2026-10-13, so they catch a real
+# loss rather than run-to-run wobble. Raise a floor when you add tests; never lower one without
+# saying why in the commit.
+#
+# Network/RelayTransport.swift is the TLS/SPKI trust decision and sits at 40.7% today: it joins
+# this list once #68 gives it unit tests.
+
+Network/SPKIPin.swift                    95   # the trust anchor (SPEC §6.3)
+Models/PairingPayload.swift              80   # pairing input from outside the app
+Network/PairingClient.swift              90   # single-use claim
+Network/DshRpcClient.swift               95   # mutate: writes are never retried
+Network/RelayExchange.swift              80   # the retry loop itself
+Persistence/KeychainStore.swift          80   # the device token
+Persistence/SavedHostStore.swift         90   # hosts.json
+Persistence/DraftStore.swift             80   # drafts.json, navigation.json

@@ -1,0 +1,49 @@
+#!/bin/bash
+# Runs Tools/check.sh before anything leaves this machine. There is no CI server yet, so this
+# hook *is* CI (docs/process/WORKFLOW.md, "Local CI"). Installed by Tools/setup-dev.sh, which
+# points core.hooksPath at .githooks/.
+#
+# Mode is chosen from what is being pushed:
+#   - the tip commit's subject starts with "Tests:"  -> check.sh --red  (must compile, must fail)
+#   - only docs changed since main (*.md, docs/, design/) -> check.sh --fast
+#   - anything else                                   -> check.sh       (full, with app builds)
+#
+# Escape hatch: `git push --no-verify`. Legitimate for parking a red branch (say so on the issue)
+# and for nothing else; the PR template asks whether the hook ran.
+set -uo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+zero="0000000000000000000000000000000000000000"
+head="$(git rev-parse HEAD)"
+
+while read -r local_ref local_sha _remote_ref _remote_sha; do
+  [[ "$local_sha" == "$zero" ]] && continue   # deleting a remote branch
+  commit="$(git rev-parse "$local_sha^{commit}")"
+  if [[ "$commit" != "$head" ]]; then
+    echo "pre-push: $local_ref is not the checked-out commit; the checks run on the working tree."
+    echo "          Check it out and push from there, or use --no-verify knowingly."
+    exit 1
+  fi
+done
+
+if ! git diff --quiet HEAD --; then
+  echo "pre-push: uncommitted changes to tracked files. The hook checks what you push, so commit"
+  echo "          or stash them first."
+  exit 1
+fi
+
+subject="$(git log -1 --format=%s HEAD)"
+mode=""
+if [[ "$subject" == Tests:* ]]; then
+  mode="--red"
+else
+  base="$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD main)"
+  changed="$(git diff --name-only "$base" HEAD 2>/dev/null || true)"
+  if [[ -n "$base" && -n "$changed" ]] && ! printf "%s\n" "$changed" | grep -vE '(\.md$|^docs/|^design/)' > /dev/null; then
+    mode="--fast"
+  fi
+fi
+
+echo "pre-push: Tools/check.sh ${mode:-(full)}"
+exec Tools/check.sh $mode
