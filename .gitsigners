@@ -1,0 +1,12 @@
+# Who may sign commits and tags in this repo: an SSH allowed_signers file (man ssh-keygen,
+# "ALLOWED SIGNERS"). Tools/setup-dev.sh points gpg.ssh.allowedSignersFile here, so
+# `git log --show-signature` and `git tag -v` verify every teammate, not just yourself.
+#
+# Format: <email> namespaces="git" <key type> <public key>
+# Public keys only. Add yours in the same PR that adds you as a committer.
+#
+# Patrick: signing key fingerprint SHA256:WZqRbxpttXvr1aK8hKjprcwLnCYq3vAT9v5lAlqwdUk (from
+# `git log --format=%GK`). It is not among the keys gitea publishes for the account, so it has to
+# be added by hand: append the line printed by
+#   echo "patrick@fernlabs.net namespaces=\"git\" $(cat <your signing key>.pub | cut -d' ' -f1,2)"
+dan.lambert4@gmail.com namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBItqgA2tmEFIx4NADXQMOeby2SxtHYE5/j51RXO+0JV

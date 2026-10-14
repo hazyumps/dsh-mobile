@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Tools/check.sh)",
+      "Bash(Tools/check.sh:*)",
+      "Bash(Tools/lint.sh)",
+      "Bash(Tools/check-version.sh)",
+      "Bash(Tools/guard-tests.sh:*)",
+      "Bash(Tools/coverage.sh:*)",
+      "Bash(python3 Tools/generate-models.py --check)",
+      "Bash(swift build:*)",
+      "Bash(swift test:*)",
+      "Bash(xcodegen generate:*)",
+      "Bash(xcodebuild:*)",
+      "Bash(xcrun simctl list:*)",
+      "Bash(git status:*)",
+      "Bash(git log:*)",
+      "Bash(git diff:*)",
+      "Bash(git show:*)",
+      "Bash(git worktree list:*)",
+      "Bash(tea issues list:*)",
+      "Bash(tea pulls list:*)"
+    ],
+    "ask": [
+      "Bash(git push:*)",
+      "Bash(git tag:*)",
+      "Bash(tea pulls create:*)",
+      "Bash(tea pulls merge:*)",
+      "Bash(tea issues close:*)",
+      "Bash(tea comments:*)"
+    ],
+    "deny": [
+      "Bash(git push --no-verify:*)",
+      "Bash(git push -f:*)",
+      "Bash(git push --force:*)"
+    ]
+  }
+}

@@ -56,7 +56,7 @@ build needs no identity.
 Tests run without Xcode:
 
 ```sh
-swift test --disable-sandbox     # 450 tests across 31 suites
+swift test --disable-sandbox     # the kit suite; Tools/check.sh runs everything
 ```
 
 `--disable-sandbox` is needed because SwiftPM's manifest cache lives outside the working tree.
@@ -86,7 +86,14 @@ each one; `DSH_TRACE=1` with `xcrun simctl launch --console-pty` prints a decisi
 
 Read [AGENTS.md](AGENTS.md) first — it carries the conventions: semantic versioning, test-driven
 development with a planner who writes the tests and a builder who passes them, signed commits,
-and the rules for working against a real harness.
+and the rules for working against a real harness. The procedure is in
+[docs/process/](docs/process/WORKFLOW.md); new to iOS? Start with the
+[primer](docs/process/IOS-PRIMER.md).
+
+```sh
+Tools/setup-dev.sh      # once: git hook, signers file, toolchain check
+Tools/check.sh          # what "green" means; the pre-push hook runs it
+```
 
 Issues are the front door: features, host gaps and papercuts all belong there. If you are
 changing the transport or a store, run `swift test` and expect a fixture to be the right place
