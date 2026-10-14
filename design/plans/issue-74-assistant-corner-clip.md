@@ -391,19 +391,99 @@ rather than changed.
 
 ## Verification
 
-To be filled in by the verifier. Planned:
+Verified 2026-10-14 on `3e1c79a` by a verifier agent (Claude Code) that built neither slice.
+Every undo was an uncommitted change, restored with `git revert --abort` or
+`git checkout -- <file>`, and followed by a green run. The app tests ran on the dedicated "DSH Remote Tests"
+simulator (`355F197E-5390-4BEC-A835-5BDC2D9DFE42`). The undo runs used the inner-loop command in
+`WORKFLOW.md` "Local CI", or `Tools/check.sh` where noted.
 
-| AC | Undone how | Expected failure with it undone |
-|---|---|---|
-| AC1 | put the `.clipShape(...)` line back on `MessageRow` (stash the Slice B fix) | AC1 fails with the ink-loss message for the top-left corner |
-| AC2 | same | AC2 fails with the ink-loss message for the bottom-left corner |
-| AC3 | replace the user bubble's `RoundedRectangle` fill with a square fill (`Rectangle()`, or `.background(DSHPalette.elevatedSurface)` with no clip) | AC3 fails because the corner pixel is filled. With only the clip put back (the AC1 probe), AC3 still passes. |
-| AC4 | not applicable | Screenshot of `DSH_SCREEN_GALLERY=conversation`: the new message's "T" and "n" are whole at 3×. Shown to Dan, not committed. |
-| AC5 | probes, as in #62 | full mode on Slice A shows "app tests" passing; a scratch failing app test turns full mode red at "app tests"; a scratch app test that does not compile is reported as a compile failure, distinctly; `--red` on the `Tests:` commit gives "red: ok" with the kit green and the app suite failing; `--red` with every test passing gives "every test passed"; with no "DSH Remote Tests" simulator, the first run creates it and the second reuses it (one entry in `xcrun simctl list devices`), and neither run boots the review simulator; `DSH_TEST_SIMULATOR=<udid>` runs on that device; a bogus `DSH_TEST_SIMULATOR` fails with a hint; `--fast` runs no app tests |
+**`Tools/check.sh` (full): green.** It printed `check: green (full, 76s)` on `3e1c79a`, and
+`check: green (full, 78s)` again after every probe below was restored. Each time, 501 kit tests in
+36 suites passed, coverage was 86.70% against a baseline of 86.70% (it did not rise, so the
+baseline needs no update), and 4 app tests in 2 suites passed.
 
-- `Tools/check.sh`: green / red
-- Risk checklist: not applicable (no S-flag). For C6, the by-eye check of AC4 is recorded above.
-- Optional, on the phone: the session from the original report no longer cuts letters.
+| AC | Undone how | Observed with it undone | Restored |
+|---|---|---|---|
+| AC1 | `git revert --no-commit 0e8f16d`, which puts `.background(message.role == .user ? DSHPalette.elevatedSurface : Color.clear)` and `.clipShape(RoundedRectangle(cornerRadius: DSHMetrics.cardCornerRadius, style: .continuous))` back on `MessageRow` | `✘ Test "AC1: assistant prose keeps its top-left corner" recorded an issue at MessageRowRenderTests.swift:97:9: Expectation failed: rowInk >= referenceInk` / `↳ the assistant row lost 50 px of ink in its top-left 16pt corner (row 498, unclipped 548)` | `git revert --abort`; app tests 4/4 pass, `swift test` 501 pass |
+| AC2 | the same tree | `✘ Test "AC2: assistant prose keeps its bottom-left corner" … Expectation failed: rowInk >= referenceInk` / `↳ the assistant row lost 54 px of ink in its bottom-left 16pt corner (row 521, unclipped 575)` | the same |
+| AC3 | (a) the same tree, with only the clip put back. (b) The rounded fill replaced with `.background(message.role == .user ? DSHPalette.elevatedSurface : Color.clear)` and no clip. (c) Beyond the plan: the user fill removed altogether, to test AC3's second assertion | (a) `✔ AC3`, as planned. (b) `✘ … Expectation failed: cornerAlpha == 0` / `↳ the user bubble's top-left corner pixel is filled (alpha 255): the bubble lost its rounded corner`; AC1 and AC2 pass. (c) `✘ … Expectation failed: edgeAlpha > 0` / `↳ the user bubble is empty 16pt along its top edge (alpha 0): the bubble lost its fill`; AC1 and AC2 pass | `git checkout -- Apps/DSHRemote/Sources/ConversationTranscript.swift`; app tests 4/4 pass, `swift test` 501 pass |
+| AC4 | not undone by a test: checked by eye (C6), on the fixed build and with the bug put back | below | below |
+| AC5 | probes | below | n/a |
+
+The AC1 and AC2 pixel counts match the Red evidence exactly, so the render is deterministic.
+
+**AC4, checked by eye.** All screenshots are of `DSH_SCREEN_GALLERY=conversation` in light
+appearance. They are kept in `/tmp`, not committed.
+
+- **Fixed build.** I checked the builder's screenshot and 3× crop, and took a screenshot of my own
+  from the same build. The new message is the first row after the "Some of this conversation is
+  missing." notice, with no Reasoning row.
+  - Its first line, "The step ended before its durable", starts with a whole "T": the crossbar
+    reaches the left edge.
+  - Its last line, "no more frames arrived after that one.", starts with an "n" whose left stem is
+    whole from top to bottom.
+  - Both lines are far wider than 32pt.
+- **Bug put back.** I reverted `0e8f16d` without committing, built Debug, installed it on "DSH
+  Remote Tests" and launched it with `SIMCTL_CHILD_DSH_SCREEN_GALLERY=conversation`.
+  - The same message reads "Ihe", with the left half of the T's crossbar gone, and "ɿo", with the
+    top of the n's stem gone.
+  - So the fixture shows the bug when it is present, which #33 item 4 could not.
+  - Afterwards the simulator was shut down, and the next `Tools/check.sh` reinstalled the fixed
+    app on it.
+
+**AC5 probes.**
+
+| Probe | Result |
+|---|---|
+| `--red` with AC1 and AC2 failing (`0e8f16d` reverted) | `red: ok it compiles and fails on assertions (kit: pass, app: fail; logs in .build/check).` / `check: ok — red for the right reason (70s)`. That run took 671 s for the planner before `67386e0`. This log has no "Failure collecting diagnostics". |
+| Full mode with AC1 and AC2 failing | `app tests: FAIL a test failed` / `check: RED (full, 115s)` / `- app tests` |
+| `--red` with every test passing (clean `3e1c79a`) | `red: FAIL every test passed. A planner test that passes before the change guards nothing.` / `check: RED (red, 67s)` |
+| A scratch app test that does not compile (an untracked file, deleted afterwards) | `error: cannot find 'thisSymbolDoesNotExist' in scope` / `app tests: FAIL the app or Tests/DSHRemoteTests does not compile` / `check: RED (full, 56s)` / `- app tests do not compile` |
+| `DSH_TEST_SIMULATOR=00000000-BOGUS-0000-0000-000000000000`, with `--red` | "DSH_TEST_SIMULATOR=… names no available iOS simulator. Pick a UDID from xcrun simctl list devices available, or unset it to use "DSH Remote Tests"." / `check: RED (red, 7s)` |
+| `--fast` | `check: green (fast, 20s)`. The output has no line about an app build, app tests, a simulator or xcodebuild. |
+| Simulator reuse | Every run printed `simulator: 355F197E-5390-4BEC-A835-5BDC2D9DFE42 "DSH Remote Tests" (Shutdown)`. `xcrun simctl list devices` lists one "DSH Remote Tests". |
+| Nothing left booted | After every run, `xcrun simctl list devices` showed no booted device. The script targets the test simulator by UDID, so the review simulator ("iPhone 18 Pro") was never booted. |
+
+Not re-run by the verifier:
+
+- the first run creating the dedicated simulator, because that means deleting it;
+- `DSH_TEST_SIMULATOR=<a real UDID>`, because that installs the app on a second simulator.
+
+The other checks:
+
+- **Version impact: PATCH, confirmed.** This is a bug fix, the first row of the table in
+  `RELEASING.md`.
+  - Against `43cace2`, the branch changes nothing in `Sources/`, `Package.swift`, `Protocol/` or
+    `Info.plist`.
+  - `project.yml` adds only the test target and a scheme `test:` action. `Tools/check-version.sh`
+    reports `0.2.0 (238)`, and there is no bump.
+  - Under `## [Unreleased]`, `CHANGELOG.md` has the `### Fixed` line "Assistant replies no longer
+    lose the left edge of their first and last letters (#74)." It also has the test-target line
+    under "Added (process, no version impact)".
+- **Risk flags: no S-flag is touched**, and I agree with the plan.
+  - **S7:** the branch's Swift diff adds no `DSH_*` read, no `ProcessInfo` environment read, and
+    nothing under `#if DEBUG`. The gallery change is fixture text behind the existing
+    `DSH_SCREEN_GALLERY`. `DSH_TEST_SIMULATOR` appears only in `Tools/check.sh` and `WORKFLOW.md`,
+    and nothing under `Apps/`, `Sources/` or `Tests/` reads it.
+  - **S8:** no `info:` key or entitlement changes.
+  - **S9:** the renders stay in memory, and the test logs go to the git-ignored `.build/check/`.
+  - **C6:** covered by the render tests and the by-eye AC4 check above.
+- **Planner tests:** `guard-tests: ok`. `MessageRowRenderTests.swift` is unchanged since `8e121c7`.
+- **Optional, on the phone:** not done.
+
+**Findings.** Every test fails with its fix undone; nothing blocks the merge. For the reviewer:
+
+1. **The clip also cut a right-hand corner.** With the bug back, the gallery message's last line
+   lost its trailing period ("that one" instead of "that one."). That line is the widest, so its
+   end sits in the bottom-right corner. The fix restores the period.
+   - No test watches the right corners. A rounded clip that came back would cut the left corners
+     too, which AC1 and AC2 catch.
+   - The CHANGELOG line names only the reported symptom.
+2. **The plan's Status line is out of date.** It says the approval "is not yet recorded as a 'plan
+   approved' comment on #74". Both gate-1 records are now on #74: "Plan approved" and "Tests
+   reviewed", by @dan at 18:33, after the `Tests:` commit (18:18) and before Slice B (18:35). The
+   verifier edits only this section, so the line is left for the orchestrator. Since an agent
+   cannot hold a gate, the reviewer may want to confirm that Dan posted or authorised both.
 
 ## Notes for the next person
 
