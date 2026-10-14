@@ -1,10 +1,10 @@
 # Issue #74: Assistant messages lose the first letter of their first and last lines
 
-**Status:** approved (Dan, 2026-10-14, in a Claude Code session; the content was approved before it
-was transcribed here, and is not yet recorded as a "plan approved" comment on #74). The planner
-raised questions while transcribing. The orchestrator resolved them the same day, consistent with
-Dan's intent, and will show Dan the changes at the tests gate (see "Questions raised at
-transcription, and their resolutions").
+**Status:** built and verified. Approved by Dan on 2026-10-14 in a Claude Code session, before it
+was transcribed here. The planner raised questions while transcribing, and the orchestrator
+resolved them the same day (see "Questions raised at transcription, and their resolutions"). Dan
+saw those changes at the tests gate, approved the tests, and authorised both gate-1 comments on
+#74 ("Plan approved", "Tests reviewed"), which the orchestrator posted from his account.
 **Branch:** `issue-74-assistant-corner-clip`
 **Version impact:** PATCH. A user-visible fix with no change to a persisted format, the pairing
 format or the public kit API (`docs/process/RELEASING.md`). The test-target plumbing is process
