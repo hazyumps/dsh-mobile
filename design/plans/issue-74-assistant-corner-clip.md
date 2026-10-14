@@ -2,8 +2,9 @@
 
 **Status:** approved (Dan, 2026-10-14, in a Claude Code session; the content was approved before it
 was transcribed here, and is not yet recorded as a "plan approved" comment on #74). The planner
-raised questions while transcribing; see "Open questions". Question 1 needs an answer before the
-tests phase.
+raised questions while transcribing. The orchestrator resolved them the same day, consistent with
+Dan's intent, and will show Dan the changes at the tests gate (see "Questions raised at
+transcription, and their resolutions").
 **Branch:** `issue-74-assistant-corner-clip`
 **Version impact:** PATCH. A user-visible fix with no change to a persisted format, the pairing
 format or the public kit API (`docs/process/RELEASING.md`). The test-target plumbing is process
@@ -63,14 +64,21 @@ test fails if the clip comes back.
   transparent and the pixel at `(left + cardCornerRadius, top + 1pt)` is filled. This catches a
   fix that drops the rounding along with the clip.
 - **AC4**: `DSH_SCREEN_GALLERY=conversation` shows an assistant message with no reasoning whose
-  first line starts with "T" and whose last line starts with "n", so the corners can be reviewed
-  by eye. This closes the gap that made #33 item 4 unreproducible.
+  first line starts with "T" and whose last line starts with "n", both lines well over 32pt wide,
+  so the corners can be reviewed by eye. This closes the gap that made #33 item 4 unreproducible.
 - **AC5**: `Tools/check.sh` runs the app tests.
   - **Full mode** has an "app tests" step after the Debug and Release builds. It runs `xcodebuild
     build-for-testing`, then `test-without-building` on a simulator, so a compile error and a
     failing test give different messages.
-  - **Simulator choice:** `DSH_TEST_SIMULATOR` if it is set, otherwise the first available iPhone
-    from `xcrun simctl list devices available -j`. If there is none, the check fails with a hint.
+  - **Simulator choice:** `DSH_TEST_SIMULATOR` if it is set. Otherwise a **dedicated** simulator
+    named "DSH Remote Tests":
+    - `xcrun simctl create` makes it on the first run, from an available iPhone device type and
+      the newest installed iOS runtime;
+    - later runs reuse it;
+    - it is never the first available simulator, or any simulator used for review.
+
+    If `DSH_TEST_SIMULATOR` names no available device, or no iOS runtime or iPhone device type is
+    installed, the check fails with a hint.
   - **`--red`** accepts a `Tests:` commit when the kit tests and the app test target both
     **compile**, nothing crashes, and **at least one** of the two suites fails on assertions. It
     reports "every test passed" only when both suites pass.
@@ -80,8 +88,8 @@ test fails if the clip comes back.
 
 | AC | Suite / file | Test name | Fails today because |
 |---|---|---|---|
-| AC1 | `MessageRowRenderTests`, `Tests/DSHRemoteTests/MessageRowRenderTests.swift` | `@Test("AC1: assistant prose keeps its top-left corner") func assistantProseKeepsItsTopLeftCorner()` | The row's 16pt continuous `clipShape` removes the top-left of the "T". Expected message: "the assistant row lost N px of ink in its top-left 16pt corner (row M, unclipped K)". **With the approved sample `"T\n\nn"` this prediction does not hold (Open question 1).** |
-| AC2 | same | `@Test("AC2: assistant prose keeps its bottom-left corner") func assistantProseKeepsItsBottomLeftCorner()` | The same clip removes the lower left of the "n"'s stem. Same message shape, for the bottom-left corner. Same caveat. |
+| AC1 | `MessageRowRenderTests`, `Tests/DSHRemoteTests/MessageRowRenderTests.swift` | `@Test("AC1: assistant prose keeps its top-left corner") func assistantProseKeepsItsTopLeftCorner()` | The row's 16pt continuous `clipShape` removes the top-left of the "T". Expected message: "the assistant row lost N px of ink in its top-left 16pt corner (row M, unclipped K)". A scratch macOS probe with this sample measured 69 px lost at scale 3; the iOS number will differ. |
+| AC2 | same | `@Test("AC2: assistant prose keeps its bottom-left corner") func assistantProseKeepsItsBottomLeftCorner()` | The same clip removes the lower left of the "n"'s stem. Same message shape, for the bottom-left corner. The probe measured 70 px lost. |
 | AC3 | same | `@Test("AC3: a user bubble keeps its rounded, filled corners") func userBubbleKeepsItsRoundedCorners()` | **Does not fail today, by design.** It is the scope guard. The verifier proves it guards something by replacing the bubble's rounded fill with a square one (see Verification). |
 | AC4 | none (by eye, per risk flag C6) | none | Today the gallery has no assistant message with a straight-edged glyph in either corner. Checked by eye: `SIMCTL_CHILD_DSH_SCREEN_GALLERY=conversation xcrun simctl launch …`, then `xcrun simctl io booted screenshot`. At 3× magnification the "T" and "n" of the new message have full left edges. The screenshot is shown to Dan, not committed. |
 | AC5 | none (tooling, verified by probes as in #62) | none | Today `Tools/check.sh` has no app-tests step, and `--red` judges the kit suite only, so a `Tests:` commit whose only failures are in an app suite reports "every test passed". The probes are under Verification. |
@@ -91,17 +99,27 @@ builder. It has one smoke `@Test` that renders `MessageBody` from the hosted bun
 non-empty image. It is green from the start and proves the plumbing before any red test exists.
 No `Tests:` commit touches it, so `Tools/guard-tests.sh` does not cover it.
 
-**How the planner tests work (approved design).** Swift Testing, with the suite `@MainActor`
-because `ImageRenderer` is main-actor. The helpers live in the test file, so the guard covers them:
+**How the planner tests work** (the approved design, with the sample text changed by resolution
+1). Swift Testing, with the suite `@MainActor` because `ImageRenderer` is main-actor. The helpers
+live in the test file, so the guard covers them:
 
 - `render(_:width:)` uses `ImageRenderer` with `proposedSize` width 320, `scale` 3 and a dark color
   scheme, and returns a `CGImage`.
 - `ink(in:of:)` counts the pixels with alpha > 0 in a rectangle given in points.
-- The approved sample text is `"T\n\nn"`: two paragraphs whose straight-edged glyphs reach the
-  top-left and bottom-left corners. The reference image is the bare `MessageBody(text:)` at the
-  same width, which has the same origin and height as the assistant row's content.
-- AC1 and AC2 start with `#require(referenceInk > 0)`, so a font or text change cannot make them
-  pass without testing anything. Then `#expect(rowInk >= referenceInk, "<message above>")`.
+- The sample text is `"The step ended.\n\nno more frames."`. It has two paragraphs: the first
+  starts with a straight-edged "T" in the top-left corner, the last starts with the stem of an "n"
+  in the bottom-left corner, and both lines are much wider than `2 × cardCornerRadius` (32pt).
+  - The approved sample was `"T\n\nn"`. It was replaced because its box is too narrow: SwiftUI
+    shrinks the corner radius to half the shorter side, and then the clip cuts nothing.
+  - The reference image is the bare `MessageBody(text:)` at the same width. It has the same origin
+    and height as the assistant row's content.
+- **Preconditions.** AC1 and AC2 each start with two `#require`s, so that neither a font change nor
+  an edit to the sample can make them pass without testing anything:
+  - `#require(referenceInk > 0, "the sample no longer puts a glyph in the <top|bottom>-left corner")`
+  - `#require(referenceWidth > 2 * DSHMetrics.cardCornerRadius, "the sample is too narrow to be
+    clipped: SwiftUI shrinks a corner radius to half the shorter side")`
+
+  Then `#expect(rowInk >= referenceInk, "<message above>")`.
 
 Fakes: none; nothing here touches the network or storage. Stubs in `Sources/`: none.
 `MessageRow` becomes internal in Slice A (a visibility change, not a stub), and `MessageBody` is
@@ -118,7 +136,7 @@ Slice A.
 
 | Slice | ACs | Files | Notes |
 |---|---|---|---|
-| A | AC5, and it makes AC1–AC3 compilable | `Apps/DSHRemote/project.yml`, `Tools/check.sh`, `Tools/setup-dev.sh`, `Apps/DSHRemote/Sources/ConversationTranscript.swift` (`MessageRow`: `private` → internal, nothing else), `Tests/DSHRemoteTests/AppTestTargetTests.swift`, `AGENTS.md`, `docs/process/WORKFLOW.md`, `CHANGELOG.md`; `Package.swift` only if SwiftPM complains | Builder, **after plan approval and before the `Tests:` commit**. Commit: "Give the app a test target, and run it in Tools/check.sh (#74)". |
+| A | AC5, and it makes AC1–AC3 compilable | `Apps/DSHRemote/project.yml`, `Tools/check.sh`, `Tools/setup-dev.sh`, `Apps/DSHRemote/Sources/ConversationTranscript.swift` (`MessageRow`: `private` → internal, nothing else), `Tests/DSHRemoteTests/AppTestTargetTests.swift`, `AGENTS.md`, `docs/process/WORKFLOW.md`, `docs/process/IOS-PRIMER.md`, `docs/process/ORCHESTRATION.md`, `docs/process/RISK-FLAGS.md`, `CHANGELOG.md`; `Package.swift` only if SwiftPM complains | Builder, **after plan approval and before the `Tests:` commit**. Commit: "Give the app a test target, and run it in Tools/check.sh (#74)". |
 | B | AC1, AC2, AC4 (AC3 must stay green) | `Apps/DSHRemote/Sources/ConversationTranscript.swift` (`MessageRow` background, clip, doc comment), `Apps/DSHRemote/Sources/ScreensGalleryView.swift` (`conversationFixture`), `CHANGELOG.md` | Builder, after the tests are approved. Commit: "Stop clipping assistant prose to a bubble it does not draw (#74)". |
 
 ### Slice A: the app test target
@@ -135,20 +153,42 @@ Slice A.
   `@testable import DSHRemote` can render it.
 - **`Tests/DSHRemoteTests/AppTestTargetTests.swift`:** the smoke test described above.
 - **`Tools/check.sh`:**
-  - the simulator picker (AC5), parsing the `simctl` JSON with `python3 -I`;
+  - the simulator choice (AC5): `DSH_TEST_SIMULATOR` if set, otherwise find or create the
+    dedicated "DSH Remote Tests" simulator. It parses the `simctl` JSON with `python3 -I`.
   - the full-mode "app tests" step;
   - the `--red` logic across both suites;
   - `--fast` unchanged;
-  - the header comment updated.
-- **`Tools/setup-dev.sh`:** check that an iOS simulator runtime is installed.
+  - the header comment updated. It names `DSH_TEST_SIMULATOR` and says the dedicated simulator is
+    for the tests only (see "Why a dedicated simulator" below).
+- **`Tools/setup-dev.sh`:** check that an iOS simulator runtime and an iPhone device type are
+  installed, which is what creating the dedicated simulator needs.
 - **Docs, one line each:**
   - `AGENTS.md` "Before you commit": what `check.sh` runs, and that CI now needs a simulator
     runtime.
-  - `WORKFLOW.md` "Local CI": an "App tests" row in the table, and the inner-loop command
-    `xcodebuild test … -only-testing:DSHRemoteTests`.
-  - `WORKFLOW.md`: view-level bugs get a render test in `Tests/DSHRemoteTests`.
-  - Open question 2 lists other docs this will contradict.
+  - `WORKFLOW.md` "Local CI": an "App tests" row in the table, the inner-loop command
+    `xcodebuild test … -only-testing:DSHRemoteTests`, and a note that "DSH Remote Tests" is the
+    tests' own simulator and is not for review or pairing.
+  - `WORKFLOW.md` step 2 rule 5 ("Kit, not app"): rules go in the kit, and a view-level bug
+    gets a render test in `Tests/DSHRemoteTests`. This replaces "the app has no test target on
+    purpose".
+  - `IOS-PRIMER.md`: the table's app "Tests" cell names the render-test target. The paragraph
+    citing #30 says the app now has a unit-test target for render tests, and that the UI-test
+    target for gestures is still #30.
+  - `ORCHESTRATION.md`, the planner brief: tests go in `Tests/DSHRemoteKitTests/`, or for a bug
+    that lives only in a view's rendering, in `Tests/DSHRemoteTests/`; the "move it into
+    `DSHRemoteKit`" sentence is kept for rules.
+  - `RISK-FLAGS.md` C6: when a rule cannot move into the kit, a render test in
+    `Tests/DSHRemoteTests` is the alternative, alongside the `DSH_*` affordance.
+  - `.claude/agents/planner.md` was checked and needs no change: it points at the brief in
+    `ORCHESTRATION.md` and repeats none of the text that changes. The same is true of the other
+    files in `.claude/`.
 - **`CHANGELOG.md`:** a line under `### Added (process, no version impact)`.
+- **Why a dedicated simulator.** The test bundle is hosted in the real app, and the app's
+  `.task` calls `model.restoreLastHost()` on launch. So a host paired on the test simulator would
+  be reconnected on every `Tools/check.sh` run. The first available simulator on this machine
+  ("iPhone 18 Pro") is the one the primer uses for `DSH_*` review, where a host may be paired.
+  That is why the tests get a simulator of their own, documented as not for review, and why
+  there is no production change to skip launch work under tests.
 - **Validate:**
   - `swift build --disable-sandbox --build-tests` ignores `Tests/DSHRemoteTests`, which
     `Package.swift` does not declare. If SwiftPM complains, add an `exclude`.
@@ -172,8 +212,9 @@ Slice A.
   and is never clipped. Nothing relied on the row's clip: user-bubble content is already 12pt
   inside the corner, and image thumbnails clip themselves (`AttachmentThumbnail.swift:23`).
 - **`ScreensGalleryView.conversationFixture`:** add an assistant message with no reasoning whose
-  first line starts with "T" and whose last line starts with "n" (AC4). Its lines should be wider
-  than 32pt, for the reason given in Open question 1.
+  first line starts with "T" and whose last line starts with "n", both lines well over 32pt wide
+  (AC4). A short line would let SwiftUI shrink the corner radius and hide the clip, which is
+  resolution 1.
 - **`CHANGELOG.md`:** under `### Fixed`, "Assistant replies no longer lose the left edge of their
   first and last letters (#74)."
 
@@ -183,7 +224,10 @@ Slice A.
 - [ ] S1–S10: none ticked. The ones I considered:
   - **S7 (debug affordances):** Slice B edits a fixture that is reached only through
     `DSH_SCREEN_GALLERY`, whose read is already inside `#if DEBUG` (`AppModel.swift`). It adds no
-    variable, no environment read and nothing new under `#if DEBUG`.
+    app variable, no environment read in Swift and nothing new under `#if DEBUG`.
+    `DSH_TEST_SIMULATOR` is read only by `Tools/check.sh`, never by the app, so it is not a
+    launch variable. It does not belong in `Apps/DSHRemote/README.md`, and `Tools/lint.sh`, which
+    scans `*.swift` under `Apps/`, does not see it.
   - **S8 (permissions):** Slice A edits `project.yml` but not the app's `info:` keys or
     entitlements. The test bundle's plist is generated.
   - **S9 (leaving the sandbox):** nothing is logged or exported, and rendered images stay in
@@ -235,17 +279,20 @@ The planner also checked the clips the list above does not name. None of them cu
 - **The design gallery** (`ComponentGalleryView.swift:113/174`): debug-only. The rows are at least
   44pt tall with their content centred, so no glyph reaches the 16pt corner.
 
-## Open questions (raised by the planner while transcribing, 2026-10-14)
+## Questions raised at transcription, and their resolutions
 
-These are not changes to the approved plan. They are for Dan to decide.
+The planner raised these while transcribing the approved plan (2026-10-14). The orchestrator
+resolved them the same day, consistent with Dan's intent, and will show Dan the changes at the
+tests gate.
 
-1. **Blocking for AC1 and AC2: the approved sample `"T\n\nn"` does not reproduce the bug.**
+1. **The approved sample `"T\n\nn"` did not reproduce the bug.** This blocked AC1 and AC2.
    - **Why:** `MessageRow`'s VStack is as wide as its text, and SwiftUI limits a rounded
      rectangle's corner radius to half its shorter side. With "T" and "n" the clipped box is about
      10pt wide, so the effective radius is about 5pt and no glyph pixel falls outside it.
-   - **Measured:** a scratch probe outside the repo used macOS SwiftUI `ImageRenderer` to mimic
-     the assistant branch of `MessageRow`, at 17pt, width 320 and scale 3. It counted pixels with
-     alpha > 0 in the 16pt corner squares, clipped and unclipped:
+   - **Measured:** a scratch probe used macOS SwiftUI `ImageRenderer` to mimic the assistant
+     branch of `MessageRow`, at 17pt, width 320 and scale 3. It ran in the git-ignored `.build/`
+     and was deleted afterwards. It counted pixels with alpha > 0 in the 16pt corner squares,
+     clipped and unclipped:
 
      | Sample | Top-left, clipped / unclipped | Bottom-left, clipped / unclipped |
      |---|---|---|
@@ -253,36 +300,31 @@ These are not changes to the approved plan. They are for Dan to decide.
      | `"The\n\nno"` | 588 / 641 | 615 / 668 |
      | `"The step ended.\n\nno more frames."` | 572 / 641 | 598 / 668 |
 
-     With the approved sample, AC1 and AC2 would pass with the bug present, and
-     `Tools/check.sh --red` would say "every test passed".
-   - **Proposed:** keep the design, but use a sample whose lines are wider than
-     `2 × cardCornerRadius`, such as `"The step ended.\n\nno more frames."`. Add
-     `#require(reference width > 2 × cardCornerRadius)` so a later edit to the sample cannot
-     quietly neuter the tests. The same lesson applies to the AC4 gallery message.
-2. **Docs that will contradict the new target unless they change too.** The approved plan edits
-   only `AGENTS.md` and `WORKFLOW.md` "Local CI". These still say the opposite:
-   - `docs/process/WORKFLOW.md` step 2 rule 5: "Kit, not app … the app has no test target on
-     purpose".
-   - `docs/process/IOS-PRIMER.md`: the table says app tests are "none, on purpose", and a
-     paragraph says "until then, the kit is where tests go" (citing #30).
-   - `docs/process/ORCHESTRATION.md`: the planner brief says tests go in `Tests/DSHRemoteKitTests/`
-     and app behaviour moves to the kit.
-   - `docs/process/RISK-FLAGS.md` C6.
-
-   Proposed: a one-line edit to each, in Slice A.
-3. **Hosted tests launch the real app on the chosen simulator.** `DSHRemoteApp`'s `.task` calls
-   `model.restoreLastHost()`. On this machine the first available iPhone is "iPhone 18 Pro", the
-   simulator the primer uses for `DSH_*` review. If a host is paired there, every
-   `Tools/check.sh` run would connect to it while the tests run. Options:
-   - document that `DSH_TEST_SIMULATOR` should name a simulator with nothing paired, or have the
-     picker prefer a dedicated one;
-   - make the app skip launch work when XCTest hosts it. That is a production change outside the
-     approved scope.
-4. **AC4 has no automated test.** It is checked by eye, which C6 allows. It could be automated by
-   making `ScreensGalleryView.conversationFixture` internal and asserting that it holds such a
-   message. That is not in the approved plan, so it is not planned.
-5. **Gate 1 bookkeeping.** `ORCHESTRATION.md` reads approval from a "plan approved" comment on the
-   issue. Dan's approval was given in a session, so #74 does not show it yet.
+     With the approved sample, AC1 and AC2 would have passed with the bug present, and
+     `Tools/check.sh --red` would have said "every test passed".
+   - **Resolved:** the sample becomes `"The step ended.\n\nno more frames."`. Each corner test
+     requires `referenceInk > 0` and a reference wider than `2 * DSHMetrics.cardCornerRadius`, with
+     messages that say the sample no longer reaches the corner or is too narrow to be clipped. The
+     AC4 gallery message gets the same care. Updated in AC4, the test list and Slice B.
+2. **Docs that would contradict the new target.** These are `WORKFLOW.md` step 2 rule 5,
+   `IOS-PRIMER.md` (the table, and the paragraph citing #30), the planner brief in
+   `ORCHESTRATION.md`, and `RISK-FLAGS.md` C6.
+   - **Resolved:** Slice A makes a one-line edit to each.
+   - `.claude/agents/planner.md` was checked and repeats none of the text that changes, so it is
+     not in the slice.
+3. **The hosted tests launch the real app**, whose `.task` reconnects any host paired on that
+   simulator. The first available iPhone is the one used for review.
+   - **Resolved:** `Tools/check.sh` uses `DSH_TEST_SIMULATOR` if it is set. Otherwise it uses a
+     dedicated "DSH Remote Tests" simulator, created on the first run and reused after. It never
+     uses the first available simulator.
+   - There is no production change. The plan states the remaining exposure: a host paired on the
+     dedicated simulator would be reconnected by the test host app, which is why that simulator
+     is dedicated and documented as not for review. Updated in AC5 and Slice A.
+4. **AC4 has no automated test.**
+   - **Resolved:** it stays checked by eye, as approved (C6). Making `conversationFixture` internal
+     to test its contents is not planned.
+5. **The "plan approved" comment on #74.**
+   - **Resolved:** the orchestrator will ask Dan to post it. The planner posts nothing.
 
 ## Red evidence
 
@@ -301,7 +343,7 @@ To be filled in by the verifier. Planned:
 | AC2 | same | AC2 fails with the ink-loss message for the bottom-left corner |
 | AC3 | replace the user bubble's `RoundedRectangle` fill with a square fill (`Rectangle()`, or `.background(DSHPalette.elevatedSurface)` with no clip) | AC3 fails because the corner pixel is filled. With only the clip put back (the AC1 probe), AC3 still passes. |
 | AC4 | not applicable | Screenshot of `DSH_SCREEN_GALLERY=conversation`: the new message's "T" and "n" are whole at 3×. Shown to Dan, not committed. |
-| AC5 | probes, as in #62 | full mode on Slice A shows "app tests" passing; a scratch failing app test turns full mode red at "app tests"; a scratch app test that does not compile is reported as a compile failure, distinctly; `--red` on the `Tests:` commit gives "red: ok" with the kit green and the app suite failing; `--red` with every test passing gives "every test passed"; a bogus `DSH_TEST_SIMULATOR` fails with a hint; `--fast` runs no app tests |
+| AC5 | probes, as in #62 | full mode on Slice A shows "app tests" passing; a scratch failing app test turns full mode red at "app tests"; a scratch app test that does not compile is reported as a compile failure, distinctly; `--red` on the `Tests:` commit gives "red: ok" with the kit green and the app suite failing; `--red` with every test passing gives "every test passed"; with no "DSH Remote Tests" simulator, the first run creates it and the second reuses it (one entry in `xcrun simctl list devices`), and neither run boots the review simulator; `DSH_TEST_SIMULATOR=<udid>` runs on that device; a bogus `DSH_TEST_SIMULATOR` fails with a hint; `--fast` runs no app tests |
 
 - `Tools/check.sh`: green / red
 - Risk checklist: not applicable (no S-flag). For C6, the by-eye check of AC4 is recorded above.
@@ -311,6 +353,9 @@ To be filled in by the verifier. Planned:
 
 - A clip only cuts content when the clipped box is wider and taller than twice its corner radius.
   Below that, SwiftUI shrinks the radius. A one-letter sample hides a corner clip completely, and
-  that is part of why short fixtures did not show this bug (Open question 1).
+  that is part of why short fixtures did not show this bug (resolution 1).
+- The app tests run inside the real app, which restores its last host on launch. Do not pair a
+  host on the "DSH Remote Tests" simulator, and do not use it for `DSH_*` review: anything paired
+  there is reconnected by every `Tools/check.sh` run.
 - Kit coverage (`Tools/coverage.sh`) is unaffected: it measures `swift test` only, and the app
   test target is not part of it.
