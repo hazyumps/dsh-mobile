@@ -334,7 +334,8 @@ struct ConversationTranscript: View {
 }
 
 /// One message: a graphite bubble toward the trailing edge for the user, prose on the
-/// canvas for the assistant.
+/// canvas for the assistant. Only the bubble is rounded; the prose is never clipped, because it
+/// has no padding and a rounded clip cuts the corner glyphs of its first and last lines (#74).
 struct MessageRow: View {
     let message: ConversationMessage
     /// Loads one attachment's pixels; nil leaves an image listed by name rather than drawn.
@@ -364,8 +365,15 @@ struct MessageRow: View {
                 }
             }
             .padding(message.role == .user ? DSHMetrics.spaceCard : 0)
-            .background(message.role == .user ? DSHPalette.elevatedSurface : Color.clear)
-            .clipShape(RoundedRectangle(cornerRadius: DSHMetrics.cardCornerRadius, style: .continuous))
+            // The bubble is drawn as a shape behind the content, not clipped around it. A clip on
+            // both roles shaved "The" to "ſhe" in an unpadded assistant reply (#74); the user's
+            // content sits `spaceCard` inside the corner, and thumbnails clip themselves.
+            .background {
+                if message.role == .user {
+                    RoundedRectangle(cornerRadius: DSHMetrics.cardCornerRadius, style: .continuous)
+                        .fill(DSHPalette.elevatedSurface)
+                }
+            }
             .opacity(message.isProvisional ? 0.85 : 1)
             if message.role == .assistant { Spacer(minLength: 0) }
         }
