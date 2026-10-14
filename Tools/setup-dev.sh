@@ -37,6 +37,51 @@ else
   warn "tea (Gitea CLI, for issues and PRs from the terminal): brew install tea"
 fi
 
+# Tools/check.sh runs the app tests on a simulator of their own, "DSH Remote Tests", and creates
+# it on its first run from the newest iOS runtime and an iPhone device type (#74).
+echo "Simulator"
+if listing="$(xcrun simctl list -j 2>/dev/null)" && command -v python3 > /dev/null; then
+  sim="$(printf "%s" "$listing" | python3 -I -c '
+import json, sys
+listing = json.load(sys.stdin)
+def version(runtime):
+    try:
+        return tuple(int(part) for part in runtime.get("version", "").split("."))
+    except ValueError:
+        return ()
+runtimes = [
+    r for r in listing.get("runtimes", [])
+    if r.get("isAvailable")
+    and (r.get("platform") == "iOS" or ".SimRuntime.iOS-" in r.get("identifier", ""))
+]
+if not runtimes:
+    sys.exit("no-runtime")
+runtime = max(runtimes, key=version)
+types = runtime.get("supportedDeviceTypes") or listing.get("devicetypes", [])
+iphones = [t["name"] for t in types if t.get("productFamily") == "iPhone"]
+dedicated = any(
+    d.get("name") == "DSH Remote Tests" and d.get("isAvailable")
+    for group in listing.get("devices", {}).values() for d in group
+)
+print(runtime.get("name", runtime.get("identifier")), iphones[0] if iphones else "", "yes" if dedicated else "no", sep="|")
+' 2>/dev/null)"
+  IFS='|' read -r runtime iphone dedicated <<< "$sim"
+  if [[ -z "$sim" ]]; then
+    bad "an iOS simulator runtime: xcodebuild -downloadPlatform iOS (Tools/check.sh runs the app tests on one)"
+  elif [[ -z "$iphone" ]]; then
+    bad "an iPhone device type for $runtime: reinstall the runtime in Xcode > Settings > Components"
+  else
+    ok "$runtime simulator runtime, with an iPhone device type ($iphone)"
+    if [[ "$dedicated" == "yes" ]]; then
+      ok "\"DSH Remote Tests\" simulator exists (the app tests' own: never pair a host on it)"
+    else
+      ok "\"DSH Remote Tests\" simulator: Tools/check.sh creates it when it first runs the app tests"
+    fi
+  fi
+else
+  bad "xcrun simctl (comes with Xcode) and python3, to find an iOS simulator runtime"
+fi
+
 echo "Git"
 git config core.hooksPath .githooks
 ok "core.hooksPath = .githooks (pre-push runs Tools/check.sh)"
