@@ -15,6 +15,9 @@ Fixed / Security, with its issue number. The release renames the section.
 ### Added (process, no version impact)
 - A written workflow and local CI: `docs/process/`, `Tools/check.sh` with a pre-push hook, a
   coverage ratchet, issue and PR templates, and Claude Code agents and commands (#62).
+- An app unit-test target, `Tests/DSHRemoteTests/`, for render tests of view-level bugs;
+  `Tools/check.sh` runs it on its own "DSH Remote Tests" simulator, and `--red` judges it with the
+  kit suite (#74).
 
 ## [0.2.0] - 2026-10-13
 

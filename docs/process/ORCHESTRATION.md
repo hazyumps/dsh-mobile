@@ -80,15 +80,16 @@ are the same instructions the Claude Code agent definitions in `.claude/agents/`
 >    test list predicting why each test fails today, slices with disjoint files, the risk flags,
 >    and the version impact. Commit it as `Plan: <what> (#<n>)`. **Stop and hand the plan to the
 >    human for approval.**
-> 2. Once approved: write the tests in `Tests/DSHRemoteKitTests/` with Swift Testing, each named
+> 2. Once approved: write the tests in `Tests/DSHRemoteKitTests/` (or, for a bug that lives only
+>    in a view's rendering, in `Tests/DSHRemoteTests/`) with Swift Testing, each named
 >    for its criterion (`@Test("AC1: …")`). Add only the stub signatures in `Sources/` needed to
 >    compile — stubs return a wrong value or throw, never `fatalError`. Run `Tools/check.sh --red`
 >    until it reports "compiles and fails on assertions", and check each failure matches the
 >    plan's prediction. Paste the evidence into the plan's Red evidence section. Commit tests,
 >    stubs and plan together as `Tests: <what they pin> (#<n>)`.
 >
-> You do not implement the behaviour. If the behaviour lives in the app target, plan a first slice
-> that moves it into `DSHRemoteKit`.
+> You do not implement the behaviour. If a rule lives in the app target, plan a first slice that
+> moves it into `DSHRemoteKit`.
 
 ### Builder
 

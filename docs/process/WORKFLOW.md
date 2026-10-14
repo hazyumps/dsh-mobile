@@ -76,7 +76,8 @@ Rules — `Tools/check.sh --red` enforces the first three:
    is the failure message.
 5. **Kit, not app.** Tests live in `Tests/DSHRemoteKitTests/` and use Swift Testing (`import
    Testing`, `@Test`, `#expect`, `#require`). If the behaviour lives in the app target, the plan's
-   first slice moves it into `DSHRemoteKit` — the app has no test target on purpose (see
+   first slice moves it into `DSHRemoteKit`: rules go in the kit. A bug that lives only in a view's
+   rendering (a modifier, not a rule) gets a render test in `Tests/DSHRemoteTests/` instead (see
    [IOS-PRIMER.md](IOS-PRIMER.md)).
 6. **Reuse the fakes**: `StubRelayTransport` / `StubRelaySocket` (scripted HTTP and socket answers,
    with a request log), `InMemorySecretStore`, `FixedEpochClock`, and `Fixtures.swift` for captured
@@ -185,12 +186,21 @@ call `Tools/check.sh` and nothing else.
 | Kit tests | `swift test --enable-code-coverage` | any test fails |
 | Coverage | `Tools/coverage.sh` | kit line coverage (excluding `Generated/`) drops below `Tools/coverage-baseline.txt`, or a file in `Tools/must-test.txt` falls below its floor |
 | App builds | `xcodebuild` Debug and Release | either configuration fails to compile |
+| App tests | `xcodebuild build-for-testing`, then `test-without-building` on a simulator | `Tests/DSHRemoteTests` does not compile, or a render test fails |
 
-Modes: `Tools/check.sh` (everything), `--fast` (no app builds), `--red` (for a `Tests:` commit:
-tests must compile and must fail). The hook picks the mode from what is being pushed.
+Modes: `Tools/check.sh` (everything), `--fast` (no app builds or app tests, no simulator), `--red`
+(for a `Tests:` commit: the kit and app tests must compile, and at least one must fail). The hook
+picks the mode from what is being pushed.
+
+The app tests' inner loop is `xcodebuild test -project Apps/DSHRemote/DSHRemote.xcodeproj -scheme
+DSHRemote -destination 'platform=iOS Simulator,name=DSH Remote Tests' -only-testing:DSHRemoteTests`.
+"DSH Remote Tests" is the tests' own simulator, created by the first `Tools/check.sh` run (or set
+`DSH_TEST_SIMULATOR` to a UDID): the tests launch the real app, which reconnects any host paired
+there, so it is not for review or pairing.
 
 **One-time setup per machine:** `Tools/setup-dev.sh` — it points git at the hook and the shared
-`.gitsigners` file, and checks for Xcode, XcodeGen and `tea`.
+`.gitsigners` file, and checks for Xcode, XcodeGen, `tea`, and an iOS simulator runtime with an
+iPhone device type (what the app tests' simulator is made from).
 
 **Adding a lint rule** is the right response to a bug that a grep could have caught. Add it to
 `Tools/lint.sh` with a comment naming the bug, and put existing violations in the allowlist with an
