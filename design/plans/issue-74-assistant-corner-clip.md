@@ -119,6 +119,8 @@ live in the test file, so the guard covers them:
   - `#require(referenceWidth > 2 * DSHMetrics.cardCornerRadius, "the sample is too narrow to be
     clipped: SwiftUI shrinks a corner radius to half the shorter side")`
 
+  A third `#require`, added when the tests were written, checks the design's own premise: the row
+  is exactly as tall as its text alone. Otherwise the two bottom-left squares would not line up.
   Then `#expect(rowInk >= referenceInk, "<message above>")`.
 
 Fakes: none; nothing here touches the network or storage. Stubs in `Sources/`: none.
@@ -328,10 +330,64 @@ tests gate.
 
 ## Red evidence
 
-To be filled in by the planner with the `Tests:` commit.
+`Tools/check.sh --red`, run 2026-10-14 on the tree that became the `Tests:` commit (Slice A at
+`7838e59`, plus `Tests/DSHRemoteTests/MessageRowRenderTests.swift`). Output from the step
+headings on:
 
 ```
+== kit tests (red: must compile)
+kit tests: all pass
+
+== app tests (red: must compile)
+simulator: 355F197E-5390-4BEC-A835-5BDC2D9DFE42 "DSH Remote Tests" (Shutdown)
+✘ Test "AC1: assistant prose keeps its top-left corner" recorded an issue at MessageRowRenderTests.swift:97:9: Expectation failed: rowInk >= referenceInk
+✘ Test "AC1: assistant prose keeps its top-left corner" failed after 0.496 seconds with 1 issue.
+✘ Test "AC2: assistant prose keeps its bottom-left corner" recorded an issue at MessageRowRenderTests.swift:97:9: Expectation failed: rowInk >= referenceInk
+✘ Test "AC2: assistant prose keeps its bottom-left corner" failed after 0.009 seconds with 1 issue.
+✘ Suite "MessageRow rendering (#74)" failed after 0.563 seconds with 2 issues.
+✘ Test run with 4 tests in 2 suites failed after 0.649 seconds with 2 issues.
+app tests: fail on assertions (full log: .build/check/app-tests.log)
+
+== red
+red: ok it compiles and fails on assertions (kit: pass, app: fail; logs in .build/check).
+
+check: ok — red for the right reason (671s)
 ```
+
+Each test, from `.build/check/app-tests.log`. The `↳` lines carry the messages with the pixel
+counts:
+
+```
+✔ Test "the hosted bundle renders an app view to pixels" passed after 0.083 seconds.
+✘ Test "AC1: assistant prose keeps its top-left corner" recorded an issue at MessageRowRenderTests.swift:97:9: Expectation failed: rowInk >= referenceInk
+↳ the assistant row lost 50 px of ink in its top-left 16pt corner (row 498, unclipped 548)
+✘ Test "AC2: assistant prose keeps its bottom-left corner" recorded an issue at MessageRowRenderTests.swift:97:9: Expectation failed: rowInk >= referenceInk
+↳ the assistant row lost 54 px of ink in its bottom-left 16pt corner (row 521, unclipped 575)
+✔ Test "AC3: a user bubble keeps its rounded, filled corners" passed after 0.057 seconds.
+```
+
+- **AC1 and AC2 failed for the predicted reason:** ink lost in the corner square, with every
+  precondition met. The sample reaches the corner, is wider than 32pt, and the row is as tall as
+  its text.
+- **AC3 and the smoke test passed, as planned.**
+
+**Checked by the planner that the tests can pass, and that AC3 can fail.** Both checks used a
+temporary, uncommitted edit to `MessageRow`, reverted straight after, and ran
+`xcodebuild … -only-testing:DSHRemoteTests test-without-building` on the same simulator:
+
+- **The planned Slice B fix** (rounded fill behind user messages only, no clip): all four tests
+  pass (`✔ Test run with 4 tests in 2 suites passed`).
+- **An over-reaching fix** (a square `Rectangle()` fill, no clip): AC1 and AC2 pass, and AC3
+  fails with `Expectation failed: cornerAlpha == 0` /
+  `↳ the user bubble's top-left corner pixel is filled (alpha 255): the bubble lost its rounded corner`.
+
+**Finding for Slice A, not fixed here.** Of the 671 s, about 600 s came after the tests had
+finished. On a failing run, `xcodebuild test-without-building` collects simulator diagnostics
+into the `.xcresult` (`simctl diagnose … --timeout=600`), so every red or failing app-test run
+stalls for up to ten minutes. Adding `-collect-test-diagnostics never` to the
+`test-without-building` call in `Tools/check.sh` removed the stall in the planner's over-reach
+run, which failed and returned at once. The flag belongs in Slice A's file, so it is reported
+rather than changed.
 
 ## Verification
 
