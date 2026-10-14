@@ -193,8 +193,9 @@ Modes: `Tools/check.sh` (everything), `--fast` (no app builds or app tests, no s
 picks the mode from what is being pushed.
 
 The app tests' inner loop is `xcodebuild test -project Apps/DSHRemote/DSHRemote.xcodeproj -scheme
-DSHRemote -destination 'platform=iOS Simulator,name=DSH Remote Tests' -only-testing:DSHRemoteTests`.
-"DSH Remote Tests" is the tests' own simulator, created by the first `Tools/check.sh` run (or set
+DSHRemote -destination 'platform=iOS Simulator,name=DSH Remote Tests' -only-testing:DSHRemoteTests
+-collect-test-diagnostics never` (without that flag a failing run can wait 10 minutes collecting
+simulator diagnostics). "DSH Remote Tests" is the tests' own simulator, created by the first `Tools/check.sh` run (or set
 `DSH_TEST_SIMULATOR` to a UDID): the tests launch the real app, which reconnects any host paired
 there, so it is not for review or pairing.
 

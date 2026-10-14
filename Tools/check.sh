@@ -175,8 +175,10 @@ run_app_tests() {
     return
   fi
   if ! choose_test_simulator; then app_tests="not-run"; return; fi
+  # On a failure xcodebuild otherwise collects simulator diagnostics (`simctl diagnose`), which
+  # can sit for its full 600 s timeout after a sub-second test run (#74). The log has what we need.
   xcodebuild -project "$APP_PROJECT" -scheme DSHRemote -configuration Debug \
-    -destination "id=$test_simulator" -parallel-testing-enabled NO \
+    -destination "id=$test_simulator" -parallel-testing-enabled NO -collect-test-diagnostics never \
     -only-testing:DSHRemoteTests test-without-building > "$test_log" 2>&1
   rc=$?
   # Leave the simulator as it was found: a stray booted test simulator would answer
