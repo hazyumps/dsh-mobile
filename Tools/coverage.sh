@@ -32,10 +32,21 @@ case "${1:-}" in
   *) echo "usage: $0 [--update-baseline|--report]" >&2; exit 2 ;;
 esac
 
-profdata=".build/debug/codecov/default.profdata"
-binary=".build/debug/DSHRemoteKitTests.xctest/Contents/MacOS/DSHRemoteKitTests"
+# Ask SwiftPM where coverage lives rather than assuming a layout: depending on the build system it
+# is .build/debug/ or .build/out/Products/Debug/ (where .build/debug may or may not be a symlink).
+codecov_dir="$(dirname "$(swift test --disable-sandbox --show-codecov-path 2>/dev/null)")"
+products_dir="$(dirname "$codecov_dir")"
+profdata="$codecov_dir/default.profdata"
+binary="$products_dir/DSHRemoteKitTests.xctest/Contents/MacOS/DSHRemoteKitTests"
 if [[ ! -f "$profdata" || ! -f "$binary" ]]; then
   echo "coverage: no profile. Run: swift test --disable-sandbox --enable-code-coverage" >&2
+  exit 2
+fi
+# SwiftPM merges the raw profiles into default.profdata only when the run passes. A failed run
+# leaves the last green run's file behind, and reading it would report a stranger's coverage.
+newest_raw="$(ls -t "$codecov_dir"/*.profraw 2>/dev/null | head -1)"
+if [[ -n "$newest_raw" && "$newest_raw" -nt "$profdata" ]]; then
+  echo "coverage: the profile is older than the last test run (did the tests fail?)" >&2
   exit 2
 fi
 

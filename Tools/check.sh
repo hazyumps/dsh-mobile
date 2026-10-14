@@ -113,7 +113,12 @@ fi
 elapsed=$(( $(date +%s) - started ))
 echo
 if [[ ${#failed[@]} -eq 0 ]]; then
-  printf "\033[32mcheck: green (%s, %ss)\033[0m\n" "$mode" "$elapsed"
+  if [[ "$mode" == "red" ]]; then
+    # Not "green": the suite is red, which is what a Tests: commit must be.
+    printf "\033[32mcheck: ok — red for the right reason (%ss)\033[0m\n" "$elapsed"
+  else
+    printf "\033[32mcheck: green (%s, %ss)\033[0m\n" "$mode" "$elapsed"
+  fi
   exit 0
 fi
 printf "\033[31mcheck: RED (%s, %ss)\033[0m\n" "$mode" "$elapsed"
