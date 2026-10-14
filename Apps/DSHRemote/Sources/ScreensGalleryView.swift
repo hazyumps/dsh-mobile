@@ -65,6 +65,18 @@ struct ScreensGalleryView: View {
         ConversationSnapshot(
             generation: 1,
             messages: [
+                // An earlier reply with a straight-edged glyph in both left corners: the "T"
+                // that opens it and the "n" that opens its last line, which a rounded clip
+                // shaves (#74). Both lines are far wider than 2 × cardCornerRadius, because
+                // SwiftUI shrinks the radius of a narrower box and a clip there cuts nothing.
+                // It sits first so it is on screen without scrolling.
+                ConversationMessage(
+                    id: "seq:9",
+                    role: .assistant,
+                    text: "The step ended before its durable record landed.\n\nno more frames arrived after that one.",
+                    isProvisional: false,
+                    reasoning: nil
+                ),
                 ConversationMessage(
                     id: "seq:10",
                     role: .user,
