@@ -10,3 +10,4 @@
 # be added by hand: append the line printed by
 #   echo "patrick@fernlabs.net namespaces=\"git\" $(cat <your signing key>.pub | cut -d' ' -f1,2)"
 dan.lambert4@gmail.com namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBItqgA2tmEFIx4NADXQMOeby2SxtHYE5/j51RXO+0JV
+patrick@fernlabs.net namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMFm2Aas1vyjdN8GoDgrLToY+0XjAT8nPNotPK+zWzzw
