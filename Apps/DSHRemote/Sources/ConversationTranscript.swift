@@ -335,7 +335,7 @@ struct ConversationTranscript: View {
 
 /// One message: a graphite bubble toward the trailing edge for the user, prose on the
 /// canvas for the assistant.
-private struct MessageRow: View {
+struct MessageRow: View {
     let message: ConversationMessage
     /// Loads one attachment's pixels; nil leaves an image listed by name rather than drawn.
     var loadImage: ((String) async -> DisplayImage?)?

@@ -51,6 +51,22 @@ targets:
         SUPPORTS_MACCATALYST: NO
         GENERATE_INFOPLIST_FILE: NO
 
+  # Render tests for bugs that live only in a view's modifiers (#74). Hosted in the app, so
+  # `@testable import DSHRemote` reaches internal views. Rules still belong in the kit and its
+  # `swift test` suite; this target is for what only rendering the real view can catch.
+  # Tools/check.sh runs it on the dedicated "DSH Remote Tests" simulator.
+  DSHRemoteTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: ../../Tests/DSHRemoteTests
+    dependencies:
+      - target: DSHRemote
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: net.fernlabs.dshremote.tests
+        GENERATE_INFOPLIST_FILE: YES
+
 schemes:
   DSHRemote:
     build:
@@ -58,3 +74,7 @@ schemes:
         DSHRemote: all
     run:
       config: Debug
+    test:
+      config: Debug
+      targets:
+        - DSHRemoteTests
