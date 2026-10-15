@@ -1,8 +1,13 @@
 # Issue #77: Run several issues at once — the test simulator collides across worktrees, and /feature branches in the shared checkout
 
-**Status:** plan approved by Dan on 2026-10-14, as written, including Decisions 1–4 and 6, as
-relayed by the orchestrator. `/release` went to #78 (Decision 5). Reproduction recorded under
-"Red evidence"; waiting for the tests gate. Written 2026-10-14 by the planner agent.
+**Status:** built and verified. The plan was approved by Dan on 2026-10-14 as written, including
+Decisions 1–4 and 6, as relayed by the orchestrator; `/release` went to #78 (Decision 5). Dan
+reviewed the red evidence the same day, and both gate-1 comments are on #77. One addition is
+outside the approved plan, made at Dan's request during the build so that future sessions need no
+explanation ("make sure there are instructions for this in the appropriate place"). It is `45414b1`:
+a "Several issues at once" bullet in `CLAUDE.md` and a paragraph in ORCHESTRATION.md "In Claude
+Code". The verifier checked it, and the one sentence it could not confirm, about background
+sessions, was then made exact. Written 2026-10-14 by the planner agent.
 **Branch:** `issue-77-parallel-worktrees`, in the worktree `.claude/worktrees/issue-77-parallel-worktrees`,
 from `origin/main` at `51d7088` (which includes #74's app test target and simulator step).
 **Version impact:** none. Only tooling, docs and Claude Code commands change: nothing in `Apps/` except
