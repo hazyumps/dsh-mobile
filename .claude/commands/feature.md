@@ -11,8 +11,27 @@ now, plus `AGENTS.md`. You coordinate; you do not write production code or tests
 
 - `tea issues $ARGUMENTS --comments` — the issue, its labels, and whether a human has approved a
   plan.
-- Find or create the branch `issue-$ARGUMENTS-<slug>` from `main` (`git checkout -b … main`). If the
-  working tree is dirty, stop and ask.
+- **Work in a worktree of your own; never switch the branch of the shared checkout**, where someone
+  else may be working (WORKFLOW.md, "Several issues at once"). If the working tree is dirty, stop
+  and ask. Then `git fetch origin`, and find out where you are:
+  `git rev-parse --path-format=absolute --git-dir --git-common-dir` prints two paths.
+  - **Two different paths: you are in a linked worktree** (for example one `claude -w` made).
+    - If an `issue-$ARGUMENTS-<slug>` branch is checked out here, resume on it. (A one-letter
+      `issue-$ARGUMENTS-<slice>` branch is a builder's slice, not the issue branch.)
+    - Otherwise, if this branch has no commits beyond `origin/main`
+      (`git rev-list --count origin/main..HEAD` prints 0), switch here:
+      `git switch -c issue-$ARGUMENTS-<slug> origin/main`, or `git switch issue-$ARGUMENTS-<slug>` if
+      `git branch -a --list "*issue-$ARGUMENTS-*"` shows it already exists. The branch you leave,
+      the one `claude -w` made, may be deleted with `git branch -d`.
+    - Anything else: stop and ask.
+  - **The same path twice: you are in the shared checkout.** Leave its branch alone and make a
+    worktree:
+    `git worktree add .claude/worktrees/issue-$ARGUMENTS-<slug> -b issue-$ARGUMENTS-<slug> origin/main`.
+    - If the branch already exists, the same without `-b`:
+      `git worktree add .claude/worktrees/issue-$ARGUMENTS-<slug> issue-$ARGUMENTS-<slug>`.
+    - If it is already checked out somewhere, `git worktree list` says where; continue there.
+    - From then on, use that worktree's absolute path for every command (`git -C <path>`, or
+      `cd <path> && …`), every agent you launch and every slice worktree.
 - Read the branch state and pick the next step from the table in ORCHESTRATION.md ("Where a branch
   is, and who goes next"). Resume from there; do not redo finished steps.
 
@@ -32,17 +51,19 @@ the tests** before any building starts.
 
 ## 3. Build
 
-For each slice in the plan (at most three at a time):
+For each slice in the plan (at most three at a time), make its worktree from inside the issue
+worktree, so it nests under that worktree's ignored `.worktrees/`:
 
 ```sh
-git worktree add .worktrees/issue-$ARGUMENTS-<slice> -b issue-$ARGUMENTS-<slice> <issue branch>
+git -C <issue worktree> worktree add .worktrees/issue-$ARGUMENTS-<slice> -b issue-$ARGUMENTS-<slice> <issue branch>
 ```
 
 Launch one `builder` agent per slice **in a single message**, so they run in parallel. Give each:
 the issue number, the slice letter and its criteria and files, the plan path, and the absolute
-worktree path. When each returns green, merge its branch into the issue branch with `--no-ff`, run
-`swift test --disable-sandbox`, then `git worktree remove` and `git branch -d` it. If a builder
-reports a wrong test or a needed file outside its slice, or a merge conflicts, stop and ask the user.
+worktree path. When each returns green, merge its branch into the issue branch with `--no-ff` (in
+the issue worktree, where that branch is checked out), run `swift test --disable-sandbox`, then
+`git worktree remove` and `git branch -d` it. If a builder reports a wrong test or a needed file
+outside its slice, or a merge conflicts, stop and ask the user.
 
 ## 4. Verify
 
