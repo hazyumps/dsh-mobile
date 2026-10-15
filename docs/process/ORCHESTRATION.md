@@ -162,7 +162,9 @@ prompting, and always ask before `git push`, `git tag` and merging.
 
 **Several issues at once.** One session per issue, each in its own terminal: `claude -w issue-<n>`
 starts Claude Code in a new worktree under `.claude/worktrees/`, and `/feature <n>` runs there.
-Background sessions isolate themselves in a worktree the same way. No session switches the shared
+A background session (one in Claude Code's job list) must enter a worktree before its first edit: the
+harness refuses edits in the shared checkout until it does, so it lands under `.claude/worktrees/`
+too (#74 and #77 were built that way). No session switches the shared
 checkout's branch; it stays on `main`. What the sessions still share (the test simulator's lock,
 the review simulator, `git stash`, the changelog) is in WORKFLOW.md, "Several issues at once".
 
