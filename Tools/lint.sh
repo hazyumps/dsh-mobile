@@ -9,6 +9,11 @@
 #                means "the default, retrying policy" — the trap documented on
 #                DshRpcClient.mutate. Writes are never retried (AGENTS.md). Use `mutate`, a write
 #                API with no policy parameter, or spell out `RPCFailureRetryPolicy.none`.
+#   optional-retry-policy
+#                A declaration typed `RPCFailureRetryPolicy?` or
+#                `Optional<RPCFailureRetryPolicy>` (comment lines excluded). An optional policy is
+#                what made `.none` mean "the default, retrying policy" (#63). Writes take no
+#                policy; a client's policy is non-optional.
 #   debug-env    A `ProcessInfo...environment[...]` read in the app outside `#if DEBUG`. The
 #                DSH_* launch variables are test affordances (Apps/DSHRemote/README.md); one
 #                (DSH_ANSWER) can auto-approve an approval, so none may reach a release build.
@@ -28,6 +33,12 @@ add() { hits="${hits}$1"$'\n'; }
 while IFS= read -r line; do
   [[ -n "$line" ]] && add "retry-none $line"
 done < <(grep -rnE 'retryPolicy:[[:space:]]*\.none\b' Sources Apps --include='*.swift' 2>/dev/null)
+
+# optional-retry-policy (lines that are only a comment are skipped)
+while IFS= read -r line; do
+  [[ -n "$line" ]] && add "optional-retry-policy $line"
+done < <(grep -rnE 'RPCFailureRetryPolicy[[:space:]]*\?|Optional[[:space:]]*<[[:space:]]*RPCFailureRetryPolicy[[:space:]]*>' \
+  Sources Apps --include='*.swift' 2>/dev/null | grep -vE '^[^:]+:[0-9]+:[[:space:]]*//')
 
 # kit-print
 while IFS= read -r line; do
