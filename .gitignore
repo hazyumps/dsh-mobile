@@ -15,3 +15,7 @@ __pycache__/
 
 # Parallel subagent worktrees.
 .worktrees/
+
+# Issue worktrees, one per issue in flight: `claude -w` and /feature put them here (#77).
+# Only this directory: the agents, commands and settings under .claude/ stay tracked.
+.claude/worktrees/

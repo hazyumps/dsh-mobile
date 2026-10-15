@@ -278,9 +278,12 @@ bundle identifier is generated from `bundleIdPrefix` in [project.yml](project.ym
 
 ```sh
 SIMCTL_CHILD_DSH_SCREEN_GALLERY=conversation \
-  xcrun simctl launch booted net.fernlabs.dshremote
-xcrun simctl io booted screenshot conversation.png
+  xcrun simctl launch "iPhone 18 Pro" net.fernlabs.dshremote
+xcrun simctl io "iPhone 18 Pro" screenshot conversation.png
 ```
+
+Name the simulator (or a UDID), not `booted`: "DSH Remote Tests" is booted too
+while any check runs the app tests.
 
 `simctl` cannot inject touches, so anything that would normally need a tap has a
 variable above; the galleries exist because the visual work has to be *looked at*

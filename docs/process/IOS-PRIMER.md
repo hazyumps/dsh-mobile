@@ -71,8 +71,11 @@ checks), and `Tools/check.sh` builds Release to prove that nothing outside depen
 Pass a launch variable to the simulator with the `SIMCTL_CHILD_` prefix:
 
 ```sh
-SIMCTL_CHILD_DSH_TRACE=1 xcrun simctl launch --console-pty booted net.fernlabs.dshremote
+SIMCTL_CHILD_DSH_TRACE=1 xcrun simctl launch --console-pty "iPhone 18 Pro" net.fernlabs.dshremote
 ```
+
+Name the simulator (or a UDID) rather than `booted`, which picks either of two booted ones, and
+"DSH Remote Tests" is booted whenever a check runs the app tests.
 
 ## Simulator and device
 
@@ -174,5 +177,5 @@ runs before a store is set reads `nil` and does not run again.
 | `swift test --disable-sandbox --filter <Suite>` | the inner loop |
 | `cd Apps/DSHRemote && xcodegen generate` | after pulling or editing `project.yml` |
 | `xcrun simctl list devices` / `xcrun simctl boot "iPhone 18 Pro"` | find and start a simulator |
-| `xcrun simctl install booted <path to .app>` | install a simulator build |
+| `xcrun simctl install "iPhone 18 Pro" <path to .app>` | install a simulator build (name the simulator, not `booted`) |
 | `tea issues` / `tea pulls` | gitea from the terminal |

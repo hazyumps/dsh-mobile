@@ -11,8 +11,15 @@ now, plus `AGENTS.md`. You coordinate; you do not write production code or tests
 
 - `tea issues $ARGUMENTS --comments` — the issue, its labels, and whether a human has approved a
   plan.
-- Find or create the branch `issue-$ARGUMENTS-<slug>` from `main` (`git checkout -b … main`). If the
-  working tree is dirty, stop and ask.
+- **Work in the issue's own worktree; never switch the shared checkout's branch.** If the tree is
+  dirty, stop and ask. `git fetch origin`, then:
+  - Already in a worktree (`git rev-parse --git-dir` ≠ `--git-common-dir`, e.g. from `claude -w`):
+    resume `issue-$ARGUMENTS-<slug>` if it is checked out; else, if this branch has no commits of
+    its own, `git switch -c issue-$ARGUMENTS-<slug> origin/main` (or `git switch` to it if it
+    exists). Anything else: stop and ask.
+  - In the shared checkout: `git worktree add .claude/worktrees/issue-$ARGUMENTS-<slug>
+    -b issue-$ARGUMENTS-<slug> origin/main` (no `-b` if the branch exists; `git worktree list`
+    shows where it is checked out), and use that absolute path for every command and agent.
 - Read the branch state and pick the next step from the table in ORCHESTRATION.md ("Where a branch
   is, and who goes next"). Resume from there; do not redo finished steps.
 
@@ -32,17 +39,19 @@ the tests** before any building starts.
 
 ## 3. Build
 
-For each slice in the plan (at most three at a time):
+For each slice in the plan (at most three at a time), make its worktree from inside the issue
+worktree, so it nests under that worktree's ignored `.worktrees/`:
 
 ```sh
-git worktree add .worktrees/issue-$ARGUMENTS-<slice> -b issue-$ARGUMENTS-<slice> <issue branch>
+git -C <issue worktree> worktree add .worktrees/issue-$ARGUMENTS-<slice> -b issue-$ARGUMENTS-<slice> <issue branch>
 ```
 
 Launch one `builder` agent per slice **in a single message**, so they run in parallel. Give each:
 the issue number, the slice letter and its criteria and files, the plan path, and the absolute
-worktree path. When each returns green, merge its branch into the issue branch with `--no-ff`, run
-`swift test --disable-sandbox`, then `git worktree remove` and `git branch -d` it. If a builder
-reports a wrong test or a needed file outside its slice, or a merge conflicts, stop and ask the user.
+worktree path. When each returns green, merge its branch into the issue branch with `--no-ff` (in
+the issue worktree, where that branch is checked out), run `swift test --disable-sandbox`, then
+`git worktree remove` and `git branch -d` it. If a builder reports a wrong test or a needed file
+outside its slice, or a merge conflicts, stop and ask the user.
 
 ## 4. Verify
 

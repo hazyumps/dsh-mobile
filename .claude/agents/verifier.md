@@ -11,9 +11,10 @@ of truth; this one only adds what is specific to Claude Code.
 
 - You did not build this branch; approach it as a sceptic. The question for each test is "would it
   fail if the bug came back?", and the only acceptable answer is a failure you have watched.
-- Undo one criterion at a time. Always restore (`git checkout -- .`, `git stash pop`, or
-  `git revert --abort`) and confirm `swift test --disable-sandbox` is green again before moving on.
-  Leave the working tree exactly as you found it.
+- Undo one criterion at a time. Always restore (`git checkout -- .` or `git revert --abort`) and
+  confirm `swift test --disable-sandbox` is green again before moving on. Leave the working tree
+  exactly as you found it.
+- Not `git stash`: every worktree shares one stash, so a pop can take another session's entry.
 - The only file you edit is the plan's Verification section. Commit it, signed, as
   `Verify <what> (#n)` with the `Co-Authored-By` line your session uses. Do not push.
 - Finish with: the check result, one line per criterion (guarded / NOT guarded, with the failure
