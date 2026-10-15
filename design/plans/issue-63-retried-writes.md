@@ -1,12 +1,17 @@
 # Issue #63: Writes are retried (event results, uploads, cancel, pairing claim)
 
-**Status:** draft
+**Status:** approved (Dan, 2026-10-15)
 **Branch:** `issue-63-retried-writes`
 **Version impact:** MINOR. This differs from the issue, which says PATCH. Removing `retryPolicy:` from
 `DshRpcClient.call/callVoid`, `DshBareEndpointClient.init/submitEventResult` and
 `PairingClient.init/claim` changes a public kit API that callers use, and that is incompatible.
 `docs/process/RELEASING.md` puts that at MINOR while 0.x. No bump in this PR, only a line under
-`## [Unreleased]`. The issue gets corrected at gate 1.
+`## [Unreleased]`. The correction is posted on the issue.
+
+**Gate-1 decisions (Dan, 2026-10-15).** The lint rule lands first with temporary #63 allowlist
+entries, as planned. The RISK-FLAGS S1 row and the WORKFLOW Lint row edits stay in this PR. The
+remaining "write through `call`" gap is filed as #87. `MOBILE-IMPLEMENTATION-SPEC.md:111` stays as
+written. The AC1 reasoning and the duplicated AC7/AC8 cases are accepted.
 
 ## Context
 
@@ -186,6 +191,7 @@ Everything below came out of the sibling search; the next section lists what was
   replayed (`AppModel.swift:660`).
 - **The base64 upload fallback** runs only on a 404 (`AttachmentUploader.swift:98-107`), so after
   this fix a 502 on the binary upload can't turn into a second upload through the fallback route.
+- **A write sent through `call`** is still expressible: #87 (see Notes).
 - **`design/MOBILE-IMPLEMENTATION-SPEC.md:111`**, which says every write "must explicitly pass
   `RPCFailureRetryPolicy.none`". It is a design record and is left as written.
 
@@ -218,10 +224,34 @@ Everything below came out of the sibling search; the next section lists what was
 
 ## Red evidence
 
-*To be filled in with the `Tests:` commit.*
+`Tools/check.sh --red` on the `Tests:` tree (2026-10-15):
 
 ```
+red: ok it compiles and fails on assertions (kit: fail, app: pass; logs in .build/check).
+check: ok — red for the right reason (156s)
 ```
+
+Kit: 532 tests in 37 suites, **10 failing tests, 28 issues**, all in `WritesAreSentOnceTests`. Every
+other suite passes, including the two edited `NetworkTests` cases. Lint is ok. The 17 guard cases
+(dropped connection for AC1–5, and all of AC6–9) pass, as predicted. Each red test's first failure
+(`WritesAreSentOnceTests.swift:<line>`):
+
+| Test | First failure | Also |
+|---|---|---|
+| AC1 … answers 502 | `:127` `(requestsSent → 3) == 1` | sleeps `[0.5, 1.0]`; `harnessUnavailable(attempts: 3)` |
+| AC1 … answers 429 | `:142` `(requestsSent → 3) == 1` | sleeps `[5.0, 5.0]`; `rateLimited(5, attempts: 3)` |
+| AC2 … on 502 | `:180` `(requestsSent → 3) == 1` | sleeps `[0.5, 1.0]`; `attempts: 3` |
+| AC2 … on 429 | `:195` `(requestsSent → 3) == 1` | sleeps `[5.0, 5.0]`; `attempts: 3` |
+| AC3 … on 502 | `:233` `(requestsSent → 3) == 1` | sleeps `[0.5, 1.0]`; `attempts: 3` |
+| AC3 … on 429 | `:250` `(requestsSent → 3) == 1` | sleeps `[5.0, 5.0]`; `attempts: 3` |
+| AC4 … on 502 | `:285` `(requestsSent → 3) == 1` | sleeps `[0.5, 1.0]`; `.exchange(.harnessUnavailable(attempts: 3))` |
+| AC4 … without Retry-After | `:303` `(requestsSent → 3) == 1` | sleeps `[60.0, 60.0]`; `.exchange(.rateLimited(60, attempts: 3))` |
+| AC5 … on 502 | `:337` `(requestsSent → 3) == 1` | `.rpc(.harnessUnavailable(attempts: 3))`; 1.7 s of real backoff |
+| AC5 … on 429 | `:349` `(requestsSent → 3) == 1` | `.rpc(.rateLimited(0, attempts: 3))` |
+
+One difference from the test list: the AC4 502 case also records sleeps of `[0.5, 1.0]`, which the
+prediction left out. It is the same bug. `isLockout` in the AC4 429 case is already true at red,
+because a three-attempt 429 is still a lockout.
 
 ## Verification
 
@@ -245,7 +275,7 @@ Everything below came out of the sibling search; the next section lists what was
 - **A write sent through `call` can still be written.** That is the shape of the `session/cancel`
   bug. The API change removes the `.none` trap, but `call` can't tell a read from a write. The
   guards are the S1 checklist and one 429/502/offline test per write. A lint rule listing the write
-  method constants was considered and rejected as a list nobody will keep up to date.
+  method constants was considered and rejected as a list nobody will keep up to date. Filed as #87.
 - **Other sessions running in parallel own:** #66 the `uploadFileBinary` bodies and docs,
   `AttachmentUploader.swift` and `AttachmentUploaderTests.swift`; #68 `RelayTransport.swift` and
   AppModel `~1655`; #65 AppModel `~19, ~115, ~275, ~320-352, ~1669-1672` and
