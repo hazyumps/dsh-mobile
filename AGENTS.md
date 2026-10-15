@@ -50,6 +50,10 @@ was learned. A branch without one is a branch nobody can review.
 git checkout -b issue-31-stop-waiting main
 ```
 
+That switches the branch of the checkout you are in. For several issues at once, give each its own
+worktree instead (`claude -w issue-31`, or `git worktree add`): WORKFLOW.md, "Several issues at
+once", says how, and what the worktrees share.
+
 - **Branch from `main`**, named `issue-<number>-<slug>`. One issue per branch: a second unrelated
   change gets a second issue and a second branch, even when it is a one-liner.
 - **Reference the issue in every commit** (`#31`). The commit body says what changed and why; the
