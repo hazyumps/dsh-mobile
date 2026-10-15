@@ -76,13 +76,17 @@ public struct DshRpcClient: Sendable {
 
     // MARK: - Calling
 
-    /// Sends one unary RPC and returns the decoded response.
+    /// Sends one unary read and returns the decoded response.
+    ///
+    /// A read may retry, so this uses the policy the client was built with. A
+    /// write goes through ``mutate(_:args:returning:)`` instead, which never
+    /// retries (SPEC §3, "Retry rule"; AGENTS.md).
     ///
     /// Success is `result.ok == true`. A result with **no `value` key** is a
     /// success and decodes with `value == nil` — SPEC §6.2: "A result may also be
     /// `{"ok":true}` with no `value` key at all, which is what the harness emits
     /// for a void result: treat a missing `value` as success, not as a decode
-    /// failure." ``callVoid(_:args:retryPolicy:)`` is the convenience for it.
+    /// failure." ``callVoid(_:args:)`` is the convenience for it.
     ///
     /// - Throws: ``DshRPCError`` for everything else, with ``DshRPCError/guidance``
     ///   carrying the SPEC §6.9 behaviour.
@@ -90,10 +94,9 @@ public struct DshRpcClient: Sendable {
     public func call<Args: Codable & Sendable, Value: Codable & Sendable>(
         _ method: String,
         args: Args,
-        returning _: Value.Type = Value.self,
-        retryPolicy: RPCFailureRetryPolicy? = nil
+        returning _: Value.Type = Value.self
     ) async throws -> RPCResponse<Value> {
-        let response = try await perform(method: method, args: args, retryPolicy: retryPolicy)
+        let response = try await perform(method: method, args: args, retryPolicy: exchange.retryPolicy)
         return try Self.decodeResponse(Value.self, from: response.body, decoder: decoder)
     }
 
@@ -106,42 +109,36 @@ public struct DshRpcClient: Sendable {
     @discardableResult
     public func callVoid<Args: Codable & Sendable>(
         _ method: String,
-        args: Args,
-        retryPolicy: RPCFailureRetryPolicy? = nil
+        args: Args
     ) async throws -> RPCResponse<JSONValue> {
-        try await call(method, args: args, returning: JSONValue.self, retryPolicy: retryPolicy)
+        try await call(method, args: args, returning: JSONValue.self)
     }
 
     // MARK: - Writes
 
     /// Sends one write, which is never retried.
     ///
-    /// SPEC §3: every write must pass ``RPCFailureRetryPolicy/none``, because
+    /// SPEC §3: every write goes out under ``RPCFailureRetryPolicy/none``, because
     /// retrying a mutation whose outcome is unknown is how a prompt is submitted
     /// twice. Reads may retry; a create, a model or preset change, a prompt, a
     /// command, an answer, an event result and an upload may not.
     ///
-    /// The reason this exists rather than callers passing the policy themselves is
-    /// a specific bug that has already happened here. The policy parameter is
-    /// `RPCFailureRetryPolicy?` with a default of `nil`, so a call site that writes
-    /// `.none` intending the policy is writing `Optional.none` — which Swift
-    /// resolves to the *default*, retrying policy, and the mutation is retried.
-    /// The failure is silent, compiles cleanly, and looks correct on review.
-    ///
-    /// So this pair takes no policy at all. There is no parameter to get wrong, and
-    /// a write that wants retries cannot be expressed.
+    /// This pair takes no policy at all, so there is no parameter to get wrong.
+    /// History: `call` used to take an optional policy, where a `.none` argument
+    /// was `Optional.none`, the default retrying policy, so writes were retried
+    /// (#63).
     @discardableResult
     public func mutate<Args: Codable & Sendable, Value: Codable & Sendable>(
         _ method: String,
         args: Args,
         returning _: Value.Type = Value.self
     ) async throws -> RPCResponse<Value> {
-        try await call(
-            method,
+        let response = try await perform(
+            method: method,
             args: args,
-            returning: Value.self,
             retryPolicy: RPCFailureRetryPolicy.none
         )
+        return try Self.decodeResponse(Value.self, from: response.body, decoder: decoder)
     }
 
     /// A write whose result the caller does not model.
@@ -158,14 +155,12 @@ public struct DshRpcClient: Sendable {
     private func perform<Args: Codable & Sendable>(
         method: String,
         args: Args,
-        retryPolicy: RPCFailureRetryPolicy?
+        retryPolicy: RPCFailureRetryPolicy
     ) async throws -> RelayHTTPResponse {
         let envelope = makeRequest(method, args: args)
         let request = try makeHTTPRequest(envelope)
         var usingExchange = exchange
-        if let retryPolicy {
-            usingExchange.retryPolicy = retryPolicy
-        }
+        usingExchange.retryPolicy = retryPolicy
         return try await usingExchange.perform(request, endpoint: method)
     }
 
