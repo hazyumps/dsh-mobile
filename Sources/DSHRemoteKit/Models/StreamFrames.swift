@@ -203,18 +203,38 @@ extension MuxFrameValue: Codable {
         // discriminator the union cannot be classified at all (SPEC §6.9).
         let type = try container.decode(String.self, forKey: .type)
 
+        // A `type` this build knows but a *body* it cannot model is kept whole rather than
+        // thrown away. It used to throw, and that was backwards: an unknown `type` was already
+        // surviving via `default:` while a known one whose shape had drifted killed the frame —
+        // which failed every stream on the socket and parked the app at "Host unavailable"
+        // (#99, where one `tool/result` carrying an object `surfaceOp` did exactly that).
         switch type {
         case Self.snapshotRawValue:
             // The snapshot's own fields are flattened into this same object, so it decodes
             // from `decoder` rather than from a nested key.
-            self = .snapshot(try MuxSnapshot(from: decoder))
+            self = (try? MuxSnapshot(from: decoder)).map(MuxFrameValue.snapshot)
+                ?? Self.keptWhole(type, from: decoder)
         case Self.eventRawValue:
-            self = .event(try container.decode(DurableEventEnvelope.self, forKey: .event))
+            self = (try? container.decode(DurableEventEnvelope.self, forKey: .event))
+                .map(MuxFrameValue.event)
+                ?? Self.keptWhole(type, from: decoder)
         case Self.assistantStreamRawValue:
-            self = .assistantStream(try container.decode(AssistantStreamFrame.self, forKey: .frame))
+            self = (try? container.decode(AssistantStreamFrame.self, forKey: .frame))
+                .map(MuxFrameValue.assistantStream)
+                ?? Self.keptWhole(type, from: decoder)
         default:
             self = .unknown(type: type, value: try JSONValue(from: decoder))
         }
+    }
+
+    /// A known `type` whose body this build could not model, kept verbatim — discriminator
+    /// included — so nothing the host sent is dropped and no field is guessed.
+    ///
+    /// The frame's envelope (`type`, `streamId`) has already been read by the time this is
+    /// reached, so the caller keeps its stream and the socket keeps its connection: the failure
+    /// is confined to one frame's body.
+    private static func keptWhole(_ type: String, from decoder: any Decoder) -> MuxFrameValue {
+        .unknown(type: type, value: (try? JSONValue(from: decoder)) ?? .null)
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -432,11 +452,19 @@ public struct DurableEventEnvelope: Codable, Sendable, Hashable {
     public var time: Int64?
     /// The event payload, lossless and untrusted in shape.
     public var data: JSONValue
-    /// Present on `user/message` and `assistant/message` in the capture and absent elsewhere.
+    /// The surface operation this event causes, when it has one.
     ///
-    /// unverified: only those two show it, and it is redacted there, so whether other event
-    /// types carry it and what its values mean is unknown. Opaque string.
-    public var surfaceOp: String?
+    /// **Polymorphic, and that is the point.** Captured from the live harness on 2026-10-15 on
+    /// `session-4755645d-5216-436e-b438-4564982800f3`: a bare **string** on the durable events
+    /// (records 0, 1, 3, 6, 8, 11) and an **object** on `tool/result`
+    /// (`{"op":"replace","startSeq":17853,"endSeq":17853}`, records 26, 28, 30).
+    ///
+    /// `String?` here was the whole of #99: one `tool/result` in a transcript failed the frame,
+    /// which failed every stream on the socket and parked the app at "Host unavailable". The
+    /// generated record model already models this as `JSONValue?`
+    /// (`Generated/SessionPage.swift`), so this is the hand-modelled copy agreeing with the
+    /// authority rather than inventing a shape — kept whole, never narrowed.
+    public var surfaceOp: JSONValue?
 
     /// Explicit so a fixture or a preview can build one. On the wire this is decoded.
     public init(
@@ -444,7 +472,7 @@ public struct DurableEventEnvelope: Codable, Sendable, Hashable {
         seq: Int64,
         time: Int64? = nil,
         data: JSONValue,
-        surfaceOp: String? = nil
+        surfaceOp: JSONValue? = nil
     ) {
         self.type = type
         self.seq = seq

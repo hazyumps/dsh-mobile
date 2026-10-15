@@ -16,6 +16,9 @@ Fixed / Security, with its issue number. The release renames the section.
   used to stop every later attempt until the app was relaunched (#26).
 - A slow or failed request no longer rebuilds the connection, so the status chip stops flickering
   on a connection that is working (#82).
+- Opening a conversation whose transcript carries a `surfaceOp` the app had not modelled no longer
+  takes the whole connection down with it. The field is kept whole, and a frame body this build
+  cannot decode can no longer fail every stream on the socket (#99).
 - Writes are sent exactly once. Approvals and answers, file uploads, session cancels and the
   pairing claim were retried up to three times on a 429 or 502, so a write the relay had already
   applied could be applied again; a rate-limited pairing claim now reports the lockout at once
