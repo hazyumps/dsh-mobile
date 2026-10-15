@@ -16,7 +16,8 @@
 # simulator of their own, "DSH Remote Tests", created on the first run (newest iOS runtime, an
 # iPhone) and reused after. It is for these tests only: the test bundle launches the real app,
 # which reconnects any host paired on that simulator, so never pair a host there or use it for
-# DSH_* review. A simulator this script boots, it shuts down again.
+# DSH_* review. It is shut down after every run, whatever state it was found in; a
+# DSH_TEST_SIMULATOR simulator is left as it was found.
 #
 # The app tests run for one checkout at a time per macOS user, because simulators belong to the
 # user and every clone and worktree shares them (#77). While a run chooses the simulator, tests
@@ -34,7 +35,7 @@ case "${1:-}" in
   --fast) mode="fast" ;;
   --red) mode="red" ;;
   "" | --full) ;;
-  -h | --help) sed -n '2,26p' "$0"; exit 0 ;;
+  -h | --help) sed -n '2,27p' "$0"; exit 0 ;;
   *) echo "usage: $0 [--fast|--red]" >&2; exit 2 ;;
 esac
 
@@ -253,9 +254,11 @@ run_app_tests() {
     -destination "id=$test_simulator" -parallel-testing-enabled NO -collect-test-diagnostics never \
     -only-testing:DSHRemoteTests test-without-building > "$test_log" 2>&1
   rc=$?
-  # Leave the simulator as it was found: a stray booted test simulator would answer
-  # `xcrun simctl … booted` in place of the one being reviewed.
-  if [[ "$test_simulator_state" != "Booted" ]]; then
+  # A stray booted test simulator answers `xcrun simctl … booted` in place of the one being
+  # reviewed. The dedicated one is shut down whatever state it was found in (#77): under the lock no
+  # other check.sh is using it, and it is not for review. Left as found, a simulator that a killed run
+  # had booted stayed booted for every run after. A DSH_TEST_SIMULATOR simulator is left as found.
+  if [[ -z "${DSH_TEST_SIMULATOR:-}" || "$test_simulator_state" != "Booted" ]]; then
     xcrun simctl shutdown "$test_simulator" > /dev/null 2>&1
   fi
   unlock_test_simulator
