@@ -163,8 +163,13 @@ which this branch does not touch. Whichever branch merges second rebases.
 - [x] **C3 concurrency.** `HostRegistry` is a new `actor` and has no `@unchecked` or `unsafe`. The
   app's two fire-and-forget `Task`s are removed. The tests await `forget` and never sleep.
 - [x] **C6 UI with no kit test.** AC10 (see below). AC9 is guarded by lint and the app build.
-- [ ] S3 pairing is **not ticked**. The claim call and the trust policy are unchanged. Only where the
-  result is stored moves.
+- [x] **S3 pairing** (ticked after security review). The claim block's persistence moved to
+  `registry.add`; `PairingClient(transport:)`, `client.claim(...)` and the trust policy are
+  unchanged. Pre-existing and out of scope: the stored pin falls back to `claim.fingerprint` when
+  the payload has none, a pin learned from the network (SPEC §3.2) — filed as its own issue.
+- [x] **S9 what leaves the sandbox** (ticked after security review). The new `hostError` text holds
+  the host's display name and a Keychain OSStatus or file-error reason; no token, account value or
+  session content can reach it (security review on the PR).
 - [ ] C1 persisted formats is **not ticked**. The same files are written in the same encoding.
 
 ## Unguarded
