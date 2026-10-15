@@ -31,14 +31,16 @@ public struct UploadedAttachment: Sendable, Hashable {
 public enum AttachmentUploadFailure: Error, Sendable, Hashable {
     /// The raw route is unavailable *and* the file is too big to send as base64.
     ///
-    /// SPEC §9 keeps a 20 MiB cap on the fallback, and the cap is checked before the bytes
-    /// are read: a file that cannot be sent should not be loaded into memory to find out.
+    /// SPEC §6.8 keeps a 20 MiB cap on the fallback, and the cap is checked before the bytes
+    /// are read: a file that cannot be sent should not be loaded into memory to find out. The
+    /// size is the file's own, measured on disk, never a size the caller supplied (#66).
     case tooLargeForFallback(byteCount: Int, limit: Int)
     /// The file is larger than this app's per-file limit (SPEC §3.6), measured from the file
-    /// on disk. Refused before anything is sent. (#66: stub; nothing throws it yet.)
+    /// on disk. Refused before anything is sent, on either route.
     case tooLarge(byteCount: Int, limit: Int)
     /// The file could not be measured as a regular file — missing, or a directory — so it is
-    /// refused rather than sent as zero bytes. (#66: stub; nothing throws it yet.)
+    /// refused rather than sent as zero bytes. Nothing was sent, so unlike ``transport(reason:)``
+    /// there is no outcome to reconcile.
     case unreadable(reason: String)
     /// The host answered successfully but named no receipt, so there is nothing to cite.
     case noReceipt
@@ -51,23 +53,29 @@ public enum AttachmentUploadFailure: Error, Sendable, Hashable {
 
 /// Uploads a prepared file into a session.
 ///
-/// SPEC §9's rules, in the order they apply:
+/// SPEC §3.6 and §6.8's rules, in the order they apply:
 ///
+/// 0. The file is **measured on disk** before anything is sent. A file that is not a readable
+///    regular file, or is larger than ``byteLimit`` (20 MiB, this app's limit rather than the
+///    harness's), is refused there, on either route. The caller's `byteCount` plays no part:
+///    a size the caller under-reports must not be a way past the cap (#66).
 /// 1. The **raw route** is preferred — `POST /api/session/uploadFileBinary?sessionId&name`
 ///    with the bytes as the body, streamed from disk so a large file never becomes a `Data`
 ///    in memory plus a base64 copy of it.
 /// 2. The base64 `fileUploads/upload` fallback runs **only** for a 404 that says the raw route
 ///    is absent. Never around an auth, size or admission refusal: those are the host judging
 ///    this upload, and re-sending it another way would be evading the answer.
-/// 3. The fallback is bounded to 20 MiB.
+/// 3. The fallback is bounded too, by ``fallbackByteLimit``, from the same measurement.
 ///
 /// It is a value type rather than an actor: it owns no state, and every call is scoped by the
 /// arguments the caller already has.
 public struct AttachmentUploader: Sendable {
-    /// SPEC §9's app-side cap for the base64 fallback. The raw route has no such limit here.
+    /// The base64 fallback's cap. It equals ``byteLimit`` by default, so today it can only
+    /// refuse when a test injects a smaller one; it stays separate because base64 costs the
+    /// file plus a third again in memory, which may justify a lower bound one day.
     public static let fallbackByteLimit = 20 * 1024 * 1024
-    /// SPEC §3.6's per-file cap, the app's limit rather than the harness's. (#66: stub; the
-    /// raw route does not enforce it yet.)
+    /// SPEC §3.6's per-file cap, the app's limit rather than the harness's (l.149). One cap,
+    /// enforced on both routes, measured from the file on disk.
     public static let byteLimit = 20 * 1024 * 1024
 
     private let makeBareClient: @Sendable () -> DshBareEndpointClient
@@ -77,7 +85,7 @@ public struct AttachmentUploader: Sendable {
 
     /// - Parameters:
     ///   - fallbackLimit: injected so a test can exercise the cap without a 20 MiB file.
-    ///   - byteLimit: the same, for the per-file cap. (#66: stub; stored, not yet used.)
+    ///   - byteLimit: the same, for the per-file cap that applies to both routes.
     public init(
         makeBareClient: @escaping @Sendable () -> DshBareEndpointClient,
         makeRPCClient: @escaping @Sendable () -> DshRpcClient,
@@ -91,12 +99,23 @@ public struct AttachmentUploader: Sendable {
     }
 
     /// Uploads one prepared file and returns the receipt a prompt can cite.
+    ///
+    /// - Parameter byteCount: **ignored.** The size is measured from `fileURL` instead, so a
+    ///   caller that under-reports it, or passes 0 because it could not stat the file, cannot
+    ///   get a file past the cap (#66). It stays only so existing callers compile; a later MINOR
+    ///   can drop it.
+    /// - Throws: ``AttachmentUploadFailure/unreadable(reason:)`` or
+    ///   ``AttachmentUploadFailure/tooLarge(byteCount:limit:)`` before any request is made.
     public func upload(
         sessionId: String,
         name: String,
         fileURL: URL,
         byteCount: Int
     ) async throws -> UploadedAttachment {
+        let size = try Self.measure(fileURL)
+        guard size <= byteLimit else {
+            throw AttachmentUploadFailure.tooLarge(byteCount: size, limit: byteLimit)
+        }
         do {
             let result = try await makeBareClient().uploadFileBinary(
                 sessionId: sessionId,
@@ -117,7 +136,7 @@ public struct AttachmentUploader: Sendable {
                 sessionId: sessionId,
                 name: name,
                 fileURL: fileURL,
-                byteCount: byteCount
+                byteCount: size
             )
         } catch {
             throw AttachmentUploadFailure.transport(reason: String(describing: error))
@@ -129,15 +148,17 @@ public struct AttachmentUploader: Sendable {
     /// unverified: this route does not exist on the installed host built 2026-10-09 — its raw
     /// route answers — so the request shape is the spec's sentence and the result is decoded
     /// permissively, requiring only the receipt it is used for.
+    ///
+    /// - Parameter byteCount: the size ``upload(sessionId:name:fileURL:byteCount:)`` measured
+    ///   from the file, never the caller's.
     private func uploadAsBase64(
         sessionId: String,
         name: String,
         fileURL: URL,
         byteCount: Int
     ) async throws -> UploadedAttachment {
-        let size = byteCount > 0 ? byteCount : (try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-        guard size <= fallbackLimit else {
-            throw AttachmentUploadFailure.tooLargeForFallback(byteCount: size, limit: fallbackLimit)
+        guard byteCount <= fallbackLimit else {
+            throw AttachmentUploadFailure.tooLargeForFallback(byteCount: byteCount, limit: fallbackLimit)
         }
         guard let data = try? Data(contentsOf: fileURL) else {
             throw AttachmentUploadFailure.transport(reason: "the prepared file could not be read")
@@ -160,6 +181,29 @@ public struct AttachmentUploader: Sendable {
         } catch {
             throw AttachmentUploadFailure.transport(reason: String(describing: error))
         }
+    }
+
+    // MARK: - Measuring
+
+    /// The file's size on disk, or ``AttachmentUploadFailure/unreadable(reason:)`` when it is
+    /// not a regular file whose size can be read. Absent is not zero: a size that cannot be
+    /// read is never treated as an empty file.
+    ///
+    /// The reason names no path or file name: it can reach the screen (SPEC §3.6, S9).
+    static func measure(_ fileURL: URL) throws -> Int {
+        let values: URLResourceValues
+        do {
+            values = try fileURL.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+        } catch {
+            throw AttachmentUploadFailure.unreadable(reason: "the file could not be read")
+        }
+        guard values.isRegularFile == true else {
+            throw AttachmentUploadFailure.unreadable(reason: "it is not a regular file")
+        }
+        guard let size = values.fileSize else {
+            throw AttachmentUploadFailure.unreadable(reason: "its size could not be read")
+        }
+        return size
     }
 
     // MARK: - Decoding
