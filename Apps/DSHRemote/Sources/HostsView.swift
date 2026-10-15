@@ -45,7 +45,7 @@ struct HostsView: View {
                 presenting: pendingForget
             ) { host in
                 Button("Forget \(host.displayName)", role: .destructive) {
-                    model.forget(host)
+                    Task { await model.forget(host) }
                     pendingForget = nil
                 }
                 Button("Cancel", role: .cancel) { pendingForget = nil }
@@ -81,6 +81,11 @@ struct HostsView: View {
                     .foregroundStyle(.secondary)
             } else if case .refused(let reason) = model.pairingOutcome {
                 Label(reason, systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.secondary)
+            }
+            // A forget that did not fully happen says so where the host is (#65).
+            if let hostError = model.hostError {
+                Label(hostError, systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.secondary)
             }
             ForEach(model.hosts) { host in
