@@ -16,6 +16,9 @@ Fixed / Security, with its issue number. The release renames the section.
   used to stop every later attempt until the app was relaunched (#26).
 - A slow or failed request no longer rebuilds the connection, so the status chip stops flickering
   on a connection that is working (#82).
+- Forgetting a host is saved: it no longer comes back, without its credential, after a relaunch,
+  and its drafts and the selected host's staged files and commands go with it. A forget that
+  could not be saved keeps the host and says so (#65).
 
 ### Added (process, no version impact)
 - A written workflow and local CI: `docs/process/`, `Tools/check.sh` with a pre-push hook, a
