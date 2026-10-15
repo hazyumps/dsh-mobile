@@ -43,25 +43,35 @@ any agent:
 
 ```
 orchestrator
-  ├─ read the issue (tea issues <n>) and the branch state
+  ├─ read the issue (tea issues <n>)
+  ├─ work in the issue's own worktree (made under .claude/worktrees/ if need be); read its branch state
   ├─ planner ─▶ plan file ─▶ [human gate 1: plan] ─▶ Tests: commit + red evidence ─▶ [gate 1: tests]
-  ├─ builders, in parallel, one per slice, each in its own worktree
+  ├─ builders, in parallel, one per slice, each in its own worktree nested in the issue's
   │     └─ merge each slice branch back into the issue branch; run swift test
   ├─ verifier (fresh agent) ─▶ Verification section
   ├─ security reviewer (fresh agent), only if a S-flag is ticked ─▶ answered checklist
   └─ push (the hook runs Tools/check.sh) ─▶ tea pulls create ─▶ [human gate 2]
 ```
 
+**The issue's worktree.** The orchestrator never switches the branch of the shared checkout, where
+someone else may be working. It runs in a worktree of the issue's own: the one it was started in
+(`claude -w`, say), or one it makes with
+`git worktree add .claude/worktrees/issue-<n>-<slug> -b issue-<n>-<slug> origin/main`. Every
+command and agent after that uses that worktree's absolute path (WORKFLOW.md, "Several issues at
+once").
+
 **Parallel builders.** At most three at once; more slices than that wait. Each gets one slice from
-the plan and its own worktree off the issue branch:
+the plan and its own worktree off the issue branch, made from inside the issue's worktree so that it
+nests under that worktree's ignored `.worktrees/`:
 
 ```sh
+# in the issue's worktree
 git worktree add .worktrees/issue-<n>-<slice> -b issue-<n>-<slice> issue-<n>-<slug>
 ```
 
 When a builder reports green, the orchestrator merges its branch into the issue branch with
-`--no-ff`, runs `swift test --disable-sandbox`, and removes the worktree. A merge conflict means the
-slices were not independent: stop and tell the human.
+`--no-ff` (in the issue's worktree), runs `swift test --disable-sandbox`, and removes the slice
+worktree. A merge conflict means the slices were not independent: stop and tell the human.
 
 ---
 
@@ -112,10 +122,11 @@ are the same instructions the Claude Code agent definitions in `.claude/agents/`
 > `docs/process/WORKFLOW.md` (step 4), `docs/process/RISK-FLAGS.md` and the plan file.
 >
 > 1. Run `Tools/check.sh` (full). It must be green.
-> 2. For **each** acceptance criterion: undo just its implementation (`git stash`, `git revert
->    --no-commit <sha>`, or re-introduce the bug), run its test, and record the failure. Restore and
->    confirm green. A test that still passes with its fix undone is a finding — report it, do not
->    fix it.
+> 2. For **each** acceptance criterion: undo just its implementation (`git revert --no-commit
+>    <sha>`, or re-introduce the bug), run its test, and record the failure. Restore
+>    (`git revert --abort`, or `git checkout -- <file>`) and confirm green. Never a bare
+>    `git stash`: every worktree shares the stash, and a `git stash pop` can take another session's
+>    entry. A test that still passes with its fix undone is a finding — report it, do not fix it.
 > 3. Check the version-impact claim against `docs/process/RELEASING.md`, and that a line was added
 >    under `## [Unreleased]` in `CHANGELOG.md`.
 > 4. Write the results into the plan's Verification section and commit as
@@ -139,7 +150,7 @@ Everything above is available as commands and subagents in this repo:
 
 | Command | Does |
 |---|---|
-| `/feature <n>` | Runs the whole loop for issue `n`: planner, gate, builders in parallel worktrees, verifier, security reviewer, PR. Stops at each human gate. |
+| `/feature <n>` | Runs the whole loop for issue `n` in the issue's own worktree, which it makes under `.claude/worktrees/` when started in the shared checkout: planner, gate, builders in parallel worktrees nested in it, verifier, security reviewer, PR. Stops at each human gate. |
 | `/bugfix <n>` | The same loop, shaped for a bug: the first test reproduces it. |
 | `/release` | Walks [RELEASING.md](RELEASING.md); stops before tagging and pushing. |
 | `/check` | Runs `Tools/check.sh` and summarises the result. |
@@ -148,6 +159,12 @@ The subagents are `.claude/agents/planner.md`, `builder.md`, `verifier.md` and
 `security-reviewer.md`; each one carries the brief above. Builders run with worktree isolation.
 Project settings in `.claude/settings.json` allow the build, test and `tea` read commands without
 prompting, and always ask before `git push`, `git tag` and merging.
+
+**Several issues at once.** One session per issue, each in its own terminal: `claude -w issue-<n>`
+starts Claude Code in a new worktree under `.claude/worktrees/`, and `/feature <n>` runs there.
+Background sessions isolate themselves in a worktree the same way. No session switches the shared
+checkout's branch; it stays on `main`. What the sessions still share (the test simulator's lock,
+the review simulator, `git stash`, the changelog) is in WORKFLOW.md, "Several issues at once".
 
 ## With other agents
 

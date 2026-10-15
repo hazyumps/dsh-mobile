@@ -34,7 +34,10 @@ Work starts on gitea, on an issue (`AGENTS.md`, "One issue, one branch").
   persisted format and a screen, split it into issues. Small issues are what make parallel
   builders and honest reviews possible.
 
-Branch from `main`: `git checkout -b issue-<n>-<slug> main`.
+Branch from `main`: `git checkout -b issue-<n>-<slug> main`. That switches the branch of the
+checkout you are in. To keep it free for other work, or to have several issues in flight, give the
+issue a worktree instead: see [Several issues at once](#several-issues-at-once). `/feature` and
+`/bugfix` always do.
 
 ## 1. Plan (planner)
 
@@ -122,9 +125,11 @@ section (or the PR description):
 
 1. `Tools/check.sh` is green — full mode, not `--fast`.
 2. **Every AC is shown to be guarded.** For each one, undo the implementation of that AC only
-   (`git stash`, `git revert --no-commit <sha>`, or re-introduce the bug by hand), run its test, and
-   paste the failure. Then restore. A test that still passes with its fix removed is a liability,
-   and the verifier says so — this repo has a precedent (`AGENTS.md`, "Verifier").
+   (`git revert --no-commit <sha>`, or re-introduce the bug by hand), run its test, and paste the
+   failure. Then restore (`git revert --abort`, or `git checkout -- <file>`). Not with a bare
+   `git stash`: the stash is shared by every worktree, so `git stash pop` can take another
+   session's entry ("Several issues at once"). A test that still passes with its fix removed is a
+   liability, and the verifier says so — this repo has a precedent (`AGENTS.md`, "Verifier").
 3. If any risk flag is ticked, run the matching checklist in [RISK-FLAGS.md](RISK-FLAGS.md) and
    paste it, answered, into the PR.
 4. Check the **version impact** claim against [RELEASING.md](RELEASING.md).
@@ -192,20 +197,89 @@ Modes: `Tools/check.sh` (everything), `--fast` (no app builds or app tests, no s
 (for a `Tests:` commit: the kit and app tests must compile, and at least one must fail). The hook
 picks the mode from what is being pushed.
 
-The app tests' inner loop is `xcodebuild test -project Apps/DSHRemote/DSHRemote.xcodeproj -scheme
-DSHRemote -destination 'platform=iOS Simulator,name=DSH Remote Tests' -only-testing:DSHRemoteTests
--collect-test-diagnostics never` (without that flag a failing run can wait 10 minutes collecting
-simulator diagnostics). "DSH Remote Tests" is the tests' own simulator, created by the first `Tools/check.sh` run (or set
-`DSH_TEST_SIMULATOR` to a UDID): the tests launch the real app, which reconnects any host paired
-there, so it is not for review or pairing.
+**The app tests take a per-user lock.** Simulators belong to the macOS user, so every clone and
+worktree shares the tests' simulator, and two test runs on it at once make each other fail.
+`Tools/check.sh` holds a lock on `$(getconf DARWIN_USER_TEMP_DIR)dsh-remote-tests-simulator.lock`
+from choosing the simulator until its tests are over. A second run prints a line saying it is
+`waiting`, naming the run that holds it, and starts its app tests when that run is done; the rest
+of the check does not wait. The lock is the kernel's `flock` on the file, so a killed run frees it.
+Never delete the file.
 
-**One-time setup per machine:** `Tools/setup-dev.sh` — it points git at the hook and the shared
-`.gitsigners` file, and checks for Xcode, XcodeGen, `tea`, and an iOS simulator runtime with an
-iPhone device type (what the app tests' simulator is made from).
+The app tests' inner loop takes the same lock, so it cannot collide with another worktree's check
+either (it prints nothing while it waits):
+
+```sh
+lockf -k "$(getconf DARWIN_USER_TEMP_DIR)dsh-remote-tests-simulator.lock" \
+  xcodebuild test -project Apps/DSHRemote/DSHRemote.xcodeproj -scheme DSHRemote \
+  -destination 'platform=iOS Simulator,name=DSH Remote Tests' -only-testing:DSHRemoteTests \
+  -collect-test-diagnostics never
+```
+
+Without `-collect-test-diagnostics never` a failing run can wait 10 minutes collecting simulator
+diagnostics, and without `-k` `lockf` deletes the lock file when it is done. "DSH Remote Tests" is
+the tests' own simulator, created by the first `Tools/check.sh` run (or set `DSH_TEST_SIMULATOR` to
+a UDID): the tests launch the real app, which reconnects any host paired there, so it is not for
+review or pairing.
+
+**One-time setup per machine:** `Tools/setup-dev.sh` — it points git at the hook and the
+`.gitsigners` file by relative paths, so each worktree uses its own copy (and warns about an
+absolute path left from before), and checks for Xcode, XcodeGen, `tea`, and an iOS simulator
+runtime with an iPhone device type (what the app tests' simulator is made from).
 
 **Adding a lint rule** is the right response to a bug that a grep could have caught. Add it to
 `Tools/lint.sh` with a comment naming the bug, and put existing violations in the allowlist with an
 exact count and an issue number.
+
+## Several issues at once
+
+A **worktree** is a second checkout of the same clone, in its own directory and on its own branch,
+sharing one history: a commit made in one is visible from all of them. A branch can be checked out
+in only one worktree at a time. Give each issue in flight a worktree, and leave the shared checkout
+(the directory you cloned) on `main`: switching its branch switches it under anyone working there.
+
+**Start** each issue in its own terminal, from the shared checkout:
+
+```sh
+claude -w issue-<n>          # a Claude Code session in a new worktree; then /feature <n> in it
+
+# or by hand:
+git fetch origin
+git worktree add .claude/worktrees/issue-<n>-<slug> -b issue-<n>-<slug> origin/main
+cd .claude/worktrees/issue-<n>-<slug>
+```
+
+`/feature` and `/bugfix` make the worktree themselves when started in the shared checkout.
+`.claude/worktrees/` is ignored. `git worktree list` shows every worktree, with its branch.
+
+**What the worktrees share:**
+
+- **The test simulator.** `Tools/check.sh` runs the app tests for one checkout at a time per macOS
+  user. A second run prints that it is `waiting`, and for whom, then carries on ("Local CI").
+- **The review simulator.** Check things by eye one session at a time, and name the simulator in
+  `simctl` commands (`"iPhone 18 Pro"` or a UDID), not `booted`, which may pick "DSH Remote Tests".
+- **`git stash`.** There is one stash for all worktrees, so `git stash pop` can take another
+  session's entry. Set work aside with a WIP commit. If you must stash,
+  `git stash push -m "<unique tag>"`, find its SHA with `git stash list --format='%H %gs'`, and
+  restore with `git stash apply <sha>`.
+- **`CHANGELOG.md`.** When two PRs each add a line under `## [Unreleased]`, the second to merge
+  conflicts there: merge `main` into its branch, keep both lines, and run `Tools/check.sh` again.
+
+**A new worktree's first build is cold**: SwiftPM's `.build` and Xcode's DerivedData are per
+directory. Its first full `Tools/check.sh` takes about 4–6 minutes (the script's header).
+
+**Clean up** once the branch is merged, from the shared checkout (`git worktree list` gives the
+path and branch):
+
+```sh
+grep -l "<worktree path>/" ~/Library/Developer/Xcode/DerivedData/DSHRemote-*/info.plist
+rm -rf ~/Library/Developer/Xcode/DerivedData/DSHRemote-<each folder it named>
+git worktree remove <worktree path>
+git branch -d <branch>
+git worktree prune           # only if a worktree's directory was deleted by hand
+```
+
+The DerivedData folder (300–500 MB) is Xcode's build output for that path. It lives outside the
+worktree, so removing the worktree leaves it behind.
 
 ## Definition of done
 

@@ -50,6 +50,10 @@ was learned. A branch without one is a branch nobody can review.
 git checkout -b issue-31-stop-waiting main
 ```
 
+That switches the branch of the checkout you are in. For several issues at once, give each its own
+worktree instead (`claude -w issue-31`, or `git worktree add`): WORKFLOW.md, "Several issues at
+once", says how, and what the worktrees share.
+
 - **Branch from `main`**, named `issue-<number>-<slug>`. One issue per branch: a second unrelated
   change gets a second issue and a second branch, even when it is a one-liner.
 - **Reference the issue in every commit** (`#31`). The commit body says what changed and why; the
@@ -89,10 +93,11 @@ part is that they are not the same person's judgement applied twice.
    planner's tests** — `Tools/guard-tests.sh` fails any later commit that changes a line from a
    `Tests:` commit. If a test is wrong, say so and let the planner change it in a new `Tests:`
    commit. Silently relaxing an assertion is how a suite stops meaning anything.
-3. **Verifier** checks the test actually guards something: reinstate the bug (or stash the fix)
-   and confirm the test fails. This repo has a precedent — a guard test written for a
-   suspected ordering bug **passed with the bug reinstated**, because it asserted values that
-   were always consistent by the time it looked. That test was a liability until it was rewritten.
+3. **Verifier** checks the test actually guards something: reinstate the bug (or revert the fix
+   with `git revert --no-commit`) and confirm the test fails. This repo has a precedent — a guard
+   test written for a suspected ordering bug **passed with the bug reinstated**, because it
+   asserted values that were always consistent by the time it looked. That test was a liability
+   until it was rewritten.
 
 A human approves the plan and the tests before building starts, and the other human approves the
 PR. Agents can hold the three roles; they cannot hold those two gates
