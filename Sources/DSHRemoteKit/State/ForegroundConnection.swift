@@ -47,10 +47,21 @@ public final class ForegroundConnection {
                 await coordinator.shutdown()
                 return
             }
-            if let error, !error.isRetryable {
-                status = error.status
-                return
-            }
+            // A terminal failure is terminal for the *backoff loop*, not for the app. Returning
+            // here made the park a dead end: `error` is only cleared by a success, so once a
+            // non-retryable failure had been recorded, every later return to the foreground
+            // repainted the same status and never dialled again — indistinguishable from a
+            // connection that never comes back, and cured only by relaunching the app.
+            //
+            // A wake therefore earns one fresh attempt. If the cause has cleared, the app recovers
+            // by itself; if it has not, the same status returns and ``run(revision:)`` parks again.
+            // One attempt per wake cannot hot-loop, which is what SPEC §6.4/§6.9's "stop retrying"
+            // protects — and `setForeground` only fires on a genuine phase change, so the app's own
+            // lifecycle is the throttle.
+            //
+            // Reachable in normal use because the relay answers 403 for a Host-fence refusal as
+            // well as for a bad credential (#79), so `.pairingRequired` can be wrong. Recovering
+            // despite the misclassification is this type's job; correcting it is the relay's.
             await run(revision: current)
         }
     }
