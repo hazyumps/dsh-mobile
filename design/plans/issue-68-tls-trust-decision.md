@@ -226,16 +226,67 @@ and that confirms the "unverified" note in `spkiPin(of:)`.
 
 ## Verification
 
-*Filled in by the verifier.* The undos are: accept when there is no anchor (AC4), take the pin
-from the issuer (AC1), skip the key-type check (AC2), and swap two dispositions (AC6). Each must turn
-a test red.
+Verified 2026-10-15 at `501727a` by an agent that did not build the branch. Each undo is one edit to
+`Sources/DSHRemoteKit/Network/RelayTransport.swift`, run with
+`swift test --disable-sandbox --filter TLSTrustDecisionTests`. It was then restored with
+`git checkout -- .`, and the full kit suite was confirmed green (517 tests) before the next undo.
+Line numbers are in `TLSTrustDecisionTests.swift`.
 
 | AC | Undone how | Test failure with it undone |
 |---|---|---|
-| | | |
+| AC4 | (a) no pin and no platform trust accepts: `.reject(.noTrustAnchor)` → `.acceptPinned` (the old `.useCredential` branch) | **guarded.** `AC4: no pin and no platform trust is rejected` `:170` `decision == .reject(.noTrustAnchor)`; decision → `.acceptPinned` |
+| AC1 | (b) the leaf is the last certificate in the chain: `?.first` → `?.last` | **guarded.** `AC1: the pin is taken from the leaf, not the issuer` `:125`, decision → `.acceptPinned`. Also `AC5: …checks only the pin` `:183`, decision → `.reject(.pinMismatch)` |
+| AC2 | (c) any leaf key is pinned: if the P-256 wrap fails, hash the raw external representation instead of returning `nil` | **guarded.** `AC2: a P-384 leaf fails closed…` `:137` and `AC2: an RSA leaf fails closed…` `:147`, `decision == .reject(.unsupportedKey)`; decision → `.reject(.pinMismatch)` |
+| AC1 | (d) a mismatched pin is accepted: `: .reject(.pinMismatch)` → `: .acceptPinned` | **guarded.** `AC1: the same certificate is rejected under a different pin` `:97`, `AC1: a pin over the whole certificate is not accepted` `:108`, `AC1: the pin is taken from the leaf, not the issuer` `:125`; each gives decision → `.acceptPinned` |
+| AC3 | (e) no pin with platform trust accepts with a credential instead of deferring: `.deferToPlatform` → `.acceptPinned` (→ `.useCredential`) | **guarded.** `AC3: no pin with platform trust required defers…` `:159` `decision == .deferToPlatform`; decision → `.acceptPinned` |
+| AC5 | (h) "both" means both: a matched pin with `requiresPlatformTrust` gives `.deferToPlatform` | **guarded.** `AC5: …checks only the pin (follow-up #86)` `:183` `decision == .acceptPinned`; decision → `.deferToPlatform` |
+| AC6 | (f) a rejection maps to `.performDefaultHandling` instead of cancel | **guarded.** `AC6: a rejected decision maps to cancelAuthenticationChallenge` `:211` fails for all 4 cases (`.noLeafCertificate`, `.unsupportedKey`, `.pinMismatch`, `.noTrustAnchor`); disposition → `rawValue: 1` |
+| AC6 | swap the accept and defer dispositions | **guarded.** `AC6: an accepted decision maps to useCredential` `:192`, disposition → `rawValue: 1`. `AC6: a deferred decision maps to performDefaultHandling` `:199`, disposition → `rawValue: 0` |
+| AC1–AC6 | `git revert --no-commit 719996c` (back to the stubs), then `git revert --abort` | 10 of 12 fail, the same set as the Red evidence |
+| AC7 | Floor line present: `Network/RelayTransport.swift 48` (`Tools/must-test.txt:10`). (1) `TLSTrustDecisionTests.swift` deleted, `Tools/check.sh --fast` | **guarded.** `coverage: FAIL Network/RelayTransport.swift is at 39.19%, below its must-test floor of 48%`. The ratchet also fires (`86.62% is below the baseline 87.08%`); `check: RED … - coverage` |
+| AC7 | (2) floor raised to 60 with every test present, `Tools/check.sh --fast`, to show the floor alone turns it red | **guarded.** `coverage: ok 87.08%`, then `coverage: FAIL Network/RelayTransport.swift is at 51.65%, below its must-test floor of 60%`; `check: RED (fast, 21s) - coverage` |
 
-- `Tools/check.sh`: …
-- S2 checklist, including `dsh-smoke` against the live relay (date, result): …
+Two undos are **not guarded by any test**. Both are known, and neither is a regression:
+
+- **The delegate adapter.** If `TransportDelegate` ignored the decision and called
+  `completionHandler(.useCredential, URLCredential(trust: trust))`, all 517 kit tests would still
+  pass. The plan's Out of scope already says this needs a real handshake, so `dsh-smoke` is the
+  only guard. What the tests prove is that `decide` and `disposition` are right, not that the
+  delegate uses them. The adapter is three lines and easy to review by eye, but a reviewer has to
+  read it.
+- **The `.noLeafCertificate` branch of `decide`.** Changing `return .reject(.noLeafCertificate)` to
+  `return .acceptPinned` leaves all 12 trust tests green. The builder said the branch can't be
+  reached offline, because a `SecTrust` can't have an empty chain. **I agree.** I checked with a
+  scratch program on macOS (2026-10-15):
+  `SecTrustCreateWithCertificates([] as CFArray, SecPolicyCreateSSL(true, …), &trust)` returns
+  `-50` (`errSecParam`) and leaves `trust` nil, and `NSNull()` gives the same result. The AC6
+  mapping test covers only `RelayTrustDecision.reject(.noLeafCertificate).disposition`. It does not
+  cover the `decide` branch that produces it. The branch is defensive code against a platform
+  invariant, and it fails closed as written. Nothing would notice if someone made it fail open.
+
+Other checks:
+
+- The fixture's pins were recomputed independently with `/opt/homebrew/bin/openssl` (SHA-256 over
+  `x509 -pubkey | pkey -pubin -outform der` for the leaf, issuer, P-384 and RSA certificates, and
+  SHA-256 over the leaf's DER). All five match `expectedPin`, `issuerOwnPin`, `p384OwnPin`,
+  `rsaOwnPin` and `leafWholeCertificatePin`.
+- Version impact: PATCH agrees with RELEASING.md ("a hardening fix"). There is no bump, and the
+  Security line is under `## [Unreleased]` in `CHANGELOG.md`. The coverage baseline (87.08) and the
+  measured value agree, so nothing needs raising.
+- `Tools/check.sh` (full) on `501727a` was green in 401s. Lint, models, version and guard-tests
+  were ok. Kit: 517 tests in 37 suites, coverage 87.08% against a baseline of 87.08%. App builds:
+  Debug ok, Release ok. App tests: 4 tests in 2 suites.
+- S2 checklist:
+  - [x] A wrong pin is rejected: `AC1: the same certificate is rejected under a different pin`,
+    `AC1: a pin over the whole certificate is not accepted` and
+    `AC1: the pin is taken from the leaf, not the issuer`.
+  - [x] A missing pin falls back to platform trust, never to "accept anything":
+    `AC3: no pin with platform trust required defers to the system's check` and
+    `AC4: no pin and no platform trust is rejected`.
+  - [ ] `dsh-smoke` against a live relay has **not been run**. Running it means minting a device
+    token through `/relay/pair` on Dan's relay (`Smoke/README.md`), which changes host state. The
+    verifier did not do that without approval, and it is still owed before merge. Until it runs,
+    nothing has exercised the delegate adapter, the one unguarded path above.
 
 ## Notes for the next person
 
