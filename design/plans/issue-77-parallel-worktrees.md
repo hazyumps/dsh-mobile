@@ -699,14 +699,234 @@ bare `xcodebuild test` instructions are all still there.
 
 ## Verification
 
-*Filled in by the verifier: for each AC, how it was undone, the probe's result with it undone, and
-the result once restored. Then `Tools/check.sh` (full) and the version-impact check.*
+Verified on 2026-10-14 by the verifier agent, on `3e48673`, in this worktree.
+- **Setup.**
+  - Checkout B for P1–P4 was a copy of `git ls-files` in the ignored `.worktrees/probe-77-b`. It was
+    not under `.build/`, which `coverage.sh` skips.
+  - P6 and P7 ran in a scratch clone with its own `.git`, in `.build/probe-77v/clone`.
+  - Probe scripts lived in the ignored `.build/probe-77v/`.
+  - All of these were deleted afterwards, along with B's DerivedData folder.
+- **Undo and restore.** Each criterion was undone with `git revert --no-commit <sha>` and restored
+  with `git revert --abort`. After each restore, `git status` was clean and `swift test` or the full
+  check was green.
+- **`Tools/check.sh` (full): green.** `check: green (full, 67s)` on `3e48673` before the probes;
+  `check: green (full, 70s)` after the last restore.
+- **Every criterion is guarded.** Each probe failed with its fix undone and passed with it restored.
+- `<worktree>` below stands for this worktree's absolute path, and UDIDs are cut to their first
+  block.
 
-| AC | Undone how | Probe result with it undone |
-|---|---|---|
+| AC | Undone how | Probe result with it undone | Restored |
+|---|---|---|---|
+| AC1 | revert `1143714` ¹ | P1, both at once: A `app tests: FAIL the tests did not run`, B `app tests: FAIL the test process crashed …`. Each was `app tests: ok` alone. | P1: both `app tests: ok`, both `check: green (full, …)` |
+| AC2 | revert `1143714` ¹ | P2: under the holder, no `waiting`. The run tested at once, and was green. | P2: one `waiting` line, naming the holder. `--fast` never waits; `DSH_TEST_SIMULATOR` waits. |
+| AC3 | revert `1143714` ¹ | P3: two `simulator: created`, count 2. Both with `choose.sh` and with the real `run_app_tests`. | P3: one `simulator: created`, count 1 |
+| AC4 | revert `1143714` ¹ | Without a lock there is nothing to leave behind, as planned. P1–P3 show the failure. | P4 (a) and (b): nothing stale. (b) waits only for the orphan. `lsof` empty after. |
+| AC5 | revert `46381e2` alone | P5: found `(Booted)`, left `(Booted)` | P5: `(Booted)`, then `(Shutdown)`. With `DSH_TEST_SIMULATOR`: left `(Booted)`. |
+| AC6 | revert `2b7243d` | P6: `feature.md:14` says `from main (git checkout -b … main)` | P6: step 0 matches AC6, and the detection is right in both places |
+| AC7 | revert `85eba0f`, in the clone | P7 (a): only `ok` lines, and the signers file stored absolute. (b): a false `ok`. | P7 (a): a `warn` naming each old value; both end relative. (b): `miss` naming `file:.git/config.worktree`, exit 1. |
+| AC8 | revert `c29dcfc` | P8: exit 1 | P8: `.gitignore:21:.claude/worktrees/`, exit 0. The tracked files stay unignored. |
+| AC9 | revert `2796ffb` ² | P9: all four bare-stash instructions are back | P9: only warnings and the tagged form |
+| AC10 | revert `50dd1eb` | P10: `booted` at README:281–282 and IOS-PRIMER:74 and 177 | P10: only prose. The commands name "iPhone 18 Pro". |
+| AC11 | revert `4c8bce2` | P11: the bare inner loop ran to `TEST SUCCEEDED` under the holder | P11: nothing for 20 s under the holder, then `TEST SUCCEEDED` |
+| AC12 | revert `4c8bce2` and `56782e0` | P12: 15 of 16 points absent. The 16th, the `check.sh` header, goes with `1143714`. | P12: all 16 present |
 
-- `Tools/check.sh`: green / red
-- Risk checklist: not applicable (no flag)
+¹ This revert conflicts only in the header comment and the `--help` line range, which `46381e2`
+also edits. I resolved it by hand to `46381e2`'s header sentence, without the lock paragraph. The
+code it leaves is `main`'s `run_app_tests` plus `46381e2`'s shutdown rule, and `bash -n` is clean.
+
+² WORKFLOW.md step 4 conflicts with `4c8bce2`'s later edit, so the grep read both sides of the
+conflict. The other three files reverted cleanly.
+
+**P1 (AC1), undone.**
+- `section.sh` read the reverted `check.sh`. Alone in A, then alone in B: `app tests: ok` each.
+- Both at once, both ending at +33 s, as in the pilot:
+
+```
+A: app tests: FAIL the tests did not run (full log: .build/check/app-tests.log)
+   log: DSHRemote encountered an error (Failed to install or launch the test runner. (Underlying
+        Error: … (Mach error -308 - (ipc/mig) server died)))
+B: app tests: FAIL the test process crashed (full log: .build/check/app-tests.log). A crash hides every
+              result after it; stub with a wrong value or a thrown error, not fatalError.
+   log: DSHRemote encountered an error (Early unexpected exit, operation never finished bootstrapping
+        - no restart will be attempted. (Underlying Error: Test crashed with signal kill before
+        establishing connection.))
+```
+
+**P1 (AC1), restored.** Two full runs, A and B, with the external holder taken first.
+- B printed `waiting` at 21:44:03 and A at 21:44:17. Nothing followed either line while the lock
+  was held.
+- On release, A took the lock first:
+
+```
+A  21:44:17  simulator: waited 0s
+   21:44:17  simulator: 821CACC8… "DSH Remote Tests" (Shutdown)
+   21:45:03  app tests: ok              check: green (full, 97s)
+B  21:45:03  simulator: waited 60s
+   21:45:44  app tests: ok              check: green (full, 138s)
+```
+
+**P2 (AC2).**
+- **Undone.** A full run under the holder printed no `waiting`. It went straight to
+  `simulator: 821CACC8… (Shutdown)` and was green, while the holder still had the lock.
+- **Restored, under the holder.** The waiting line came after `== app tests` and
+  `build-for-testing`. Lint, the kit tests, coverage and both app builds had already run while the
+  lock was held. A holder that writes nothing reads as `simulator: waiting: another run holds the
+  app tests' simulator (holder unknown; lsof <lock file> names it)`.
+- **Restored, natural overlap** (A and B started together, with no holder). B printed:
+
+```
+simulator: waiting: another Tools/check.sh is running the app tests (pid 69896, <worktree>, since 21:46:31)
+simulator: waited 47s                      (at 21:47:18, the second A printed "app tests: ok")
+```
+
+  Both runs were green.
+- **`--fast` under the holder:** `check: green (fast, 3s)`, with no `waiting`.
+- **`DSH_TEST_SIMULATOR=821CACC8…` under the holder:** it printed `waiting`, then nothing for 10 s,
+  then `waited 10s` on release, and was green.
+
+**P3 (AC3).**
+- **Undone, the plan's `choose.sh`, twice at once:** `created "DSH Remote Tests probe-77v"
+  16B180E7…` and `… DF14301E…`, and a count of 2.
+- **`choose.sh` cannot tell the fix from the bug.** It extracts only `choose_test_simulator`, which
+  #77 did not change, so it shows the race either way. So the real `run_app_tests` (`section.sh`,
+  under the name `DSH Remote Tests probe-77s`) was raced in A and B as well:
+  - undone: two `created` (`F1C98B38…`, `F90EBBA9…`), a count of 2;
+  - restored: one `created` (`611D5AE4…`). B printed `waiting … (pid 81615, <worktree>, since
+    22:07:06)` and `waited 70s`, then used that simulator. A count of 1.
+- **Restored, the plan's own probe.**
+  - Steps: `xcrun simctl delete 821CACC8…`, take the holder, start two full runs, wait for both
+    `waiting` lines, then release.
+  - Result: exactly one `simulator: created "DSH Remote Tests" C9463903-08EA-4A3D-B5B1-E488370B9E5D`,
+    from B. A printed `waited 73s`, then `simulator: C9463903… (Shutdown)`.
+  - Both runs were green, and `simctl list` showed one simulator.
+  - **The dedicated simulator's UDID is now `C9463903…`.**
+
+**P4 (AC4), restored.**
+- **(a) Ctrl-C.** SIGINT went to the run's process group once the simulator was Booted.
+  - During the section, `lsof -t` named `check.sh` 72441 and its `xcodebuild` 73066.
+  - The run ended `check: RED … app tests did not run`, and `lsof` then listed nothing.
+  - Run 2 printed no `waiting`, and was green.
+- **(b) `kill -9` of `check.sh` 73836 alone.**
+  - It was reaped, and its orphaned `xcodebuild` 74435 was then paused with SIGSTOP, so that run 2
+    could reach the lock while the orphan still held it.
+  - `lsof -t` named only 74435. The lock file still said `pid 73836, <worktree>, since 21:51:56`.
+  - Run 2, in B, printed: `simulator: waiting: another Tools/check.sh is running the app tests (pid
+    73836, <worktree>, since 21:51:56; it has exited, and a process it started is still using the
+    simulator)`.
+  - The orphan was resumed and exited at 21:54:28. Until then run 2 printed nothing more; it printed
+    `waited 60s` at 21:54:27, and was green.
+  - Afterwards `lsof` listed nothing.
+- **The lock file was never deleted.** It kept inode `80090711` from the first probe to the last.
+
+**P5 (AC5).**
+- **Undone** (`46381e2` reverted, the simulator booted by hand): `simulator: 821CACC8… (Booted)`,
+  green, and `(Booted)` afterwards.
+- **Restored:** the same start, and `(Shutdown)` afterwards.
+- **With `DSH_TEST_SIMULATOR=821CACC8…`:** `(Booted)` before and after, as found. It was shut down
+  by hand.
+
+**P6 (AC6), restored.**
+- In this worktree, `git rev-parse --path-format=absolute --git-dir --git-common-dir` printed
+  `…/.git/worktrees/issue-77-parallel-worktrees` and `…/.git`. In the scratch clone it printed
+  `<clone>/.git` twice.
+- I followed step 0 in the clone for a made-up #999.
+  - `git worktree add .claude/worktrees/issue-999-probe -b issue-999-probe origin/main` made the
+    worktree.
+  - The clone stayed on its own branch, and `git status` there was clean, because the path is
+    ignored.
+  - Inside the new worktree, the detection printed two paths.
+- `bugfix.md` runs `/feature`, so it needs no change.
+
+**P7 (AC7), in the scratch clone.**
+- The shared `.git/config` was read before and after, and it is unchanged. It still holds the
+  absolute `core.hooksPath` and `allowedSignersFile` (Decision 7).
+- **Undone**, after `git -C <clone> revert --no-commit 85eba0f`:
+  - (a) Only `ok` lines. The read-back was `file:.git/config .githooks` and
+    `file:.git/config <clone>/.gitsigners`.
+  - (b) `ok   core.hooksPath = .githooks`, while `file:.git/config.worktree
+    /tmp/elsewhere/.githooks` stayed in effect.
+- **Restored:**
+
+```
+(a) warn core.hooksPath was /tmp/elsewhere/.githooks (file:.git/config): every worktree ran the hook
+         from there. Setting .githooks.
+    warn gpg.ssh.allowedSignersFile was /tmp/elsewhere/.gitsigners (file:.git/config): every worktree
+         verified signatures against that file. Setting .gitsigners.
+    read back: file:.git/config .githooks / file:.git/config .gitsigners
+(b) miss core.hooksPath is still /tmp/elsewhere/.githooks, from file:.git/config.worktree, which
+         overrides .git/config: unset it there                                  (exit 1)
+```
+
+- With both values already relative, the script printed only the `ok` lines.
+- The relative signers file verifies: `45414b1 G dan.lambert4@gmail.com`, from the clone's root and
+  from `docs/process/`.
+
+**P8–P12, restored.**
+- **P8:** `.gitignore:21:.claude/worktrees/	.claude/worktrees/x/AGENTS.md`, exit 0. The agents,
+  commands and settings check exits 1.
+- **P9:** the remaining mentions are ORCHESTRATION.md:128 and 167, WORKFLOW.md:130 and 260–263, and
+  verifier.md:17–20. All are warnings or the tagged form.
+- **P10:** only prose: IOS-PRIMER.md:78–79 and 181, and README.md:286–288.
+  `xcrun simctl getenv "iPhone 18 Pro" HOME` resolves `CC0A81E3…`.
+- **P11:** the `lockf -k …` command under the holder printed nothing and started no `xcodebuild` for
+  20 s, then printed `** TEST SUCCEEDED **` 41 s after the release. The lock file keeps its inode.
+  - Undone, the bare command printed `** TEST SUCCEEDED **` and exited 0 at +43 s, with the holder
+    still holding the lock.
+- **P12:** 16 greps, one per point of AC12, all present. The cleanup command
+  `grep -l "<path>/" ~/Library/Developer/Xcode/DerivedData/DSHRemote-*/info.plist` named exactly
+  checkout B's folder, which its `WorkspacePath` confirmed.
+
+**Version impact: none, confirmed.**
+- `git diff --name-only 51d7088 HEAD` touches `.claude/`, `.gitignore`, `AGENTS.md`, `CLAUDE.md`,
+  `CHANGELOG.md`, `Tools/check.sh`, `Tools/setup-dev.sh`, `docs/process/`,
+  `Apps/DSHRemote/README.md` and this plan.
+- Nothing in `Sources/`, `Package.swift`, `Protocol/`, `project.yml` or `Info.plist`.
+- RELEASING.md says "Docs, tests, tooling only | none". `check-version.sh` printed
+  `version: ok 0.2.0 (238)`.
+- The changelog line is under `## [Unreleased]`, "Added (process, no version impact)".
+
+**Risk flags: none touched, as planned.**
+- **S7:** no Swift changed: no app `DSH_*` variable, no `ProcessInfo` read, no `#if DEBUG`.
+  - `DSH_TEST_SIMULATOR` is read only by `check.sh`, as since #74. #77 makes a run that uses it wait
+    for the lock, and keeps "left as found".
+  - The lock path comes from `getconf DARWIN_USER_TEMP_DIR`, not from the environment, so no variable
+    steers it.
+  - Lint and the Release build are green.
+- **S9:** the lock file is in the per-user temp directory, which is `drwx------` and owned by the
+  user. It holds a pid, a checkout path and a time, and no app data.
+- Risk checklist: not applicable (no flag).
+
+**`45414b1`, added outside the plan** (CLAUDE.md, and "In Claude Code" in ORCHESTRATION.md). No AC
+covers it, so no probe guards it. I checked it against the CLI and WORKFLOW.md:
+- **Accurate:**
+  - `claude --help` lists `-w, --worktree [name]`, "Create a new git worktree for this session".
+  - Claude Code's worktrees live under `.claude/worktrees/`, as this one does.
+  - What it says the worktrees share matches WORKFLOW.md, "Several issues at once".
+- **Not confirmed: "Background sessions isolate themselves in a worktree the same way."**
+  - `claude --help` says nothing about worktrees for `--bg`.
+  - Only `claude rm` mentions one, as "its worktree when that is safe".
+- **"The shared checkout … stays on `main`" is not today's state.** `git worktree list` shows it
+  on `issue-62-dev-process`.
+
+**Findings for the human.** None blocks the merge; every criterion is guarded.
+1. **Confirm or soften 45414b1's sentence about background sessions** (above).
+2. **The shared checkout is on `issue-62-dev-process`, not `main`.** The new docs assume `main`.
+3. **A relative `gpg.ssh.allowedSignersFile` (AC7) checks each worktree against its own
+   `.gitsigners`.** So inside a PR branch's worktree, a key the PR itself adds verifies that PR's
+   commits.
+   - Before, the absolute path trusted whatever the shared checkout had checked out, which today is
+     not `main` either.
+   - Not an S-flag. Read any `.gitsigners` change in a PR before trusting its signatures.
+4. **A killed run's line can name the wrong holder.** It is minor, and observed with
+   `check.sh`'s own lock functions.
+   - A `kill -9`'d run's line stays in the lock file until the next `check.sh` takes the lock.
+   - If the inner loop's `lockf -k`, which writes nothing, takes the lock first, a waiting run
+     names the dead run instead of "holder unknown": `waiting: another Tools/check.sh is running
+     the app tests (pid 99999, /a/killed/run, since 21:00:00; it has exited, and a process it
+     started is still using the simulator)`.
+   - The lock itself was right; only the name was wrong.
+5. **The kit's coverage moves between runs of unchanged code.** It printed 86.70–86.74% without
+   "It rose", so the baseline stays 86.70.
 
 ## Notes for the next person
 
