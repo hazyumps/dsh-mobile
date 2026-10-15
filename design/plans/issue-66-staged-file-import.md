@@ -272,14 +272,76 @@ Every failure is the one the test list predicts. Three things the builder should
 
 ## Verification
 
-*Filled in by the verifier.*
+Verified 2026-10-15 by the verifier agent on `0865916`. Each AC was undone alone, its test run,
+and the tree restored (`git checkout -- .` / `git revert --abort`). After the last restore, lint,
+the kit suite (516) and the app suite (7) were green again and `git status` was clean.
 
 | AC | Undone how | Test failure with it undone |
 |---|---|---|
-| AC1 | | |
+| AC1–3 | `git revert --no-commit 7272cc0` (all of slice A) | all four refusal tests fail: "an error was expected but none was thrown" (receipt `ee7fc538…`/`receipt-from-fallback` returned), `sent == 0` fails. The at-limit guard passes, as it should. |
+| AC1 | removed only `guard size <= byteLimit` in `upload()` | AC1 over-limit: `thrown == .tooLarge(byteCount: limit + 1, limit: limit)`, `sent == 0` (also AC2 under-report) |
+| AC1 | `<=` → `<` | "AC1: a file exactly at the limit is sent": `Caught error: .tooLarge(byteCount: 16, limit: 16)` |
+| AC2 | `let size = byteCount > 0 ? byteCount : try Self.measure(fileURL)` (the old trust-the-caller rule) | both AC2 tests: `thrown == .tooLarge(byteCount: 64, …)` / `thrown == .tooLargeForFallback(byteCount: 64, limit: limit)`, `sent == 0` |
+| AC2 | fallback gets the caller's `byteCount` instead of `size` | "AC2: the fallback measures the file…": "receipt-from-fallback" returned, `sent == 0` fails |
+| AC3 | `let size = (try? Self.measure(fileURL)) ?? 0` | AC3: no error thrown, `sent == 0` fails, "expected .unreadable" |
+| AC3 | removed the uploader's `isRegularFile == true` guard | **nothing fails** (516 pass). See finding 2. |
+| AC4–6 | `git revert --no-commit 2445e75` (all of slice B) | all six staging tests fail (10 issues), as in the red evidence |
+| AC4 | `stage` returns `url: source` instead of the copy | AC4: `contents(atPath: staged.url.path) == Data("abcdef")`, `isStagedCopy(staged.url)`; AC5 at-limit and AC6 discard fail too |
+| AC5 | removed both size guards (before and after the copy) | "AC5: a file one byte over…": no error thrown, `stagedEntries.isEmpty` fails |
+| AC5 | removed **only** the pre-copy size guard (copy first, check after) | **nothing fails.** See finding 1. |
+| AC5 | `<=` → `<` before the copy | "AC5: a file exactly at the limit is staged": `Caught error: .tooLarge(byteCount: 16, limit: 16)` |
+| AC5 | removed `isRegularFile == true` from staging's `measure` | **nothing fails.** See finding 2. |
+| AC6 | `discard` no longer removes the folder | "AC6: discard…": `!fileExists(staged.url.path)`, `stagedEntries.isEmpty` |
+| AC6 | `sweep` removes nothing | "AC6: sweep…": `stagedEntries.count == 0` |
+| AC7 | `git revert --no-commit a85b874` | all three `FileImportTests` fail: `attachmentError == "This phone is not connected…"` (→ nil), `#require(model.attachmentError)`, `stagedEntries.count == 0` |
+| AC7 | `importFile` skips the discard | "AC7: an import that cannot upload…": `stagedEntries.isEmpty` |
+| AC7 | `AppModel.init` skips `staging.sweep()` | "AC7: launch clears copies…": `stagedEntries.count == 0` |
+| AC7 | `importFile` calls `attachFile` on the picked URL, without staging | "AC7: an import over the app limit…": `message.contains("20 MiB")`, `contains("this app")` (the message is "not connected") |
+| AC7 | over-limit message reworded without "this app"/"20 MiB" | same test, same two expectations |
+| AC7 | importer closure calls `model.attachFile(at: url…)` instead of `importFile` | **nothing fails** (lint ok, app 7/7). See finding 3. |
+| AC8 | re-added `startAccessingSecurityScopedResource` + `defer` stop + `Task { attachFile }` in the importer | `lint: FAIL security-scope Apps/DSHRemote/Sources/ConversationView.swift:171: let scoped = url.startAccessingSecurityScopedResource()` (also fires for a hit in `Sources/DSHRemoteKit/Services/`) |
 
-- `Tools/check.sh`: …
-- Risk checklist: …
+Findings for the reviewer (not fixed; the verifier does not change tests or code):
+
+1. **"Refused before anything is copied" (AC5, S5) is not guarded.** With the pre-copy size check
+   removed, the post-copy re-measure throws `.tooLarge` and the catch deletes the folder, so the
+   AC5 and AC7 over-limit tests cannot tell "never copied" from "copied, then cleaned up". A 2 GB
+   pick would be copied in full before being refused, and nothing would notice. A test that could
+   tell them apart: an over-limit source made unreadable (`chmod 000`). It can be measured but not
+   copied, so check-first gives `.tooLarge` and copy-first gives `.unreadable`.
+2. **The `isRegularFile` check is not independently guarded**, in the uploader or in staging. The
+   only non-regular input in a test is a directory, and a directory reports `fileSize == nil` on
+   macOS (probed 2026-10-15: `isRegularFile=false fileSize=nil`). The nil-size branch refuses it
+   whether or not the type check exists. The uploader has no directory test at all, although AC3
+   names "a directory". A FIFO (`mkfifo`) is not a regular file but does report a size, so it would
+   guard the check.
+3. **The view wiring is unguarded.** If the importer closure (or the `DSH_ATTACH` seed) is pointed
+   back at `attachFile`, no test or lint fails. Without the scope call AC8 has nothing to match. The
+   plan accepts this under C6. On a device, a pick from outside the sandbox would then fail to read
+   rather than leak. It is the residual risk for the device check (C4).
+
+- `Tools/check.sh` (full), 2026-10-15 on `0865916`: **green**, 174 s. Lint, models, version
+  0.2.0 (238), guard-tests ok. Kit 516/516. Coverage ok 86.78% (baseline 86.83%). App Debug and
+  Release ok. App tests 7/7 on "DSH Remote Tests".
+- Coverage: the 86.78% is **not a drop caused by this PR**. `main` (`d5d6478`), measured the same
+  way from a `git archive` copy, is **86.74%** (7397 lines, 981 missed); it was already 0.09 under
+  the baseline, inside the 0.30 tolerance. The branch adds 97 kit lines with 10 missed (89.7%,
+  above the kit average) and raises the total by 0.04. That is under the tolerance, so check.sh does
+  not say "rose" and the baseline is not updated. The uncovered new lines:
+  `AttachmentStaging.swift` 76 (the iOS-only `setAttributes` protection: `protection` is nil on
+  macOS), 82 (the post-copy re-measure's throw), 86-89 (the catch cleanup), which together leave the
+  file at 88.61% against its 85 floor; `AttachmentUploader.swift` 201 and 204 (`measure`'s
+  not-regular-file and nil-size throws, findings 1–2). The builder named the staging lines; the two
+  uploader lines are extra.
+- Version impact: PATCH is consistent with RELEASING.md's "hardening fix" row. The two new cases on
+  the public, non-frozen `AttachmentUploadFailure` break an exhaustive `switch` in a caller outside
+  this repo. Read strictly, that is the "public kit API changes incompatibly" row, which is MINOR
+  while 0.x. The plan raises this as a question for the human gate; it is still open.
+- CHANGELOG: a line is under `## [Unreleased]` → Fixed (#66). `DSH_ATTACH` README row updated.
+- Risk checklist: S5, S6, S1, S7, S9, C3, C6 are evidenced above or in the diff (S7: the seed is
+  still inside `#if DEBUG`, and Release builds green). **C4 is not done by the verifier:** the
+  physical-iPhone Files and iCloud Drive picks have to be recorded in the PR, or the PR has to say
+  they were not done.
 
 ## Notes for the next person
 
