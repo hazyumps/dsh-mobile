@@ -519,7 +519,7 @@ final class AppModel {
                 )
                 // Never retried: two identical results for one event cost a second turn of
                 // the agent's work in the worst case (SPEC §8).
-                try await client.submitEventResult(request, retryPolicy: .none)
+                try await client.submitEventResult(request)
             }
             let store = InteractionStore(
                 identity: { await coordinator.remoteEvents()?.identity },

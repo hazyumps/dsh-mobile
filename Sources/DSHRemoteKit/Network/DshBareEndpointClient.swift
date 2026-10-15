@@ -135,13 +135,17 @@ public struct DshBareEndpointClient: Sendable {
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
 
+    /// Both endpoints are writes — an upload and an approval or answer — so the
+    /// client has no retry policy to choose: every request goes out once under
+    /// ``RPCFailureRetryPolicy/none`` (SPEC §3, "Retry rule"; AGENTS.md). A 502
+    /// after the relay has already acted would otherwise send a second upload or
+    /// a second approval (#63).
     public init(
         baseURL: URL,
         authorization: RelayAuthorization,
         transport: any RelayTransport,
         sleeper: any RelaySleeper = TaskRelaySleeper(),
         clock: any EpochClock = SystemEpochClock(),
-        retryPolicy: RPCFailureRetryPolicy = .default,
         makeRpcId: @escaping @Sendable () -> String = { UUID().uuidString }
     ) {
         self.baseURL = baseURL
@@ -151,7 +155,7 @@ public struct DshBareEndpointClient: Sendable {
             transport: transport,
             sleeper: sleeper,
             clock: clock,
-            retryPolicy: retryPolicy
+            retryPolicy: RPCFailureRetryPolicy.none
         )
         self.makeRpcId = makeRpcId
         let encoder = JSONEncoder()
@@ -251,8 +255,7 @@ public struct DshBareEndpointClient: Sendable {
     /// built by ``EventResultRequest/args`` rather than by a generated DTO.
     @discardableResult
     public func submitEventResult(
-        _ request: EventResultRequest,
-        retryPolicy: RPCFailureRetryPolicy? = nil
+        _ request: EventResultRequest
     ) async throws -> JSONValue? {
         let envelope = makeEventResultRequest(request)
         let url = try RelayURL.resolve(envelope.path, against: baseURL)
@@ -266,11 +269,7 @@ public struct DshBareEndpointClient: Sendable {
             body: try encoder.encode(envelope)
         )
 
-        var usingExchange = exchange
-        if let retryPolicy {
-            usingExchange.retryPolicy = retryPolicy
-        }
-        let response = try await usingExchange.perform(httpRequest, endpoint: Self.eventResultMethod)
+        let response = try await exchange.perform(httpRequest, endpoint: Self.eventResultMethod)
 
         // Same envelope and same typed-error rule as any other RPC; it only lacks
         // a modelled result type, and a result this endpoint returns has no
