@@ -118,6 +118,9 @@ shared. App tests go in `Tests/DSHRemoteTests/FileImportTests.swift`.
 | AC5 | `AttachmentStagingTests` | `"AC5: a file one byte over the limit is refused before anything is copied"` | stub does not check size: "an error was expected but none was thrown" |
 | AC5 | `AttachmentStagingTests` | `"AC5: a file exactly at the limit is staged"` | stub copies nothing: `staged.url` is not inside the staging directory |
 | AC5 | `AttachmentStagingTests` | `"AC5: a directory is refused and nothing is copied"` | stub does not check the type: "an error was expected but none was thrown" |
+| AC5 | `AttachmentRefusalOrderTests` (follow-up) | `"AC5: an over-limit file is refused on its size before any copy is attempted"` | added after verification (finding 1); passes on the branch, fails with the pre-copy guard removed (see Verification) |
+| AC5 | `AttachmentRefusalOrderTests` (follow-up) | `"AC5: a symbolic link, which reports a size, is refused as not a regular file and nothing is copied"` | added after verification (finding 2); fails with staging's `isRegularFile` check removed |
+| AC3 | `AttachmentRefusalOrderTests` (follow-up) | `"AC3: the uploader refuses a symbolic link as not a regular file and sends nothing"` | added after verification (finding 2); fails with the uploader's `isRegularFile` check removed |
 | AC6 | `AttachmentStagingTests` | `"AC6: discard removes the staged copy and its folder"` | stub `discard` is a no-op: `(fileExists(staged.url) → true) == false` |
 | AC6 | `AttachmentStagingTests` | `"AC6: sweep removes copies left by an earlier launch"` | stub `sweep` is a no-op: `(contentsOfDirectory.count → 1) == 0` |
 | AC7 | `FileImportTests` (app) | `"AC7: an import that cannot upload leaves nothing staged and says why"` | stub `importFile` does nothing: `(model.attachmentError → nil) == "This phone is not connected to a harness."` |
@@ -319,6 +322,52 @@ Findings for the reviewer (not fixed; the verifier does not change tests or code
    back at `attachFile`, no test or lint fails. Without the scope call AC8 has nothing to match. The
    plan accepts this under C6. On a device, a pick from outside the sandbox would then fail to read
    rather than leak. It is the residual risk for the device check (C4).
+
+### Follow-up tests for findings 1 and 2
+
+Dan approved closing findings 1 and 2 with a new `Tests:` commit on 2026-10-15; finding 3 (the view
+wiring) is accepted as is, under C6, and left for the device check. The planner added
+`Tests/DSHRemoteKitTests/AttachmentRefusalOrderTests.swift` with three tests. No production code and
+no earlier `Tests:` line changed. All three pass on the branch, because the implementation exists;
+what they prove is that each fails with its guard removed.
+
+**A FIFO does not work; a symbolic link does.** The suggestion was a FIFO, on the assumption that it
+reports a size. Probed 2026-10-15 on macOS 27.0.1 with a `swiftc` program calling
+`url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey, .fileResourceTypeKey])`:
+
+```
+symlink->file  isRegular=false size=107  type=SymbolicLink
+symlink->dir   isRegular=false size=100  type=SymbolicLink
+fifo           isRegular=false size=nil  type=NamedPipe   (also with 30 bytes buffered)
+socket         isRegular=false size=nil  type=Socket
+/dev/null      isRegular=false size=nil  type=CharacterSpecial
+x.app (dir)    isRegular=false size=nil  type=Directory
+```
+
+A FIFO has no `fileSize`, so it is refused by the nil-size branch just as a directory is, and a FIFO
+test would have passed with the type check removed. A symbolic link is the only non-regular file
+that reports a size (its own, the length of its target path): resource values describe the link,
+not what it points at. Refusing it is also right on its own terms: `FileManager.copyItem` copies a
+link as a link (probed: the "copy" is a `SymbolicLink` of the same size), so a staged link would
+still read the source, which is the #66 bug again. Nothing in these tests opens a file that can
+block, so none can hang. Each test `#require`s its premise (the link reports a size; `chmod 000`
+really denies the read, which it would not for root), so a changed platform fails loudly rather
+than passing vacuously.
+
+The `chmod 000` approach works under `swift test --disable-sandbox` (uid 501): the source still
+measures `isRegular=true size=17`, and `copyItem` fails with `NSCocoaErrorDomain 513` / POSIX 13. The
+test restores `0o600` in a `defer`.
+
+| Finding | Test | Guard removed | Failure with it removed |
+|---|---|---|---|
+| 1 | "AC5: an over-limit file is refused on its size before any copy is attempted" | the pre-copy `guard byteCount <= byteLimit` in `AttachmentStaging.stage` (measure kept, copy first) | `thrown == .tooLarge(byteCount: limit + 1, limit: limit) → false`, `thrown → .unreadable(reason: "the file could not be copied")` |
+| 2 | "AC5: a symbolic link, which reports a size, is refused as not a regular file and nothing is copied" | `values.isRegularFile == true` in `AttachmentStaging.measure` | "an error was expected but none was thrown"; `scratch.stagedEntries.isEmpty → false`, left behind `["2AAC5638-…"]`; "expected .unreadable, got nil" |
+| 2 | "AC3: the uploader refuses a symbolic link as not a regular file and sends nothing" | the `isRegularFile == true` guard in `AttachmentUploader.measure` | "an error was expected but none was thrown and `UploadedAttachment(receiptId: "ee7fc538-…", …)` was returned"; `sent == 0 → false`, `sent → 1`; "expected .unreadable, got nil" |
+
+Each guard was removed alone, the `Attachment` suites run (35 tests), and the file restored with
+`git checkout -- <file>`; only the named test failed each time. With everything restored the new
+suite passes 3/3. The Red evidence's first note ("guards against a real `stage` that copies first
+and checks after") was wrong, as finding 1 showed; the first test above is what guards it.
 
 - `Tools/check.sh` (full), 2026-10-15 on `0865916`: **green**, 174 s. Lint, models, version
   0.2.0 (238), guard-tests ok. Kit 516/516. Coverage ok 86.78% (baseline 86.83%). App Debug and
