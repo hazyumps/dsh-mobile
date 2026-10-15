@@ -17,6 +17,9 @@ Fixed / Security, with its issue number. The release renames the section.
 - A slow or failed request no longer rebuilds the connection, so the status chip stops flickering
   on a connection that is working (#82).
 
+### Security
+- A relay connection with neither a pin nor platform validation is refused instead of trusted (#68).
+
 ### Added (process, no version impact)
 - A written workflow and local CI: `docs/process/`, `Tools/check.sh` with a pre-push hook, a
   coverage ratchet, issue and PR templates, and Claude Code agents and commands (#62).
