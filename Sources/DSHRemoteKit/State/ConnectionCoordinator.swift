@@ -649,13 +649,17 @@ public actor ConnectionCoordinator {
 
     /// Maps one `session/page` record onto the durable envelope the rest of the app
     /// already folds. The generated record type does the decoding; this is a rename.
+    ///
+    /// `surfaceOp` is passed through **whole**. It used to be narrowed with `.stringValue`,
+    /// which silently dropped the object form the host sends on `tool/result` (#99) — the same
+    /// narrowing that failed the frame on the mux path.
     private static func envelope(from record: SessionPageRecordsItem) -> DurableEventEnvelope {
         DurableEventEnvelope(
             type: record.event.type,
             seq: record.event.seq,
             time: record.event.time,
             data: record.event.data,
-            surfaceOp: record.event.surfaceOp?.stringValue
+            surfaceOp: record.event.surfaceOp
         )
     }
 

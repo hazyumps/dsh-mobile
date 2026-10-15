@@ -320,22 +320,45 @@ func unknownWireVocabularyIsTolerated() throws {
     #expect(outcome.seq == 38)
 }
 
-@Test("a non-string discriminant is a decode failure, not an unknown value")
+@Test("a non-string envelope discriminant is a decode failure, not an unknown value")
 func nonStringDiscriminantsFailToDecode() throws {
-    // An unknown *value* is tolerated; a wrong *kind* leaves the union unclassifiable, which
-    // SPEC §6.9 treats as a protocol incompatibility.
+    // An unknown *value* is tolerated and a body this build cannot model is kept whole (#99),
+    // but the two discriminants that decide how the frame is classified cannot be guessed at:
+    // without them there is nothing to classify it by (SPEC §6.9).
     #expect(throws: (any Error).self) {
         try capturedMuxFrame("snapshot", at: ["type"], with: .int(7))
     }
     #expect(throws: (any Error).self) {
         try capturedMuxFrame("snapshot", at: ["value", "type"], with: .int(7))
     }
-    #expect(throws: (any Error).self) {
-        try capturedMuxFrame("event/turn/start", at: ["value", "event", "type"], with: .array([.int(1)]))
+}
+
+@Test("a wrong kind inside the body is kept whole, not fatal")
+func wrongKindInsideBodyIsKeptWhole() throws {
+    // Rewritten from `nonStringDiscriminantsFailToDecode`, which asserted that these threw. Both
+    // are *inside* the body, and throwing there failed the whole frame — which failed every
+    // stream on the socket and parked the app at "Host unavailable" (#99). The line is envelope
+    // versus body: the two envelope discriminants are the test above's job, and everything a
+    // body contains is kept whole rather than able to condemn the connection.
+    let event = try capturedMuxFrame(
+        "event/turn/start", at: ["value", "event", "type"], with: .array([.int(1)])
+    )
+    #expect(event.type == .item)
+    guard case .unknown(let eventType, _) = event.value else {
+        Issue.record("expected the body to be kept whole; got \(String(describing: event.value))")
+        return
     }
-    #expect(throws: (any Error).self) {
-        try capturedMuxFrame("snapshot", at: ["value", "records", "0", "type"], with: .bool(true))
+    #expect(eventType == "event")
+
+    let snapshot = try capturedMuxFrame(
+        "snapshot", at: ["value", "records", "0", "type"], with: .bool(true)
+    )
+    #expect(snapshot.type == .item)
+    guard case .unknown(let snapshotType, _) = snapshot.value else {
+        Issue.record("expected the body to be kept whole; got \(String(describing: snapshot.value))")
+        return
     }
+    #expect(snapshotType == "snapshot")
 }
 
 @Test("a frame missing its optional fields still decodes")
@@ -464,4 +487,69 @@ func handBuiltFrameEncodesToCapturedShape() throws {
     #expect(object["value"]?["type"]?.stringValue == "assistant-stream")
     #expect(object["value"]?["frame"]?["type"]?.stringValue == "start")
     #expect(object["value"]?["frame"]?["startedAfterSeq"]?.intValue == 36)
+}
+
+// MARK: - A field the client has not modelled must not kill the connection (#99)
+
+@Test("an event whose surfaceOp is an object does not fail the frame, and is kept whole")
+func surfaceOpObjectDecodes() throws {
+    // Captured from the live harness on 2026-10-15, on `session-4755645d-…`:
+    //   python3 Tools/probes/mux-sizes.py session-4755645d-5216-436e-b438-4564982800f3 20
+    //   DecodingError.typeMismatch: Expected value of type String.
+    //   Path: value.records[26].event.surfaceOp
+    // `surfaceOp` is a string on the durable events and this object on `tool/result`, so one
+    // `tool/result` in a transcript used to fail the whole frame — and with it every stream.
+    //
+    // Asserted at the frame level on purpose: the value's own type is what #99 changes, and a
+    // test written against the new type would not compile before the fix, which `--red`
+    // refuses. Decoding at all, plus the round-trip below, is the whole claim.
+    let frame = try capturedMuxFrame(
+        "event/user/message",
+        at: ["value", "event", "surfaceOp"],
+        with: .object([
+            "op": .string("replace"),
+            "startSeq": .int(17853),
+            "endSeq": .int(17853),
+        ])
+    )
+
+    #expect(frame.type == .item)
+    #expect(frame.streamId == "redacted")
+
+    let reEncoded = try JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(frame))
+    // Kept whole: nothing the host sent was dropped or invented.
+    #expect(reEncoded["value"]?["event"]?["surfaceOp"]?["op"]?.stringValue == "replace")
+    #expect(reEncoded["value"]?["event"]?["surfaceOp"]?["startSeq"]?.intValue == 17853)
+    #expect(reEncoded["value"]?["event"]?["surfaceOp"]?["endSeq"]?.intValue == 17853)
+}
+
+@Test("a value body this build cannot decode is kept whole, not fatal")
+func undescribableValueBodyIsKeptWhole() throws {
+    // The `snapshot` capture with `records` replaced by a string: an envelope this build knows
+    // and a body it cannot model. Before #99 that threw out of `MuxFrameValue`, so `MuxFrame`
+    // failed, so `MuxClient` failed *every* stream and reported it as a bad envelope — while the
+    // envelope was fine.
+    let frame = try capturedMuxFrame("snapshot", at: ["value", "records"], with: .string("not an array"))
+
+    // The envelope still reads.
+    #expect(frame.type == .item)
+    #expect(frame.streamId == "redacted")
+
+    guard case .unknown(let type, let value) = frame.value else {
+        Issue.record("expected the body to be kept whole; got \(String(describing: frame.value))")
+        return
+    }
+    #expect(type == "snapshot")
+    // Kept whole: the discriminator and the field that could not be modelled are both still there.
+    #expect(value["type"]?.stringValue == "snapshot")
+    #expect(value["records"]?.stringValue == "not an array")
+}
+
+@Test("a frame that is not an object still fails")
+func nonObjectFrameStillFails() throws {
+    // AC3: the fallback is for a body this build cannot model, not for a frame that cannot be
+    // classified at all. A bare JSON string has no envelope to read.
+    #expect(throws: (any Error).self) {
+        try JSONDecoder().decode(MuxFrame.self, from: Data("\"not a frame\"".utf8))
+    }
 }
