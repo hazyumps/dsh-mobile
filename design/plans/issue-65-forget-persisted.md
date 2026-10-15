@@ -1,6 +1,6 @@
 # Issue #65: forgetting a host is not persisted
 
-**Status:** draft
+**Status:** approved (Dan, 2026-10-15; all seven design deviations accepted)
 **Branch:** `issue-65-forget-persisted`
 **Version impact:** PATCH. This is a bug fix. `HostRegistry` is a new kit type; nothing public is
 removed or changed, and `hosts.json`, `selection.json` and the drafts files keep their formats. No
@@ -190,10 +190,32 @@ real fix is the per-host state object in the AppModel extraction, which is outsi
 
 ## Red evidence
 
-*Filled in with the `Tests:` commit.*
+`Tools/check.sh --red` with the tests and the stub, nothing else:
 
 ```
+red: ok it compiles and fails on assertions (kit: fail, app: pass; logs in .build/check).
+check: ok — red for the right reason (78s)
 ```
+
+Kit: 514 tests in 37 suites, **16 issues**, all in `Host registry`. They are all assertion
+failures, with no compile error or crash. App tests: 4 pass. Every failure matches the prediction.
+
+| Test | Failure (`HostRegistryTests.swift`) |
+|---|---|
+| AC1 forgotten host stays forgotten | `:80` `relaunched.hosts == [keep]`; `:81` `hostStore.load() == [keep]`; `:83` forgotten token `== nil`; `:84` `loadSelection() == nil`; `:85` `relaunched.selection == nil` |
+| AC2 drafts gone from disk | `:109` draft text `== ""`; `:110` `draftCount == 0`; `:111` `navigation == DraftNavigation()` |
+| AC3 unselected forget keeps selection | **passes**. This is the guard, as predicted |
+| AC4 unsavable list changes nothing | `:155` expected `.listNotSaved`, got `nil` (no throw) |
+| AC5 undeletable token reported | `:185` expected `.credentialNotRemoved`, got `nil` (no throw) |
+| AC6 add survives relaunch | `:206` `relaunched.hosts == [paired]`; `:207` token `== "fresh-token"` |
+| AC7 unsavable add leaves no token | `:229` expected `.listNotSaved`, got `nil` (no throw) |
+| AC8 stale selection cleared at launch | `:249` `registry.selection == nil`; `:250` `loadSelection() == nil` |
+| AC8 selection survives relaunch | `:263` `selection?.hostId == keep.id` |
+
+AC4 and AC7 stop at the throw check, so their "nothing changed" assertions have not run yet. They
+run once `forget` and `add` throw. The read-only trick (`0o555` on the host directory) is not yet
+proven to make `HostStore.save` fail, because the stub never saves. If AC4 or AC7 later reports
+"got nil" against a real implementation, the trick is the suspect and not the builder.
 
 ## Verification
 
