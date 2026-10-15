@@ -44,7 +44,7 @@ any agent:
 ```
 orchestrator
   ├─ read the issue (tea issues <n>)
-  ├─ work in the issue's own worktree (made under .claude/worktrees/ if need be); read its branch state
+  ├─ work in the issue's own worktree; read its branch state
   ├─ planner ─▶ plan file ─▶ [human gate 1: plan] ─▶ Tests: commit + red evidence ─▶ [gate 1: tests]
   ├─ builders, in parallel, one per slice, each in its own worktree nested in the issue's
   │     └─ merge each slice branch back into the issue branch; run swift test
@@ -53,16 +53,13 @@ orchestrator
   └─ push (the hook runs Tools/check.sh) ─▶ tea pulls create ─▶ [human gate 2]
 ```
 
-**The issue's worktree.** The orchestrator never switches the branch of the shared checkout, where
-someone else may be working. It runs in a worktree of the issue's own: the one it was started in
-(`claude -w`, say), or one it makes with
-`git worktree add .claude/worktrees/issue-<n>-<slug> -b issue-<n>-<slug> origin/main`. Every
-command and agent after that uses that worktree's absolute path (WORKFLOW.md, "Several issues at
-once").
+**The issue's worktree.** The orchestrator never switches the shared checkout's branch; it works in
+the issue's own worktree (WORKFLOW.md, "Several issues at once") and passes its absolute path to
+every agent.
 
 **Parallel builders.** At most three at once; more slices than that wait. Each gets one slice from
-the plan and its own worktree off the issue branch, made from inside the issue's worktree so that it
-nests under that worktree's ignored `.worktrees/`:
+the plan and its own worktree off the issue branch, nested under the issue worktree's ignored
+`.worktrees/`:
 
 ```sh
 # in the issue's worktree
@@ -124,9 +121,9 @@ are the same instructions the Claude Code agent definitions in `.claude/agents/`
 > 1. Run `Tools/check.sh` (full). It must be green.
 > 2. For **each** acceptance criterion: undo just its implementation (`git revert --no-commit
 >    <sha>`, or re-introduce the bug), run its test, and record the failure. Restore
->    (`git revert --abort`, or `git checkout -- <file>`) and confirm green. Never a bare
->    `git stash`: every worktree shares the stash, and a `git stash pop` can take another session's
->    entry. A test that still passes with its fix undone is a finding — report it, do not fix it.
+>    (`git revert --abort`, or `git checkout -- <file>`; not `git stash`, which every worktree
+>    shares) and confirm green. A test that still passes with its fix undone is a finding — report
+>    it, do not fix it.
 > 3. Check the version-impact claim against `docs/process/RELEASING.md`, and that a line was added
 >    under `## [Unreleased]` in `CHANGELOG.md`.
 > 4. Write the results into the plan's Verification section and commit as
@@ -150,7 +147,7 @@ Everything above is available as commands and subagents in this repo:
 
 | Command | Does |
 |---|---|
-| `/feature <n>` | Runs the whole loop for issue `n` in the issue's own worktree, which it makes under `.claude/worktrees/` when started in the shared checkout: planner, gate, builders in parallel worktrees nested in it, verifier, security reviewer, PR. Stops at each human gate. |
+| `/feature <n>` | Runs the whole loop for issue `n` in its own worktree: planner, gate, builders in parallel worktrees, verifier, security reviewer, PR. Stops at each human gate. |
 | `/bugfix <n>` | The same loop, shaped for a bug: the first test reproduces it. |
 | `/release` | Walks [RELEASING.md](RELEASING.md); stops before tagging and pushing. |
 | `/check` | Runs `Tools/check.sh` and summarises the result. |
@@ -160,13 +157,10 @@ The subagents are `.claude/agents/planner.md`, `builder.md`, `verifier.md` and
 Project settings in `.claude/settings.json` allow the build, test and `tea` read commands without
 prompting, and always ask before `git push`, `git tag` and merging.
 
-**Several issues at once.** One session per issue, each in its own terminal: `claude -w issue-<n>`
-starts Claude Code in a new worktree under `.claude/worktrees/`, and `/feature <n>` runs there.
-A background session (one in Claude Code's job list) must enter a worktree before its first edit: the
-harness refuses edits in the shared checkout until it does, so it lands under `.claude/worktrees/`
-too (#74 and #77 were built that way). No session switches the shared
-checkout's branch; it stays on `main`. What the sessions still share (the test simulator's lock,
-the review simulator, `git stash`, the changelog) is in WORKFLOW.md, "Several issues at once".
+**Several issues at once.** One session per issue: `claude -w issue-<n>` starts Claude Code in a new
+worktree under `.claude/worktrees/`, and `/feature <n>` runs there. A background session must enter a
+worktree before its first edit (the harness refuses edits in the shared checkout), so it lands there
+too.
 
 ## With other agents
 

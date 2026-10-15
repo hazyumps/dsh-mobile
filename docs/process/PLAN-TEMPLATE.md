@@ -2,7 +2,8 @@
 
 Copy to `design/plans/issue-<n>-<slug>.md`. Delete the guidance in *italics* as you fill it in.
 A bug fix with one criterion can be short; every heading still gets an answer, even if it is
-"none".
+"none". Keep it reviewable — a few hundred lines at most: evidence is the failing line, not the
+whole log, and a long probe script goes in the commit body rather than the plan.
 
 ---
 

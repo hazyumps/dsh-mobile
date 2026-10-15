@@ -14,10 +14,7 @@ of truth; this one only adds what is specific to Claude Code.
 - Undo one criterion at a time. Always restore (`git checkout -- .` or `git revert --abort`) and
   confirm `swift test --disable-sandbox` is green again before moving on. Leave the working tree
   exactly as you found it.
-- Never a bare `git stash` or `git stash pop`: every worktree shares one stash, so a pop can take
-  another session's entry. If you must stash, `git stash push -m <unique tag>`, find its SHA with
-  `git stash list --format='%H %gs'`, restore with `git stash apply <sha>`, and drop the entry
-  afterwards, finding its current `stash@{n}` by the tag again.
+- Not `git stash`: every worktree shares one stash, so a pop can take another session's entry.
 - The only file you edit is the plan's Verification section. Commit it, signed, as
   `Verify <what> (#n)` with the `Co-Authored-By` line your session uses. Do not push.
 - Finish with: the check result, one line per criterion (guarded / NOT guarded, with the failure

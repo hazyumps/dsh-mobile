@@ -74,9 +74,8 @@ Pass a launch variable to the simulator with the `SIMCTL_CHILD_` prefix:
 SIMCTL_CHILD_DSH_TRACE=1 xcrun simctl launch --console-pty "iPhone 18 Pro" net.fernlabs.dshremote
 ```
 
-Name the simulator (or give its UDID from `xcrun simctl list devices`) rather than writing
-`booted`. With two booted, `booted` lets `simctl` pick either, and while any checkout's
-`Tools/check.sh` runs the app tests, their own simulator, "DSH Remote Tests", is booted too.
+Name the simulator (or a UDID) rather than `booted`, which picks either of two booted ones, and
+"DSH Remote Tests" is booted whenever a check runs the app tests.
 
 ## Simulator and device
 

@@ -282,10 +282,8 @@ SIMCTL_CHILD_DSH_SCREEN_GALLERY=conversation \
 xcrun simctl io "iPhone 18 Pro" screenshot conversation.png
 ```
 
-Name the review simulator ("iPhone 18 Pro" on this machine, or a UDID from
-`xcrun simctl list devices`) rather than `booted`: while any checkout's
-`Tools/check.sh` runs the app tests, "DSH Remote Tests" is booted too, and
-`booted` lets `simctl` pick either.
+Name the simulator (or a UDID), not `booted`: "DSH Remote Tests" is booted too
+while any check runs the app tests.
 
 `simctl` cannot inject touches, so anything that would normally need a tap has a
 variable above; the galleries exist because the visual work has to be *looked at*
