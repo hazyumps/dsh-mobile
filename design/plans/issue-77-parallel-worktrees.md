@@ -1,6 +1,8 @@
 # Issue #77: Run several issues at once — the test simulator collides across worktrees, and /feature branches in the shared checkout
 
-**Status:** draft, awaiting gate 1. Written 2026-10-14 by the planner agent.
+**Status:** plan approved by Dan on 2026-10-14, as written, including Decisions 1–4 and 6, as
+relayed by the orchestrator. `/release` went to #78 (Decision 5). Reproduction recorded under
+"Red evidence"; waiting for the tests gate. Written 2026-10-14 by the planner agent.
 **Branch:** `issue-77-parallel-worktrees`, in the worktree `.claude/worktrees/issue-77-parallel-worktrees`,
 from `origin/main` at `51d7088` (which includes #74's app test target and simulator step).
 **Version impact:** none. Only tooling, docs and Claude Code commands change: nothing in `Apps/` except
@@ -411,7 +413,7 @@ against the lock file path and the waiting line that this plan fixes for Slice A
   `git checkout -b release-X.Y.Z`, and the hotfix branch.
   - A release is rare and driven by one human, and its tag steps assume `main` is checked out.
     Making it worktree-safe means rewriting those steps.
-  - Proposed as a follow-up issue (Decision 5).
+  - Moved to its own issue: #78, "Let /release work from a worktree too" (Decision 5).
 - **Two `check.sh` runs in the same worktree at once.** SwiftPM locks `.build` itself, and
   `xcodebuild`'s build database refuses a second build, loudly. One session per worktree is the
   model.
@@ -446,7 +448,7 @@ checkout or one simulator.
 - **A killed run's booted simulator** stays booted forever → AC5.
 - **Switching the branch of the shared checkout:**
   - `/feature` → AC6;
-  - `/release` and RELEASING.md → out of scope;
+  - `/release` and RELEASING.md → out of scope, now #78;
   - WORKFLOW.md step 0 and AGENTS.md's example are a human's single-checkout path. They stay, with
     a pointer → AC12.
 - **The shared stash:** the verifier's instructions → AC9; the pre-push message → out of scope.
@@ -481,7 +483,7 @@ checkout or one simulator.
      passed".
    - That commit is never the tip at push time, so the pre-push hook never runs `--red` on it.
    - The alternative is a different subject, such as `Repro:`.
-5. **`/release` is out of scope.** Should it get a follow-up issue?
+5. **`/release` is out of scope.** Resolved: it is #78.
 6. **Verification touches the real dedicated simulator.** P3 deletes "DSH Remote Tests", and the
    next run recreates it, with a cold boot. P5 boots it by hand.
 7. **After the merge, Dan runs `Tools/setup-dev.sh` once** on this machine. That replaces the
@@ -489,11 +491,211 @@ checkout or one simulator.
 
 ## Red evidence
 
-*Filled in by the planner in the tests phase (Decision 4): the output of P1, P3, P5, P7, P8, P9 and
-P10 on the unchanged tree.*
+Recorded on 2026-10-14 on `1755292`, the plan commit.
+- **The scripts under test are `main`'s.** Its `Tools/check.sh` and `Tools/setup-dev.sh` match
+  `main` byte for byte (`git diff --quiet 51d7088 -- <file>`).
+- **Cleanup.** Scratch work lived in the ignored `.build/probe-77/`. All of it was deleted
+  afterwards, along with the probe simulators and the copy's DerivedData, and "DSH Remote Tests"
+  was left Shutdown.
+- **How to read the output:**
+  - `<worktree>` stands for `/Users/dan/Fernlabs/dsh-mobile/.claude/worktrees/issue-77-parallel-worktrees`;
+  - UDIDs are cut to their first block;
+  - `…` marks lines left out of xcodebuild's error dictionary.
+- **No `--red` run.** There is no Swift test, so `Tools/check.sh --red` does not apply
+  (Decision 4).
+
+**Every probe that can show a bug today showed it. None failed to reproduce.**
+- P2 and P4 guard the shape of the fix and have nothing to show before it, as planned.
+- P12 is the absence of the new docs.
+
+**P1 (AC1): two checkouts run the app-test section at once.**
+- Checkout A is this worktree.
+- Checkout B is a copy of `git ls-files` in `.build/probe-77/b`. It has its own path, so its own
+  DerivedData.
+
+First, `section.sh` alone in each checkout, one after the other:
 
 ```
+A: simulator: 355F197E… "DSH Remote Tests" (Shutdown)
+   ✔ Test run with 4 tests in 2 suites passed after 0.128 seconds.
+   app tests: ok
+B: simulator: 355F197E… "DSH Remote Tests" (Shutdown)
+   ✔ Test run with 4 tests in 2 suites passed after 0.113 seconds.
+   app tests: ok
 ```
+
+Then both at once, trial 1:
+
+```
+== A (this worktree)
+simulator: 355F197E… "DSH Remote Tests" (Shutdown)
+app tests: FAIL the test process crashed (full log: .build/check/app-tests.log). A crash hides every
+           result after it; stub with a wrong value or a thrown error, not fatalError.
+app_tests=crash
+[A ended at +33s]
+   A's .build/check/app-tests.log:
+	DSHRemote encountered an error (Early unexpected exit, operation never finished bootstrapping - no restart will be attempted. (Underlying Error: Test crashed with signal kill before establishing connection.))
+** TEST EXECUTE FAILED **
+… DTServiceHubClient failed to bless service hub for simulator DSH Remote Tests (355F197E…) …
+== B (the copy)
+simulator: 355F197E… "DSH Remote Tests" (Booting)
+	DSHRemote encountered an error (Failed to install or launch the test runner. (Underlying Error: The operation couldn’t be completed. (Mach error -308 - (ipc/mig) server died)))
+	The operation couldn’t be completed. (Mach error -308 - (ipc/mig) server died)
+…
+app tests: FAIL the tests did not run (full log: .build/check/app-tests.log)
+app_tests=not-run
+[B ended at +33s]
+== simulator after: DSH Remote Tests (355F197E…) (Shutdown)
+```
+
+Trial 2 gave the same two failures with the checkouts swapped:
+- A: `app tests: FAIL the tests did not run`, after `Failed to install or launch the test runner …
+  (Mach error -308 - (ipc/mig) server died)`;
+- B: `app tests: FAIL the test process crashed …`, with `Early unexpected exit, operation never
+  finished bootstrapping … Test crashed with signal kill before establishing connection` in its
+  log;
+- both ended at +33 s.
+
+Result: **reproduced, twice.** Each checkout passes alone. Together both fail, and whichever is
+told its tests "crashed" is also told to stop using `fatalError`.
+
+In trial 1, B found the simulator `(Booting)`, because A had started booting it a moment before.
+Without a lock, the state a run reads can be one that another run is in the middle of changing.
+
+**P3 (AC3): two first runs at once.** `choose.sh`, started twice at once, with the name
+`DSH Remote Tests probe-77`:
+
+```
+before: 0 simulator(s) named "DSH Remote Tests probe-77"
+run 1: simulator: created "DSH Remote Tests probe-77" D6B81BC1… (com.apple.CoreSimulator.SimDeviceType.iPhone-18-Pro, com.apple.CoreSimulator.SimRuntime.iOS-27-0)
+run 2: simulator: created "DSH Remote Tests probe-77" 9011269C… (com.apple.CoreSimulator.SimDeviceType.iPhone-18-Pro, com.apple.CoreSimulator.SimRuntime.iOS-27-0)
+after: 2 simulator(s) named "DSH Remote Tests probe-77"
+    DSH Remote Tests probe-77 (9011269C…) (Shutdown)
+    DSH Remote Tests probe-77 (D6B81BC1…) (Shutdown)
+a third run: simulator: 9011269C… "DSH Remote Tests probe-77" (Shutdown)
+```
+
+Result: **reproduced.** Two simulators were created, and the next run silently picked one of them.
+
+**P5 (AC5): a run that finds the test simulator booted.** First `xcrun simctl boot 355F197E…`,
+after which `simctl list` showed `(Booted)`. Then a full `Tools/check.sh`:
+
+```
+✔ Test run with 501 tests in 36 suites passed after 0.603 seconds.
+== app tests
+simulator: 355F197E… "DSH Remote Tests" (Booted)
+✔ Test run with 4 tests in 2 suites passed after 0.102 seconds.
+app tests: ok
+check: green (full, 140s)
+-- xcrun simctl list devices, afterwards: DSH Remote Tests (355F197E…) (Booted)
+```
+
+The scope guard: `DSH_TEST_SIMULATOR=355F197E…`, with the simulator still booted, run through
+`section.sh`:
+
+```
+simulator: DSH_TEST_SIMULATOR=355F197E… "DSH Remote Tests" (Booted)
+✔ Test run with 4 tests in 2 suites passed after 0.098 seconds.
+app tests: ok
+-- afterwards: (Booted)
+```
+
+Result: **reproduced.**
+- A green full run leaves the test simulator booted, and every later run would do the same.
+- The guard shows today's "leave as found" for an override. That behaviour stays.
+- The simulator was shut down by hand afterwards.
+- The same run is the baseline: the unchanged tree is green in full mode, in 140 s, including a
+  cold kit build in this worktree.
+
+**P7 (AC7): `setup-dev.sh` and paths into a checkout.** This ran in the scratch clone
+`.build/probe-77/clone`. Before anything else, `git rev-parse --path-format=absolute --git-dir`
+printed `<worktree>/.build/probe-77/clone/.git`, confirming that the clone has its own `.git` and
+that the shared config is untouched.
+
+(a) The two values before the run (`git config --show-origin --get`):
+
+```
+file:.git/config	/tmp/elsewhere/.githooks
+file:.git/config	/tmp/elsewhere/.gitsigners
+```
+
+The Git section of `<clone>/Tools/setup-dev.sh`'s output:
+
+```
+Git
+  ok   core.hooksPath = .githooks (pre-push runs Tools/check.sh)
+  ok   gpg.ssh.allowedSignersFile = .gitsigners (verifies teammates' signatures)
+  ok   commit signing on (ssh)
+  ok   your signing key is in .gitsigners
+```
+
+The values read back afterwards:
+
+```
+file:.git/config	.githooks
+file:.git/config	<worktree>/.build/probe-77/clone/.gitsigners
+```
+
+Result: **reproduced.** Both old values were replaced without a word. The signers file is stored
+as an absolute path, even though the `ok` line says `.gitsigners`.
+
+(b) After `git config extensions.worktreeConfig true` and
+`git config --worktree core.hooksPath /tmp/elsewhere/.githooks`, the value's origin was
+`file:.git/config.worktree	/tmp/elsewhere/.githooks`. Then `setup-dev.sh` again:
+
+```
+Git
+  ok   core.hooksPath = .githooks (pre-push runs Tools/check.sh)
+  ok   gpg.ssh.allowedSignersFile = .gitsigners (verifies teammates' signatures)
+  ok   commit signing on (ssh)
+-- git config --show-origin --get core.hooksPath, afterwards:
+file:.git/config.worktree	/tmp/elsewhere/.githooks
+```
+
+Result: **reproduced.** The script printed `ok` while the hook path in effect still points
+elsewhere.
+
+**P8 (AC8): `.gitignore`.**
+
+```
+$ git check-ignore -v --no-index .claude/worktrees/x/AGENTS.md
+exit 1
+$ git check-ignore --no-index .claude/agents/planner.md .claude/commands/feature.md .claude/settings.json
+exit 1
+```
+
+Result: **reproduced.** Worktrees under `.claude/worktrees/` are not ignored. The second command is
+the scope guard: these files are tracked and must stay unignored.
+
+**P9, P10, P6, P11 (the docs), by grep:**
+
+```
+P9 $ grep -rn -i stash AGENTS.md docs .claude
+AGENTS.md:92:3. **Verifier** checks the test actually guards something: reinstate the bug (or stash the fix)
+docs/process/ORCHESTRATION.md:115:> 2. For **each** acceptance criterion: undo just its implementation (`git stash`, `git revert
+docs/process/WORKFLOW.md:125:   (`git stash`, `git revert --no-commit <sha>`, or re-introduce the bug by hand), run its test, and
+.claude/agents/verifier.md:14:- Undo one criterion at a time. Always restore (`git checkout -- .`, `git stash pop`, or
+
+P10 $ grep -n booted Apps/DSHRemote/README.md docs/process/IOS-PRIMER.md
+docs/process/IOS-PRIMER.md:74:SIMCTL_CHILD_DSH_TRACE=1 xcrun simctl launch --console-pty booted net.fernlabs.dshremote
+docs/process/IOS-PRIMER.md:177:| `xcrun simctl install booted <path to .app>` | install a simulator build |
+Apps/DSHRemote/README.md:281:  xcrun simctl launch booted net.fernlabs.dshremote
+Apps/DSHRemote/README.md:282:xcrun simctl io booted screenshot conversation.png
+
+P6 $ grep -n "checkout -b" .claude/commands/feature.md
+14:- Find or create the branch `issue-$ARGUMENTS-<slug>` from `main` (`git checkout -b … main`). If the
+
+P11 $ grep -n -A1 "The app tests' inner loop" docs/process/WORKFLOW.md
+195:The app tests' inner loop is `xcodebuild test -project Apps/DSHRemote/DSHRemote.xcodeproj -scheme
+196-DSHRemote -destination 'platform=iOS Simulator,name=DSH Remote Tests' -only-testing:DSHRemoteTests
+```
+
+Result: **each one matches the plan's "today" column.** The stash, `booted`, `git checkout -b` and
+bare `xcodebuild test` instructions are all still there.
+
+**Not run today, as planned:**
+- P2 and P4 need the lock.
+- P12 has nothing to check until the new docs exist.
 
 ## Verification
 
