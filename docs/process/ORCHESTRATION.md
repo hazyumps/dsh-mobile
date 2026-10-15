@@ -160,6 +160,12 @@ The subagents are `.claude/agents/planner.md`, `builder.md`, `verifier.md` and
 Project settings in `.claude/settings.json` allow the build, test and `tea` read commands without
 prompting, and always ask before `git push`, `git tag` and merging.
 
+**Several issues at once.** One session per issue, each in its own terminal: `claude -w issue-<n>`
+starts Claude Code in a new worktree under `.claude/worktrees/`, and `/feature <n>` runs there.
+Background sessions isolate themselves in a worktree the same way. No session switches the shared
+checkout's branch; it stays on `main`. What the sessions still share (the test simulator's lock,
+the review simulator, `git stash`, the changelog) is in WORKFLOW.md, "Several issues at once".
+
 ## With other agents
 
 Any agent that reads `AGENTS.md` (most do, by convention) is pointed here. Without

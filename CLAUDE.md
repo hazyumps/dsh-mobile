@@ -13,6 +13,12 @@ agents and humans can follow the same steps.
 - **Agents:** `planner`, `builder`, `verifier`, `security-reviewer` in `.claude/agents/`. Each one's
   brief is a section of `docs/process/ORCHESTRATION.md`; change the brief there, not in the agent
   file.
+- **Several issues at once:** each issue runs in its own git worktree. Start a session per issue
+  with `claude -w issue-<n>` (or let `/feature`/`/bugfix` make one under `.claude/worktrees/`), and
+  never switch branches in the shared checkout, which stays on `main`. What the worktrees still
+  share — the test simulator's lock (a check may wait), the review simulator (one at a time),
+  `git stash`, `CHANGELOG.md` merges, the cold first build, cleanup — is in WORKFLOW.md, "Several
+  issues at once".
 - Never `git push --no-verify`, never merge to `main`, never push a tag, never close an issue by
   hand — those belong to a human (`docs/process/ORCHESTRATION.md`, "Principles").
 - `Tools/check.sh` in full mode builds the app twice and can take several minutes cold; give it a
