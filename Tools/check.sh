@@ -17,6 +17,13 @@
 # iPhone) and reused after. It is for these tests only: the test bundle launches the real app,
 # which reconnects any host paired on that simulator, so never pair a host there or use it for
 # DSH_* review. A simulator this script boots, it shuts down again.
+#
+# The app tests run for one checkout at a time per macOS user, because simulators belong to the
+# user and every clone and worktree shares them (#77). While a run chooses the simulator, tests
+# and shuts it down, it holds a lock on $(getconf DARWIN_USER_TEMP_DIR)dsh-remote-tests-simulator.lock.
+# A second run prints a "waiting" line naming the run it waits for, and starts once that run's
+# simulator section ends. Everything before it (lint, kit tests, app builds) does not wait. A killed
+# run frees the lock by itself; never delete the file.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -27,7 +34,7 @@ case "${1:-}" in
   --fast) mode="fast" ;;
   --red) mode="red" ;;
   "" | --full) ;;
-  -h | --help) sed -n '2,19p' "$0"; exit 0 ;;
+  -h | --help) sed -n '2,26p' "$0"; exit 0 ;;
   *) echo "usage: $0 [--fast|--red]" >&2; exit 2 ;;
 esac
 
@@ -155,6 +162,68 @@ choose_test_simulator() {
   fi
 }
 
+# The lock around the app tests' simulator (#77). Two runs on it at once both fail, and one is told
+# its tests crashed; two first runs each create a "DSH Remote Tests".
+#
+# It is flock(2), taken by /usr/bin/lockf on descriptor 9, which this shell holds open and every
+# command of the section inherits. The kernel drops it once no process holds the descriptor, after
+# Ctrl-C, kill -9 or a crash alike, so there is never a stale lock to detect or delete. An orphaned
+# xcodebuild keeps it until it exits, which is right: it is still using the simulator. Rejected: a
+# mkdir or pid-file lock, which a kill -9 leaves behind, and flock(1), which macOS does not ship.
+#
+# The path is per macOS user, like the simulators, so every clone and worktree sees it. It is not
+# $TMPDIR, which a tool or sandbox can set per session. WORKFLOW.md's inner-loop command takes the
+# same lock (`lockf -k <this path> xcodebuild test …`). Never delete the file, and give any
+# command-form lockf on it -k: a waiter holding the old file open would lock a different inode from
+# the next run's.
+simulator_lock=""
+lock_test_simulator() {
+  local rc holder pid waited_from
+  simulator_lock="$(getconf DARWIN_USER_TEMP_DIR 2>/dev/null)"
+  if [[ -z "$simulator_lock" ]]; then
+    echo "simulator: no per-user temp directory (getconf DARWIN_USER_TEMP_DIR) to hold the lock in"
+    return 1
+  fi
+  simulator_lock="${simulator_lock}dsh-remote-tests-simulator.lock"   # the value ends in "/"
+  # Append, never truncate: opening the file must not wipe the holder's line.
+  if ! exec 9>> "$simulator_lock"; then
+    echo "simulator: cannot open the lock file $simulator_lock"
+    return 1
+  fi
+  lockf -s -t 0 9
+  rc=$?
+  if [[ $rc -eq 75 ]]; then   # EX_TEMPFAIL: another run has the simulator
+    holder="$(head -n 1 "$simulator_lock" 2>/dev/null)"
+    if [[ -z "$holder" ]]; then
+      echo "simulator: waiting: another run holds the app tests' simulator (holder unknown; lsof $simulator_lock names it)"
+    else
+      pid="${holder#pid }"
+      pid="${pid%%,*}"
+      if [[ "$pid" =~ ^[0-9]+$ ]] && ! kill -0 "$pid" 2> /dev/null; then
+        holder="$holder; it has exited, and a process it started is still using the simulator"
+      fi
+      echo "simulator: waiting: another Tools/check.sh is running the app tests ($holder)"
+    fi
+    waited_from=$(date +%s)
+    lockf -s 9   # no time limit: a hung holder still has the simulator, and the line above names it
+    rc=$?
+    [[ $rc -eq 0 ]] && echo "simulator: waited $(( $(date +%s) - waited_from ))s"
+  fi
+  if [[ $rc -ne 0 ]]; then
+    echo "simulator: could not lock $simulator_lock (lockf exit $rc)"
+    exec 9>&-
+    return 1
+  fi
+  # For a waiting run to name us. The lock is the flock, not this line: truncating through another
+  # descriptor does not release it.
+  printf "pid %s, %s, since %s\n" "$$" "$ROOT" "$(date +%H:%M:%S)" > "$simulator_lock"
+}
+
+unlock_test_simulator() {
+  : > "$simulator_lock"   # so a holder that writes nothing (lockf -k …) reads as unknown, not as us
+  exec 9>&-
+}
+
 # Builds and runs the app test target (Tests/DSHRemoteTests). Compiling and running are separate
 # xcodebuild calls, so a compile error and a failing test cannot be mistaken for each other.
 # Sets app_tests to one of: pass, fail (on assertions), compile, crash, not-run.
@@ -174,7 +243,10 @@ run_app_tests() {
     app_tests="compile"
     return
   fi
-  if ! choose_test_simulator; then app_tests="not-run"; return; fi
+  # From here to the shutdown, one checkout at a time. build-for-testing stays outside: DerivedData
+  # is per project path, so builds in two checkouts do not meet.
+  if ! lock_test_simulator; then app_tests="not-run"; return; fi
+  if ! choose_test_simulator; then unlock_test_simulator; app_tests="not-run"; return; fi
   # On a failure xcodebuild otherwise collects simulator diagnostics (`simctl diagnose`), which
   # can sit for its full 600 s timeout after a sub-second test run (#74). The log has what we need.
   xcodebuild -project "$APP_PROJECT" -scheme DSHRemote -configuration Debug \
@@ -186,6 +258,7 @@ run_app_tests() {
   if [[ "$test_simulator_state" != "Booted" ]]; then
     xcrun simctl shutdown "$test_simulator" > /dev/null 2>&1
   fi
+  unlock_test_simulator
   grep -E "^✘ |^✔ Test run with|Test Case .* failed|error: -\[" "$test_log" | head -40
   if [[ $rc -eq 0 ]]; then
     echo "app tests: ok"
