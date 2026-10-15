@@ -1,6 +1,6 @@
 # Issue #99: one unmodelled event field must not kill the connection
 
-**Status:** draft
+**Status:** verified
 **Branch:** `issue-99-unmodelled-event-field` (worktree `.claude/worktrees/issue-99`)
 **Version impact:** MINOR — `DurableEventEnvelope.surfaceOp` changes type in the kit's public API
 (`String?` → `JSONValue?`), which is an incompatible change to a caller. While `0.x` that is MINOR.
@@ -92,11 +92,59 @@ and the `snapshot` / `event/user/message` captures in `Fixtures/mux-stream-frame
 
 ## Red evidence
 
-*Filled in with the `Tests:` commit.*
+`Tools/check.sh --red` on `fcbf2d6` (the `Tests:` commit) with the fix stashed, so the tree is exactly
+the tests:
+
+```
+red: ok it compiles and fails on assertions (kit: fail, app: pass; logs in .build/check).
+check: ok — red for the right reason (33s)
+```
+
+Kit: 554 tests in 39 suites, **3 issues**, every one an assertion — no compile error.
+
+| Test | Message |
+|---|---|
+| `an event whose surfaceOp is an object does not fail the frame, and is kept whole` | `Caught error: typeMismatch: Expected value of type String. Path: value.event.surfaceOp … found a dictionary instead` |
+| `a value body this build cannot decode is kept whole, not fatal` | `Caught error: typeMismatch: Expected value of type Array<Any>. Path: value.records … found a string instead` |
+| `a wrong kind inside the body is kept whole, not fatal` | `Caught error: typeMismatch: Expected value of type String. Path: value.event.type … found an array instead` |
+
+The first reproduces the **live failure's own path** (`value.records[26].event.surfaceOp`), so the test
+is the bug rather than a shape near it.
+
+**A pre-existing test encoded the old contract and is rewritten in that commit, visibly.**
+`nonStringDiscriminantsFailToDecode` asserted that four shapes threw. Two are the discriminants that
+decide how a frame is classified — the frame's own `type`, and the value union's `type` — and they stay
+fatal, because without them there is nothing to classify by (SPEC §6.9). The other two are *inside* the
+body, and throwing there is precisely what failed the frame, failed every stream on the socket and
+parked the app. They moved to `wrongKindInsideBodyIsKeptWhole`, which asserts the body survives with its
+discriminator intact. **The line the fix draws is envelope versus body**, and the rewrite is what makes
+that a rule rather than an accident.
+
+Two fixture facts were learned the hard way and are in the test's comments: `streamId` is redacted to
+`"redacted"`, and `surfaceOp` sits at `value.event.surfaceOp` — a key set beside `event` is silently
+ignored by the decoder, which reads exactly like a pass.
 
 ## Verification
 
-*Filled in by the verifier.*
+The fix was undone on the finished tree — `git revert --no-commit a6771d3`, implementation gone and
+tests kept — and `Tools/check.sh --red` re-run:
+
+| AC | Undone how | Test failure with it undone |
+|---|---|---|
+| AC1 | `git revert --no-commit a6771d3` | `StreamFrameTests.swift:494` — `typeMismatch … Path: value.event.surfaceOp` |
+| AC2 | same | `StreamFrameTests.swift:526` — `typeMismatch … Path: value.records`, and `:336` — `Path: value.event.type` |
+| AC3 | same | `a frame that is not an object still fails` still passes; the two envelope discriminants in `nonStringDiscriminantsFailToDecode` still pass |
+| AC4 | — | see below |
+
+- **AC4, against the real capture.** With the fix in place, the 949706-byte frame captured from
+  `session-4755645d-…` decodes: `value=snapshot`, **98 records**, `cursor=18217`, and all **three**
+  object-form `surfaceOp`s are preserved — the first being
+  `{"op":"replace","startSeq":17853,"endSeq":17853}`. Before the fix the same bytes threw the
+  `typeMismatch` above. The scratch test that read it was not committed: the capture is session
+  content (`AGENTS.md`, "Host data stays local").
+- `Tools/check.sh`: **green** (full, 61 s) — 554 tests in 39 suites; coverage 88.05% against the
+  88.05% baseline (unchanged); Debug **and** Release build; app tests pass; `guard-tests` clean.
+- Risk checklist: **C2** answered in the PR; no S-flag ticked.
 
 ## Notes for the next person
 
