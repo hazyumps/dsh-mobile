@@ -1,6 +1,6 @@
 # Issue #63: Writes are retried (event results, uploads, cancel, pairing claim)
 
-**Status:** approved (Dan, 2026-10-15)
+**Status:** verified (2026-10-15)
 **Branch:** `issue-63-retried-writes`
 **Version impact:** MINOR. This differs from the issue, which says PATCH. Removing `retryPolicy:` from
 `DshRpcClient.call/callVoid`, `DshBareEndpointClient.init/submitEventResult` and
@@ -255,20 +255,46 @@ because a three-attempt 429 is still a lockout.
 
 ## Verification
 
-*Filled in by the verifier. Planned checks:*
+Verified 2026-10-15 at `6a84d09`, by a verifier that did not build it. Each criterion was undone on
+its own, by hand on the finished tree, and its tests re-run
+(`swift test --disable-sandbox --filter WritesAreSentOnceTests`, or the named `NetworkTests` for
+AC11). The tree was restored with `git checkout -- <file>` and the suite was green again before the
+next one. Every write test fails by count, so the message reads `requestsSent → 3` where it expects 1.
 
-| AC | Undone how | Expected failure with it undone |
+| AC | Undone how | Failure with it undone |
 |---|---|---|
-| AC1 | restore the `retryPolicy` parameter and override in `submitEventResult` (or the bare client's `.default`) | `(requestsSent → 3) == 1` |
-| AC2, AC3 | give `DshBareEndpointClient.init` back `retryPolicy: .default` | `(requestsSent → 3) == 1` for both overloads |
-| AC4 | give `PairingClient` back its `.default` | `(requestsSent → 3) == 1`; sleeps `[60, 60]` |
-| AC5 | `cancelSession` back to `client.call` | `(requestsSent → 3) == 1` |
-| AC6–9 | one site at a time back to `call` with no policy | `(requestsSent → 3) == 1` |
-| AC10 | add `retryPolicy: RPCFailureRetryPolicy? = nil` to any write; then add a `///` line naming `RPCFailureRetryPolicy?` | `lint: FAIL … optional-retry-policy …`; then `lint: ok` (comments are not matched) |
+| AC1 | `submitEventResult` only: `usingExchange.retryPolicy = .default` before `perform` (uploads left on `.none`) | the 502 and 429 cases only: `:127`/`:142` `requestsSent → 3`; `slept` `[0.5, 1.0]` / `[5.0, 5.0]`; `harnessUnavailable(attempts: 3)`, `rateLimited(5, attempts: 3)` |
+| AC2 | the in-memory `uploadFileBinary` only (`DshBareEndpointClient.swift:201`) uses `.default` | the AC2 502/429 cases only: `:180`/`:195` `requestsSent → 3`; `slept` `[0.5, 1.0]` / `[5.0, 5.0]`; `attempts: 3` |
+| AC3 | the file `uploadFileBinary` only (`:239`) uses `.default` | the AC3 502/429 cases only: `:233`/`:250` `requestsSent → 3`; `slept` `[0.5, 1.0]` / `[5.0, 5.0]`; `attempts: 3` |
+| AC1–3 | `DshBareEndpointClient.init`'s exchange back to `RPCFailureRetryPolicy.default` | all six 502/429 cases of AC1–3, `requestsSent → 3` (18 issues) |
+| AC4 | `PairingClient.init`'s exchange back to `RPCFailureRetryPolicy.default` | `:285`/`:303` `requestsSent → 3`; `slept` `[0.5, 1.0]` / `[60.0, 60.0]`; `.exchange(.harnessUnavailable(attempts: 3))`, `.exchange(.rateLimited(60, attempts: 3))` |
+| AC5 | `cancelSession` back to `client.call` (the coordinator client's `.default`) | `:337`/`:349` `requestsSent → 3`; the error is still `harnessUnavailable`/`rateLimited` but not `attempts: 1` |
+| AC6 | `createSession` back to `client.call` | `:382`/`:394` `requestsSent → 3`; `attempts: 1` expectation fails |
+| AC7 | `prompt` back to `client.call` | `:427`/`:439` `requestsSent → 3`; `attempts: 1` expectation fails |
+| AC8 | `answer` back to `client.call` | `:474`/`:486` `requestsSent → 3`; `attempts: 1` expectation fails |
+| AC9 | `answerContinued` back to `client.call` | `:525`/`:537` `requestsSent → 3`; `attempts: 1` expectation fails |
+| AC10 | `retryPolicy: RPCFailureRetryPolicy? = nil` added to `PairingClient.claim`; then the same as `Optional<RPCFailureRetryPolicy>`; then an `RPCFailureRetryPolicy?` property in `AppModel.swift` | `lint: FAIL` `optional-retry-policy Sources/DSHRemoteKit/Network/PairingClient.swift:100: …` for both spellings, and `optional-retry-policy Apps/DSHRemote/Sources/AppModel.swift:…` for the app |
+| AC10 (comments) | only a `///` line naming `` `retryPolicy: RPCFailureRetryPolicy? = nil` `` added | `lint: ok`, as intended |
+| AC10 (old trap) | `AppModel.swift:522` back to `submitEventResult(request, retryPolicy: .none)` | `lint: FAIL` `retry-none Apps/DSHRemote/Sources/AppModel.swift:522` (and the app no longer compiles: the parameter is gone) |
+| AC11 | `call` passes `RPCFailureRetryPolicy.none` (the write policy leaks into reads) | `readsStillRetry` caught `.rateLimited(0, attempts: 1)`; `status429ExhaustsToBackoff` `attempts: 1`, `slept → []`; `status502ExhaustsToHarnessUnavailable` `attempts: 1`; four more 429/502 retry tests fail |
+| AC11 | `call` ignores the client's policy and always uses `.default` | `retryPolicyNoneStopsAfterOneAttempt`: `attempts → 3`, `slept → [5.0, 5.0]`, `rateLimited(5, attempts: 3)` |
 
-- Full `Tools/check.sh`: Debug and Release builds prove `AppModel` compiles against the narrower
-  API.
-- The S1 and S3 checklists go in the PR, from a security-reviewer pass.
+On HEAD, `grep -rn "RPCFailureRetryPolicy?" Sources Apps` prints nothing, and the allowlist has no
+`#63` line. With everything restored, `swift test --disable-sandbox` is green: 532 tests in 37 suites.
+
+- `Tools/check.sh`: **green** (full, 283 s). Lint ok, models up to date, version ok 0.2.0 (238),
+  `guard-tests` clean, 532 kit tests pass, coverage 87.12% (baseline 86.83%), Debug **and**
+  Release build, 4 app tests pass.
+- Coverage: the baseline goes from 86.83 to **87.12** in this commit
+  (`Tools/coverage.sh --update-baseline` after `swift test --enable-code-coverage` on HEAD), as
+  "Coverage only goes up" requires.
+- Version impact: **MINOR** is right. `DshRpcClient.call`/`callVoid`,
+  `DshBareEndpointClient.init`/`submitEventResult` and `PairingClient.init`/`claim` lose a public
+  parameter, and `AppModel` used it. That is "a public kit API that callers use, changes
+  incompatibly" (`docs/process/RELEASING.md:32`), which is MINOR while 0.x. `project.yml` and
+  `Info.plist` are untouched (no bump). `CHANGELOG.md` `[Unreleased]` has the `### Fixed` line and
+  a `### Changed` line marked MINOR, both with `#63`.
+- Risk checklist: in the PR (S1 and S3, from the security reviewer's pass).
 
 ## Notes for the next person
 
