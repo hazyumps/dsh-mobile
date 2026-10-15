@@ -1,6 +1,9 @@
 # Issue #66: file import releases security-scoped access before upload; raw upload unbounded
 
-**Status:** draft. Design approved by Dan, 2026-10-15; this plan awaits gate 1.
+**Status:** red tests written; awaiting gate 1 (tests). The plan was approved by Dan on 2026-10-15
+as written (`7aec420`), including the new `AttachmentUploadFailure.unreadable(reason:)` case and the
+PATCH version impact; the approval is posted on #66 ("Plan approved"). Tests written 2026-10-15 by
+the planner agent.
 **Branch:** `issue-66-staged-file-import`
 **Version impact:** PATCH. This is a hardening fix: an oversized or unreadable file is now refused
 instead of sent. The kit's public API only grows. `upload(…byteCount:)` keeps its signature and
@@ -209,10 +212,63 @@ is resolved by keeping both rule descriptions.
 
 ## Red evidence
 
-*Filled in with the `Tests:` commit.*
+`Tools/check.sh --red`, 2026-10-15, on the `Tests:` commit's tree: lint ok, guard-tests ok,
+`kit tests: fail on assertions`, `app tests: fail on assertions`,
+`red: ok it compiles and fails on assertions (kit: fail, app: fail)`. Kit: 516 tests, 22 issues,
+all in the two new suites; every existing test passes. App: 7 tests, 3 issues, all in
+`FileImportTests`. Excerpts from `.build/check/test.log` and `.build/check/app-tests.log`:
 
 ```
+AC1: the raw route refuses a file one byte over the limit before sending anything
+  an error was expected but none was thrown and "UploadedAttachment(receiptId: "ee7fc538-…", …)" was returned
+  thrown == .tooLarge(byteCount: limit + 1, limit: limit)   thrown → nil, expected .tooLarge(byteCount: 17, limit: 16)
+  sent == 0                                                 sent → 1
+AC1: a file exactly at the limit is sent                    passes (guard, as planned)
+AC2: a caller that under-reports the size cannot get an oversized file past the limit
+  an error was expected but none was thrown and "UploadedAttachment(receiptId: "ee7fc538-…", …)" was returned
+  thrown == .tooLarge(byteCount: 64, limit: limit)          thrown → nil
+  sent == 0                                                 sent → 1
+AC2: the fallback measures the file, not the caller's byteCount
+  an error was expected but none was thrown and "UploadedAttachment(receiptId: "receipt-from-fallback", …)" was returned
+  thrown == .tooLargeForFallback(byteCount: 64, limit: limit)   thrown → nil
+  sent == 0  (rpc)                                          sent → 1
+AC3: a file whose size cannot be read is refused, not sent as zero bytes
+  an error was expected but none was thrown and "UploadedAttachment(receiptId: "ee7fc538-…", …)" was returned
+  sent == 0                                                 sent → 1
+  expected .unreadable, got nil
+AC4: a staged copy stays readable after the source is gone
+  FileManager.default.contents(atPath: staged.url.path) == Data("abcdef".utf8)   → nil vs 6 bytes
+  scratch.isStagedCopy(staged.url)   …/source/notes.txt is not <staging>/<UUID>/<name>
+  staged.byteCount == 6              staged.byteCount → 0
+AC5: a file one byte over the limit is refused before anything is copied
+  an error was expected but none was thrown
+AC5: a file exactly at the limit is staged
+  scratch.isStagedCopy(staged.url)   …/source/edge.bin is not <staging>/<UUID>/<name>
+  staged.byteCount == limit          staged.byteCount → 0
+AC5: a directory is refused and nothing is copied
+  an error was expected but none was thrown
+  expected .unreadable, got nil
+AC6: discard removes the staged copy and its folder
+  !FileManager.default.fileExists(atPath: staged.url.path)   still there: …/source/notes.txt
+AC6: sweep removes copies left by an earlier launch
+  scratch.stagedEntries.count == 0   left behind: ["AA916DC0-…"]   count → 1
+AC7: an import that cannot upload leaves nothing staged and says why
+  model.attachmentError == "This phone is not connected to a harness."   model.attachmentError → nil
+AC7: an import over the app limit is refused with a message naming the app's 20 MiB limit
+  try #require(model.attachmentError)   model.attachmentError → nil
+AC7: launch clears copies an earlier launch left behind
+  scratch.stagedEntries.count == 0   left behind: ["A718A1D6-…"]   count → 1
 ```
+
+Every failure is the one the test list predicts. Three things the builder should know:
+
+- The two AC5 refusal tests also assert that nothing is left in staging. That assertion passes
+  against the stub (it copies nothing) and guards against a real `stage` that copies first and
+  checks after.
+- The AC7 over-limit test runs with no host connected. It passes only if `importFile` stages, and so
+  refuses the oversized file, **before** `attachFile` checks for a connection; otherwise the
+  message would be "not connected". That is the planned order (stage, then upload the copy).
+- The "this app" check in that test is case-insensitive, so the message may begin "This app's…".
 
 ## Verification
 

@@ -277,7 +277,9 @@ final class AppModel {
         #endif
     }
 
-    init(draftsDirectory: URL? = nil) {
+    /// - Parameter stagingDirectory: where imported files are copied before upload (#66). Stub:
+    ///   ignored until slice C sweeps it here.
+    init(draftsDirectory: URL? = nil, stagingDirectory: URL? = nil) {
         drafts = DraftStore(directory: draftsDirectory ?? Self.defaultDraftsDirectory)
         // The registry drops a selection naming a host that is no longer saved. Its list is
         // read synchronously, so a launch with hosts does not flash the pairing introduction.
@@ -974,8 +976,18 @@ final class AppModel {
             "The harness refused that file (\(code)): \(message)"
         case .transport(let reason):
             "That upload may not have arrived: \(reason)"
+        // #66 placeholders so this switch stays exhaustive; slice C writes the real messages.
+        case .tooLarge:
+            "That file could not be attached."
+        case .unreadable:
+            "That file could not be attached."
         }
     }
+
+    /// Stages an imported file, uploads the copy, and discards it once the upload settles (#66).
+    ///
+    /// Stub for the planner's red tests: does nothing yet. Slice C implements it.
+    func importFile(at fileURL: URL, to sessionId: String) async {}
 
     func clearAttachments(for sessionId: String) {
         stagedAttachments[sessionId] = nil

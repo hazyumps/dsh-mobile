@@ -34,6 +34,12 @@ public enum AttachmentUploadFailure: Error, Sendable, Hashable {
     /// SPEC §9 keeps a 20 MiB cap on the fallback, and the cap is checked before the bytes
     /// are read: a file that cannot be sent should not be loaded into memory to find out.
     case tooLargeForFallback(byteCount: Int, limit: Int)
+    /// The file is larger than this app's per-file limit (SPEC §3.6), measured from the file
+    /// on disk. Refused before anything is sent. (#66: stub; nothing throws it yet.)
+    case tooLarge(byteCount: Int, limit: Int)
+    /// The file could not be measured as a regular file — missing, or a directory — so it is
+    /// refused rather than sent as zero bytes. (#66: stub; nothing throws it yet.)
+    case unreadable(reason: String)
     /// The host answered successfully but named no receipt, so there is nothing to cite.
     case noReceipt
     /// The host refused the upload.
@@ -60,21 +66,28 @@ public enum AttachmentUploadFailure: Error, Sendable, Hashable {
 public struct AttachmentUploader: Sendable {
     /// SPEC §9's app-side cap for the base64 fallback. The raw route has no such limit here.
     public static let fallbackByteLimit = 20 * 1024 * 1024
+    /// SPEC §3.6's per-file cap, the app's limit rather than the harness's. (#66: stub; the
+    /// raw route does not enforce it yet.)
+    public static let byteLimit = 20 * 1024 * 1024
 
     private let makeBareClient: @Sendable () -> DshBareEndpointClient
     private let makeRPCClient: @Sendable () -> DshRpcClient
     private let fallbackLimit: Int
+    private let byteLimit: Int
 
     /// - Parameters:
     ///   - fallbackLimit: injected so a test can exercise the cap without a 20 MiB file.
+    ///   - byteLimit: the same, for the per-file cap. (#66: stub; stored, not yet used.)
     public init(
         makeBareClient: @escaping @Sendable () -> DshBareEndpointClient,
         makeRPCClient: @escaping @Sendable () -> DshRpcClient,
-        fallbackLimit: Int = AttachmentUploader.fallbackByteLimit
+        fallbackLimit: Int = AttachmentUploader.fallbackByteLimit,
+        byteLimit: Int = AttachmentUploader.byteLimit
     ) {
         self.makeBareClient = makeBareClient
         self.makeRPCClient = makeRPCClient
         self.fallbackLimit = fallbackLimit
+        self.byteLimit = byteLimit
     }
 
     /// Uploads one prepared file and returns the receipt a prompt can cite.
