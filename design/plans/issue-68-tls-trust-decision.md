@@ -44,7 +44,7 @@ returns for a `SecTrust` built offline, and what the delegate passes to `URLSess
   hostname check (SPEC §3.2).
 - **AC4** — With no pin and no platform trust, the connection is rejected. Today it is accepted.
 - **AC5** — With a pin and `requiresPlatformTrust` both set, only the pin is checked (today's
-  behaviour, kept on purpose; follow-up #N).
+  behaviour, kept on purpose; follow-up #86).
 - **AC6** — Each decision maps to one disposition: accepted → `.useCredential` (the only one with a
   `URLCredential(trust:)`), deferred → `.performDefaultHandling`, rejected →
   `.cancelAuthenticationChallenge`.
@@ -126,7 +126,7 @@ never evaluates it. The stubs in the `Tests:` commit are the two enums,
 | AC2 | `"AC2: an RSA leaf fails closed even under its own SPKI pin"` | `.reject(.unsupportedKey)` | stub returns `.reject(.noTrustAnchor)` |
 | AC3 | `"AC3: no pin with platform trust required defers to the system's check"` | `.deferToPlatform` | stub returns `.reject(.noTrustAnchor)` |
 | AC4 | `"AC4: no pin and no platform trust is rejected"` | `.reject(.noTrustAnchor)` | **passes by construction** against the stub |
-| AC5 | `"AC5: a pin with platform trust also required checks only the pin (follow-up #N)"` | `.acceptPinned` | stub returns `.reject(.noTrustAnchor)` |
+| AC5 | `"AC5: a pin with platform trust also required checks only the pin (follow-up #86)"` | `.acceptPinned` | stub returns `.reject(.noTrustAnchor)` |
 | AC6 | `"AC6: an accepted decision maps to useCredential"` | `.useCredential` | stub returns `.cancelAuthenticationChallenge` |
 | AC6 | `"AC6: a deferred decision maps to performDefaultHandling"` | `.performDefaultHandling` | stub returns `.cancelAuthenticationChallenge` |
 | AC6 | `"AC6: a rejected decision maps to cancelAuthenticationChallenge"` | `.cancelAuthenticationChallenge` | **passes by construction** against the stub |
@@ -135,10 +135,9 @@ Expected red: 10 of the 12 fail with a value mismatch. The red evidence must nam
 by construction. The verifier's undo table is what shows that AC4 and the reject mapping guard
 something.
 
-**Discovery risk.** `SecTrustCopyCertificateChain` on an *unevaluated* trust might not return
-`[leaf, issuer]` in that order. If the red run shows that it doesn't, that is something learned
-about the platform, and it gets pinned in a test that says so. The fix is not to evaluate the trust
-inside `decide`.
+**Discovery risk, resolved.** `SecTrustCopyCertificateChain` on an *unevaluated* trust does return
+`[leaf, issuer]` in that order (macOS, 2026-10-15). The AC1 issuer test checks this before it looks
+at the decision, so a platform change would fail there and not show up as a confusing pin result.
 
 ## Slices
 
@@ -164,7 +163,7 @@ the new test file.
 
 ## Out of scope
 
-- Whether a pin together with `requiresPlatformTrust` should require both. That is follow-up #N
+- Whether a pin together with `requiresPlatformTrust` should require both. That is follow-up #86
   (labels `security`, `client`); AC5 records today's answer.
 - Exercising the delegate's `URLSession` plumbing itself, which needs a real handshake. `dsh-smoke`
   remains that test.
@@ -186,10 +185,44 @@ These were found while checking it against the code. The approved decisions are 
 
 ## Red evidence
 
-*Filled in with the `Tests:` commit.*
+`Tools/check.sh --red` on the working tree of the `Tests:` commit, which holds the tests, the
+fixture and the stubs:
 
 ```
+kit tests: fail on assertions (full log: .build/check/test.log)
+app tests: ok
+red: ok it compiles and fails on assertions (kit: fail, app: pass; logs in .build/check).
+check: ok — red for the right reason (67s)
 ```
+
+Kit: 517 tests in 37 suites, **10 issues**, all of them assertion failures in
+`TLSTrustDecisionTests.swift`. Each failure matches the prediction. The fixture tests pass with the
+new file registered.
+
+| Test | Failure (`TLSTrustDecisionTests.swift`) |
+|---|---|
+| AC1: …accepted with the relay's published pin | `:86` `decision == .acceptPinned`; decision → `.reject(.noTrustAnchor)` |
+| AC1: …rejected under a different pin | `:97` `decision == .reject(.pinMismatch)`; decision → `.reject(.noTrustAnchor)` |
+| AC1: a pin over the whole certificate is not accepted | `:108` `decision == .reject(.pinMismatch)`; decision → `.reject(.noTrustAnchor)` |
+| AC1: the pin is taken from the leaf, not the issuer | `:125` `decision == .reject(.pinMismatch)`; decision → `.reject(.noTrustAnchor)` (the chain check at `:120` passes) |
+| AC2: a P-384 leaf fails closed… | `:137` `decision == .reject(.unsupportedKey)`; decision → `.reject(.noTrustAnchor)` |
+| AC2: an RSA leaf fails closed… | `:147` `decision == .reject(.unsupportedKey)`; decision → `.reject(.noTrustAnchor)` |
+| AC3: no pin with platform trust required defers… | `:159` `decision == .deferToPlatform`; decision → `.reject(.noTrustAnchor)` |
+| AC5: …checks only the pin (follow-up #86) | `:183` `decision == .acceptPinned`; decision → `.reject(.noTrustAnchor)` |
+| AC6: an accepted decision maps to useCredential | `:192` `disposition == .useCredential`; disposition → `rawValue: 2` (cancel) |
+| AC6: a deferred decision maps to performDefaultHandling | `:199` `disposition == .performDefaultHandling`; disposition → `rawValue: 2` (cancel) |
+
+**Two tests pass by construction against the stub, as predicted:** `AC4: no pin and no platform
+trust is rejected`, and `AC6: a rejected decision maps to cancelAuthenticationChallenge` (one test
+with four cases, one per `RelayTrustRejection`). The verifier's undo table is what shows they guard
+something.
+
+**Satisfiability probe, outside the repo.** A throwaway script ran the platform path on the fixture:
+`SecCertificateCreateWithData` → `SecCertificateCopyKey` → `SecKeyCopyExternalRepresentation`. It
+gave a 65-byte `04…` point for the stand-in, which wraps and hashes to `7pcXvn2K…`. The issuer gave a
+65-byte point hashing to `issuerOwnPin`. P-384 gave 97 bytes and RSA gave 270 bytes (PKCS#1), so
+`SPKIPin`'s wrapping refuses both. AC1 and AC2 can therefore be met through the real Security API,
+and that confirms the "unverified" note in `spkiPin(of:)`.
 
 ## Verification
 
@@ -208,4 +241,6 @@ a test red.
 
 The test certificates are synthetic stand-ins around a captured public key. They prove the decision
 against the relay's real pin without committing the relay's certificate, its SANs, or any private
-key. Regenerating them needs a throwaway key and the commands in the fixture's `source` field.
+key. To regenerate them, follow the commands in the fixture's `source` field with OpenSSL 3 or
+later; new keys mean new values for every pin except `expectedPin`. The fixture is base64 DER, not
+PEM, because the redaction test in `FixtureProvenanceTests` refuses `-----BEGIN`.

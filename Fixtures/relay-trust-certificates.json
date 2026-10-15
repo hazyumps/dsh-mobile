@@ -1,0 +1,27 @@
+{
+  "description": "Synthetic stand-in certificates for the TLS trust decision (#68). The leaf carries the live relay's captured P-256 public key from relay-spki-pin.json (forced in with -force_pubkey), so its SPKI pin is the relay's published pin, but it is not the relay's certificate: it is issued by a throwaway P-256 issuer whose private key was deleted after signing, as were the P-384 and RSA leaf keys. Every pin here was computed by openssl as base64 SHA-256 over DER, independently of the code under test. Certificates are base64 DER.",
+  "source": [
+    "generated 2026-10-15 with OpenSSL 4.0.3 29 Sep 2026 (Library: OpenSSL 4.0.3 29 Sep 2026), in a scratch directory; every private key deleted afterwards",
+    "base64 -d of relay-spki-pin.json spkiDerBase64 > relay-spki.der",
+    "openssl pkey -pubin -inform DER -in relay-spki.der -out relay-pub.pem",
+    "openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out issuer.key",
+    "openssl req -x509 -new -key issuer.key -subj /CN=dsh-test-throwaway-issuer -days 3650 -set_serial 1 -out issuer.pem",
+    "openssl x509 -new -subj /CN=dsh-relay-stand-in -force_pubkey relay-pub.pem -CA issuer.pem -CAkey issuer.key -days 3650 -set_serial 2 -out leaf.pem",
+    "openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-384 -out p384.key; openssl pkey -in p384.key -pubout -out p384-pub.pem",
+    "openssl x509 -new -subj /CN=dsh-test-p384-leaf -force_pubkey p384-pub.pem -CA issuer.pem -CAkey issuer.key -days 3650 -set_serial 3 -out p384.pem",
+    "openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out rsa.key; openssl pkey -in rsa.key -pubout -out rsa-pub.pem",
+    "openssl x509 -new -subj /CN=dsh-test-rsa-leaf -force_pubkey rsa-pub.pem -CA issuer.pem -CAkey issuer.key -days 3650 -set_serial 4 -out rsa.pem",
+    "rm issuer.key p384.key rsa.key",
+    "SPKI pin: openssl x509 -in X.pem -pubkey -noout | openssl pkey -pubin -outform DER | openssl dgst -sha256 -binary | base64",
+    "whole-certificate pin: openssl x509 -in X.pem -outform DER | openssl dgst -sha256 -binary | base64"
+  ],
+  "expectedPin": "7pcXvn2Kosz4qWgFpUmIao9YQ05bXYTLbfP0IskaeN4=",
+  "leafOverCapturedRelayKey": "MIIBczCCARigAwIBAgIBAjAKBggqhkjOPQQDAjAkMSIwIAYDVQQDDBlkc2gtdGVzdC10aHJvd2F3YXktaXNzdWVyMB4XDTI2MTAxNTE5MDgzOVoXDTM2MTAxMjE5MDgzOVowHTEbMBkGA1UEAwwSZHNoLXJlbGF5LXN0YW5kLWluMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEotFXVvjb7G1fUyJqZgSL/XQZmkQIPYszdQyJ/AWakIUsyIGNABp0gjxNLQS48tzwLHvdYu/B2r9y9Qnka2oCC6NCMEAwHQYDVR0OBBYEFE5yqopbdjP6/h2l+7hI23Esn14pMB8GA1UdIwQYMBaAFBZWEsoyU+07YlTPpigIBxSzuVqzMAoGCCqGSM49BAMCA0kAMEYCIQCH+FWZu1q4SP/10BrQia/oNWxq4Qju3Y5mfu6kXBQJwAIhAM+f5g5MGxZPoCuhHJzM9IzSJyJVgRD1C72Z/NHUghlP",
+  "leafWholeCertificatePin": "EnB03zeP7whsBC5bAiTxlqQa/K2d1YV6Efv0SEKshyo=",
+  "throwawayIssuer": "MIIBaDCCAQ+gAwIBAgIBATAKBggqhkjOPQQDAjAkMSIwIAYDVQQDDBlkc2gtdGVzdC10aHJvd2F3YXktaXNzdWVyMB4XDTI2MTAxNTE5MDgzOVoXDTM2MTAxMjE5MDgzOVowJDEiMCAGA1UEAwwZZHNoLXRlc3QtdGhyb3dhd2F5LWlzc3VlcjBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABOEpMmUvWuNRNc09olXlaU5Tgb87Moj4vgivUkylkJvGCdyfMCGmRjjms/7nGkaoaGtenDjKq2XeDMr7dWLhcmKjMjAwMB0GA1UdDgQWBBQWVhLKMlPtO2JUz6YoCAcUs7laszAPBgNVHRMBAf8EBTADAQH/MAoGCCqGSM49BAMCA0cAMEQCIDyUktvwbuncsJkpWFe8Eyi6SnsVoBUsa9iXg7EzbhIDAiAkVAVFTstqMafpAj4gP9D3r3kq0K4OwPQCUDOzkls65Q==",
+  "issuerOwnPin": "6ILRYUKI8ySI3KSNnesS1RP86hk8izQ182JKnocZ238=",
+  "p384Leaf": "MIIBjzCCATWgAwIBAgIBAzAKBggqhkjOPQQDAjAkMSIwIAYDVQQDDBlkc2gtdGVzdC10aHJvd2F3YXktaXNzdWVyMB4XDTI2MTAxNTE5MDgzOVoXDTM2MTAxMjE5MDgzOVowHTEbMBkGA1UEAwwSZHNoLXRlc3QtcDM4NC1sZWFmMHYwEAYHKoZIzj0CAQYFK4EEACIDYgAEgJPsrTGxnwFJrk9SorhCytPZ5KUzJVbKWnbsgpeqkTbL/TrO02vTIcMS5rY9GC6rKol66hoFeS5bLpjHY8JWREU2myOZbFs9iA0N38L7gEHfmvc81YAmKKAKzC9LXcuBo0IwQDAdBgNVHQ4EFgQU5DP4m7ubR9YR3b/dBk9f9TeiSBMwHwYDVR0jBBgwFoAUFlYSyjJT7TtiVM+mKAgHFLO5WrMwCgYIKoZIzj0EAwIDSAAwRQIhAOD2PIe3Acat7ITMdTkwi0ivZlYvoCy0/9KUE15yjCHnAiACJ7mRduRSN7Rrfnqw/bv6HMK9qis08dwIv4/8vWuDAA==",
+  "p384OwnPin": "c5xqdnMFPij2A0anX6aCKTdjuL7DO+wbrTGj9ghFkYE=",
+  "rsaLeaf": "MIICPTCCAeKgAwIBAgIBBDAKBggqhkjOPQQDAjAkMSIwIAYDVQQDDBlkc2gtdGVzdC10aHJvd2F3YXktaXNzdWVyMB4XDTI2MTAxNTE5MDgzOVoXDTM2MTAxMjE5MDgzOVowHDEaMBgGA1UEAwwRZHNoLXRlc3QtcnNhLWxlYWYwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDpgDKy6ISlg7InCxNk2IQpPYXpWB4vnSGLXLPMj1wzoHYM3dBxVZmYtU4Ke6d/IguunH0X6ndlEtjsKZ9ly3CwW7JaD1hKzNtMLy5ip3+tK/AnzctLDo1+JN/KnbrJrqqHoyn6UkEy62RCEEWCBKJSDwLUi0BlPodxLvddx4mOKQdOcSf+L+mVCn7gis9t+23teWU2hmaKzyZ+t6/qef1bqLT13PKpJOIc4HsrQhLO9gI/qi+nxevb2lg6jvbycQr7/yxZd3fei48kN2D9684Gtok2MbVPpnAc+bm/01GInqQl3GEuiUeoa6DQ+ER6TvouW72Oz0ZjIbVnt5xOKRSHAgMBAAGjQjBAMB0GA1UdDgQWBBToIPCivvW3jQUZ6BLZz9thXQhrWzAfBgNVHSMEGDAWgBQWVhLKMlPtO2JUz6YoCAcUs7laszAKBggqhkjOPQQDAgNJADBGAiEA+R90mDISsUGqvfxp7iO0bRK2p34BQzwsvkrthr4HiFkCIQCbE+QR0cZBj0QL7hd/kKN5okAfYOG9TKTk7V7l0m5ABQ==",
+  "rsaOwnPin": "Lx9Cy2qJEx3Zav5mZ1rtvFxBDnkX4VDB0ngY7NM4lVY="
+}

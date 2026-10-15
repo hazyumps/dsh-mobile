@@ -317,6 +317,42 @@ public struct RelayPinningPolicy: Sendable, Hashable {
     var isPinned: Bool { expectedSPKIPin != nil }
 }
 
+#if canImport(Security)
+/// What the challenge handler does with a server's trust (#68).
+enum RelayTrustDecision: Equatable, Sendable {
+    /// The pin matched, and it stands in for the chain.
+    case acceptPinned
+    /// The system checks the chain and the hostname (SPEC §3.2).
+    case deferToPlatform
+    case reject(RelayTrustRejection)
+}
+
+/// Why a server's trust was refused.
+enum RelayTrustRejection: Equatable, Sendable {
+    /// The trust carried no certificate.
+    case noLeafCertificate
+    /// The leaf key is not P-256, so no pin can be computed. This fails closed (SPEC §6.3).
+    case unsupportedKey
+    case pinMismatch
+    /// There is no pin and no platform validation, so nothing vouches for the server.
+    case noTrustAnchor
+}
+
+extension RelayPinningPolicy {
+    /// Stub for the `Tests:` commit of #68. The real decision lands with the build.
+    func decide(serverTrust: SecTrust) -> RelayTrustDecision {
+        .reject(.noTrustAnchor)
+    }
+}
+
+extension RelayTrustDecision {
+    /// Stub for the `Tests:` commit of #68. The real mapping lands with the build.
+    var disposition: URLSession.AuthChallengeDisposition {
+        .cancelAuthenticationChallenge
+    }
+}
+#endif
+
 /// The real transport (deliverable 1): `URLSession` for HTTP,
 /// `URLSessionWebSocketTask` for the mux socket.
 ///
