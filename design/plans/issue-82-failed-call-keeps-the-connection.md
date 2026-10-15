@@ -1,6 +1,6 @@
 # Issue #82: a failed request must not tear down the connection
 
-**Status:** draft
+**Status:** verified
 **Branch:** `issue-82-failed-call-keeps-the-connection`
 **Version impact:** PATCH — a behaviour fix. No API change, no persisted format, no generated model.
 No bump in this PR; a line under `## [Unreleased]`.
@@ -81,11 +81,49 @@ the `$events` router, and `streamEnded` repaints the connection status.
 
 ## Red evidence
 
-*Filled in with the `Tests:` commit.*
+`Tools/check.sh --red` on `a3245aa` (the `Tests:` commit) with the fix stashed, so the tree is exactly
+the tests:
+
+```
+red: ok it compiles and fails on assertions (kit: fail, app: pass; logs in .build/check).
+check: ok — red for the right reason (35s)
+```
+
+Kit: 505 tests in 36 suites, **2 issues**, both assertion failures — no compile error.
+
+| Test | Message |
+|---|---|
+| `a call that times out leaves the connection alone` | `coordinator.status == .connected` → not met (`:329`) |
+| `a transport failure during session/list reaches the caller and leaves the connection alone` | `coordinator.status == before` → not met (`:676`) |
+
+**A third pre-existing test encoded the defect as the contract** and is rewritten in that commit,
+visibly. `StateTests.sessionListTransportFailureIsReported` required
+`coordinator.status == .offline` with the comment *"SPEC §6.9 'Offline': the status says so"*. Its
+real claim — a transport failure must not become a silent empty list — is kept as the typed throw it
+already asserted; what changes is that a call the connection did not break no longer repaints the
+connection. The replacement asserts the status is **unchanged**, which is strictly stronger than what
+it replaced. It was found by the full check, not by the focused suite: the focused suite was green
+while this one was red.
+
+One assertion was written and then **removed for being vacuous**: `eventually { openedSocketRequests
+.count == 1 }` returns true on its first check and therefore passes with the bug present. The status
+implies the socket count instead, because the teardown is *caused* by a non-usable status.
 
 ## Verification
 
-*Filled in by the verifier.*
+The fix was undone on the finished tree — `git revert --no-commit 20cbeed`, implementation gone and
+tests kept — and `Tools/check.sh --red` re-run:
+
+| AC | Undone how | Test failure with it undone |
+|---|---|---|
+| AC1 | `git revert --no-commit 20cbeed` | `ForegroundConnectionTests.swift:329` — `coordinator.status == .connected` not met; and `StateTests.swift:676` — `coordinator.status == before` not met |
+| AC2 | same | `revokedCredentialParksAndRevives` still passes — `.pairingRequired` is still applied |
+| AC3 | same | `logicalEndRecovers` still passes — `$events` ending still rebuilds |
+
+- `Tools/check.sh`: **green** (full, 49 s) — 505 tests in 36 suites; coverage 86.74% against the
+  86.83% baseline, within the tool's 0.30 run-to-run tolerance and therefore not lowered or raised;
+  Debug **and** Release build; app tests pass; `guard-tests` clean.
+- Risk checklist: **C3** answered in the PR; S1 and C5 reasoned as not ticked there.
 
 ## Reproduction status
 
