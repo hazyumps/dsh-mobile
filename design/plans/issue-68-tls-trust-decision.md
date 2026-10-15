@@ -1,6 +1,6 @@
 # Issue #68: Test the TLS/SPKI pinning decision without a live relay
 
-**Status:** approved (Dan, 2026-10-15). AC8 was added after verification, with scope approved by Dan on 2026-10-15.
+**Status:** verified. Plan approved by Dan, 2026-10-15; AC8 was added after the first verification, with scope approved by Dan the same day; dsh-smoke run 2026-10-15.
 **Branch:** `issue-68-tls-trust-decision`
 **Version impact:** PATCH. No API change, no persisted format, no generated model. The one change in
 behaviour (AC4) is a policy that no caller builds, now refused instead of trusted. That is
@@ -409,11 +409,18 @@ Other checks:
   - [x] A missing pin falls back to platform trust, never to "accept anything":
     `AC3: no pin with platform trust required defers to the system's check` and
     `AC4: no pin and no platform trust is rejected`.
-  - [ ] `dsh-smoke` against a live relay has **not been run**. Running it means minting a device
-    token through `/relay/pair` on Dan's relay (`Smoke/README.md`), which changes host state. The
-    verifier did not do that without approval, and it is still owed before merge. AC8 now guards
-    the delegate adapter offline. Only `dsh-smoke` shows that a real handshake delivers the
-    server-trust challenge to it (plan, Out of scope).
+  - [x] `dsh-smoke` against a live relay, 2026-10-15, built at `ff93079`, run against Dan's local
+    relay at `https://127.0.0.1:3443` (harness 0.2.0-rc.2 plus the relay fork). Dan approved running
+    it. The steps followed `Smoke/README.md`: mint a throwaway device `smoke-test-68`, run with the
+    claim's pin, run with a wrong pin, then revoke.
+    - The claim's pin equals the pin re-derived from `~/.dsh/relay/relay-cert.pem`.
+    - Right pin: `connect: OK`, `status: connected`, `sessions: 2 total`, `SMOKE OK`, exit 0. A real
+      handshake delivers the server-trust challenge to the adapter, on both the request session and
+      the socket session, and a matching pin is trusted.
+    - Wrong pin (`AAAA…=`): `connect: FAILED`, `status: hostUnavailable`, `error: socket was not
+      established within 10.0s`, exit 1 after 10 s. The connection is refused and never trusted. It
+      surfaces as an establishment timeout, not as a pin mismatch; #89 tracks that.
+    - The device was revoked: HTTP 303, and `revokedAt` is set in the relay's `state.json`.
 
 ## Notes for the next person
 
@@ -422,3 +429,8 @@ against the relay's real pin without committing the relay's certificate, its SAN
 key. To regenerate them, follow the commands in the fixture's `source` field with OpenSSL 3 or
 later; new keys mean new values for every pin except `expectedPin`. The fixture is base64 DER, not
 PEM, because the redaction test in `FixtureProvenanceTests` refuses `-----BEGIN`.
+
+Dan's relay has rotated its key since `Fixtures/relay-spki-pin.json` was captured on 2026-10-07: on
+2026-10-15 the live pin no longer matched `7pcX…`. That does not invalidate the fixtures. They are a
+known vector, a public key and the pin the relay published for it, not a statement about the
+current relay.
