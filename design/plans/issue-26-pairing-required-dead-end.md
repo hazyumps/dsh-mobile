@@ -1,6 +1,6 @@
 # Issue #26: a parked connection is not a dead end
 
-**Status:** draft
+**Status:** verified
 **Branch:** `issue-26-pairing-required-dead-end`
 **Version impact:** PATCH — a fix to existing behaviour. No API change, no persisted format, no
 generated model. No bump in this PR; a line under `## [Unreleased]`.
@@ -103,14 +103,45 @@ No new stub is needed and no `Sources/` addition is required to make the tests c
 
 ## Red evidence
 
-*Filled in with the `Tests:` commit.*
+`Tools/check.sh --red` on `2b61e2c` (the `Tests:` commit), before any implementation:
 
 ```
+red: ok it compiles and fails on assertions (kit: fail, app: pass; logs in .build/check).
+check: ok — red for the right reason (48s)
 ```
+
+Kit: 504 tests in 36 suites, 6 issues, every one an assertion failure — no compile error.
+
+| Test | Message |
+|---|---|
+| `a wake earns one fresh attempt after a parked credential rejection` | `recovery.status == .connected` → not evaluated; `recovery.error == nil` → `credentialRejected(relayError: nil, status: 403)`; `transport.openedSocketRequests.count == 2` → not evaluated |
+| `a changed certificate parks, and a wake earns exactly one fresh attempt` | `eventually { transport.openedSocketRequests.count == 2 }` → not evaluated |
+| `a credential rejected mid-connection parks, and a wake earns exactly one fresh attempt` | `eventually { transport.openedSocketRequests.count == 2 }` → not evaluated |
+
+The count staying at **1** *is* the defect. `parkedFailureDoesNotLoop` and `unpairedNeverDials`
+passed before the change and after it, as intended: they are guards, not red tests.
+
+The first run was a **false red**: the app-tests step could not reach SwiftPM's manifest cache
+(`cannot open file '…/Library/Caches/org.swift.swiftpm/manifests/…' for diagnostics emission`), which
+is a property of the agent's file sandbox rather than of the change. Re-running with a wider sandbox
+gave the honest result above.
 
 ## Verification
 
-*Filled in by the verifier.*
+The fix was undone on the finished tree — `git revert --no-commit cabf1ec`, so the implementation is
+gone and the tests remain — and the suite re-run:
+
+| AC | Undone how | Test failure with it undone |
+|---|---|---|
+| AC1, AC3 | `git revert --no-commit cabf1ec` | `eventually { transport.openedSocketRequests.count == 2 }` not evaluated; the count stays 1; `recovery.error` still `credentialRejected(relayError: nil, status: 403)` |
+| AC3 (pin) | same | `eventually { transport.openedSocketRequests.count == 2 }` not evaluated |
+| AC2, AC4, AC5 | same | guards still pass — no sleep, no loop, and no dial without a credential |
+
+- `Tools/check.sh`: **green** (full, 61 s) — 504 tests in 36 suites; coverage 86.83%, and the baseline
+  raised from 86.70 to 86.83 in the same PR as the coverage rule requires; Debug **and** Release
+  build; app tests pass; `guard-tests` clean.
+- Risk checklist: **C3** and **C5** answered in the PR; no S-flag ticked, with the S1 and S2
+  reasoning given there.
 
 ## Notes for the next person
 
