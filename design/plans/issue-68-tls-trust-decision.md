@@ -1,6 +1,6 @@
 # Issue #68: Test the TLS/SPKI pinning decision without a live relay
 
-**Status:** approved (Dan, 2026-10-15)
+**Status:** approved (Dan, 2026-10-15). AC8 was added after verification, with scope approved by Dan on 2026-10-15.
 **Branch:** `issue-68-tls-trust-decision`
 **Version impact:** PATCH. No API change, no persisted format, no generated model. The one change in
 behaviour (AC4) is a policy that no caller builds, now refused instead of trusted. That is
@@ -50,6 +50,15 @@ returns for a `SecTrust` built offline, and what the delegate passes to `URLSess
   `.cancelAuthenticationChallenge`.
 - **AC7** — `Network/RelayTransport.swift` is in `Tools/must-test.txt` with a floor. Enforced by
   `Tools/check.sh`, not by a test of its own.
+- **AC8** (added after verification) — the challenge handler URLSession calls answers from the
+  decision, for both of the transport's sessions (requests, and the mux socket's upgrade):
+  - pinned, matching stand-in certificate → `.useCredential` with a credential
+  - pinned, wrong pin → `.cancelAuthenticationChallenge`, no credential
+  - `.platformTrust` → `.performDefaultHandling`, no credential
+  - `(nil, false)` → `.cancelAuthenticationChallenge`, no credential
+  - an HTTP Basic challenge under a pinned policy → `.performDefaultHandling`, no credential
+  - a server-trust challenge with a nil `serverTrust` → `.performDefaultHandling`. This is today's
+    behaviour, kept and documented. The security reviewer noted that cancelling would be stricter.
 
 ## Design (one slice)
 
@@ -146,8 +155,58 @@ at the decision, so a platform change would fail there and not show up as a conf
 | A | AC1–AC6 | `Sources/DSHRemoteKit/Network/RelayTransport.swift` | the decision, the disposition mapping, the delegate as an adapter |
 | A | AC7 | `Tools/must-test.txt`, `Tools/coverage-baseline.txt`, `CHANGELOG.md` | the floor is set a few points under the measured value, and the "joins once #68" note is removed. The baseline goes up if the kit total rises. Security line: "A relay connection with neither a pin nor platform validation is refused instead of trusted (#68)." |
 
+| B | AC8 | `Sources/DSHRemoteKit/Network/RelayTransport.swift` | `challengeDelegates` returns `(session.delegate, socketSession.delegate)`. No change to `TransportDelegate`. |
+
 The planner (tests phase) owns the fixture, `Fixtures.swift`, `FixtureProvenanceTests.swift` and
-the new test file.
+the new test files.
+
+## AC8: the handler URLSession calls (added after verification)
+
+**Why.** The verifier found that if `TransportDelegate.urlSession(_:didReceive:)` ignored `decide`
+and always answered `.useCredential` with `URLCredential(trust:)`, all 517 kit tests would pass.
+AC1–AC6 prove the decision. Nothing proved the handler uses it.
+
+**The seam: the delegates URLSession holds, not a copy of their logic.** The test stub is
+`URLSessionRelayTransport.challengeDelegates`, an internal, read-only property:
+`(request: (any URLSessionDelegate)?, socket: (any URLSessionDelegate)?)`. It returns `(nil, nil)`.
+The builder makes it return `session.delegate` and `socketSession.delegate`, the objects URLSession
+itself calls. The tests send a fake challenge to each delegate's
+`urlSession(_:didReceive:completionHandler:)` and record what reaches the completion handler.
+
+The coordinator suggested a different seam: a static `respond(to:pinning:)` that the delegate
+calls in one line. It was rejected because it moves the gap rather than closing it. A `didReceive`
+that skipped `respond` and answered `.useCredential` would still pass every test. Going through
+`session.delegate` turns that exact mutation red. It also covers the socket session, which has its
+own `URLSession` and so its own delegate slot. The cost is the same either way: the handler is
+already correct, so the red comes from the stub, not from a defect.
+
+**The fake challenge, with no network.** The challenge's protection space is a test-only
+`URLProtectionSpace` subclass whose `serverTrust` returns a `SecTrust` over the fixture
+certificates; the stub `URLAuthenticationChallengeSender` is never called. Observed on macOS
+(2026-10-15, a scratch program, before writing the tests):
+- the subclass survives into `URLAuthenticationChallenge.protectionSpace`
+- the override is what `serverTrust` returns
+- a delegate reached through `URLSession.delegate` receives the challenge
+
+The first test also asserts that the fake carries its trust, so a platform change there would show.
+
+**Tests: `Tests/DSHRemoteKitTests/TLSChallengeHandlerTests.swift`.** Each test runs twice, once per
+session (`arguments: ChallengeSession.allCases`, which are `request` and `socket`).
+
+| Test name | Expect | Fails today because |
+|---|---|---|
+| `"AC8: a pinned transport answers the matching certificate with useCredential and a credential"` | `useCredential`, credential present | stub exposes no delegate: answer → `nil` |
+| `"AC8: a pinned transport cancels a certificate under a different pin"` | `cancelAuthenticationChallenge`, nil | answer → `nil` |
+| `"AC8: a platform-trust transport leaves the server-trust challenge to the system"` | `performDefaultHandling`, nil | answer → `nil` |
+| `"AC8: a transport with no pin and no platform trust cancels the challenge"` | `cancelAuthenticationChallenge`, nil | answer → `nil` |
+| `"AC8: a pinned transport leaves an HTTP Basic challenge to the system"` | `performDefaultHandling`, nil | answer → `nil` |
+| `"AC8: a server-trust challenge without a trust is left to the system (today's behaviour)"` | `performDefaultHandling`, nil | answer → `nil` |
+
+**No AC8 case passes by construction.** The stub provides no handler at all, so the
+`performDefaultHandling` cases fail too.
+
+`TrustMaterial` and `serverTrust(_:)` in `TLSTrustDecisionTests.swift` change from `private` to
+internal, so the new file reuses them. That is the only change to an earlier planner line.
 
 ## Risk flags
 
@@ -165,8 +224,11 @@ the new test file.
 
 - Whether a pin together with `requiresPlatformTrust` should require both. That is follow-up #86
   (labels `security`, `client`); AC5 records today's answer.
-- Exercising the delegate's `URLSession` plumbing itself, which needs a real handshake. `dsh-smoke`
-  remains that test.
+- A real handshake. AC8 tests the handler URLSession calls, using a fake challenge. That the
+  system actually delivers a server-trust challenge to it during TLS is still something only
+  `dsh-smoke` shows.
+- Cancelling a server-trust challenge that has no trust. AC8 records today's
+  `.performDefaultHandling`, and changing it would be a behaviour change of its own.
 - Any change to how a pin is obtained or stored (S3).
 
 ## Corrections to the approved plan
@@ -223,6 +285,34 @@ gave a 65-byte `04…` point for the stand-in, which wraps and hashes to `7pcXvn
 65-byte point hashing to `issuerOwnPin`. P-384 gave 97 bytes and RSA gave 270 bytes (PKCS#1), so
 `SPKIPin`'s wrapping refuses both. AC1 and AC2 can therefore be met through the real Security API,
 and that confirms the "unverified" note in `spkiPin(of:)`.
+
+### AC8 red evidence
+
+`Tools/check.sh --red` on the working tree of the AC8 `Tests:` commit, which is the finished slice A
+plus the AC8 tests and the `challengeDelegates` stub:
+
+```
+lint: ok
+kit tests: fail on assertions (full log: .build/check/test.log)
+app tests: ok
+red: ok it compiles and fails on assertions (kit: fail, app: pass; logs in .build/check).
+check: ok — red for the right reason (61s)
+```
+
+Kit: 523 tests in 38 suites, **12 issues**. All 12 are in `TLSChallengeHandlerTests.swift`: six
+tests, each failing for both `request` and `socket`. The earlier 12 trust-decision tests stay
+green. The fake-trust check at `:140` passes.
+
+| Test | Failure (`TLSChallengeHandlerTests.swift`), both sessions |
+|---|---|
+| AC8: …the matching certificate with useCredential and a credential | `:144` `answer == ChallengeAnswer(disposition: .useCredential, hasCredential: true)`; answer → `nil` |
+| AC8: …cancels a certificate under a different pin | `:158` `answer == …cancelAuthenticationChallenge…`; answer → `nil` |
+| AC8: a platform-trust transport leaves the server-trust challenge to the system | `:172` `answer == …performDefaultHandling…`; answer → `nil` |
+| AC8: …no pin and no platform trust cancels the challenge | `:188` `answer == …cancelAuthenticationChallenge…`; answer → `nil` |
+| AC8: a pinned transport leaves an HTTP Basic challenge to the system | `:206` `answer == …performDefaultHandling…`; answer → `nil` |
+| AC8: a server-trust challenge without a trust is left to the system (today's behaviour) | `:223` `answer == …performDefaultHandling…`; answer → `nil` |
+
+None pass by construction.
 
 ## Verification
 

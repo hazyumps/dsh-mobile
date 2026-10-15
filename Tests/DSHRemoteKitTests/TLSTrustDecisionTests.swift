@@ -16,7 +16,7 @@ import Testing
 // fixture's `source` field has the commands.
 
 /// The stand-in certificates and the pins openssl computed for them.
-private struct TrustMaterial {
+struct TrustMaterial {
     let leaf: SecCertificate
     let issuer: SecCertificate
     let p384Leaf: SecCertificate
@@ -57,7 +57,7 @@ private struct TrustMaterial {
 
 /// An unevaluated server trust for `certificates`, leaf first, under the SSL policy a
 /// challenge carries.
-private func serverTrust(_ certificates: [SecCertificate]) throws -> SecTrust {
+func serverTrust(_ certificates: [SecCertificate]) throws -> SecTrust {
     var trust: SecTrust?
     let status = SecTrustCreateWithCertificates(
         certificates as CFArray,

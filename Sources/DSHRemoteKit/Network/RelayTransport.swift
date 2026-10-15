@@ -461,6 +461,15 @@ public final class URLSessionRelayTransport: NSObject, RelayTransport, @unchecke
         socketSession.invalidateAndCancel()
     }
 
+    /// What URLSession asks about this transport's authentication challenges: the request
+    /// session's delegate and the socket session's (#68, AC8). It is internal so a test can put
+    /// a challenge to the object URLSession actually calls, rather than to a copy of its logic.
+    var challengeDelegates: (request: (any URLSessionDelegate)?, socket: (any URLSessionDelegate)?) {
+        // Stub for the `Tests:` commit of #68 (AC8). The build answers with the sessions' own
+        // delegates.
+        (nil, nil)
+    }
+
     /// The configuration a long-lived socket needs, given the one the caller uses for requests.
     ///
     /// Built field by field rather than by copying: `URLSessionConfiguration.copy()` returns an
