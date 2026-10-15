@@ -316,7 +316,12 @@ None pass by construction.
 
 ## Verification
 
-Verified 2026-10-15 at `501727a` by an agent that did not build the branch. Each undo is one edit to
+Verified twice on 2026-10-15 by an agent that did not build the branch. Round 1 covered AC1–AC7 at
+`501727a`. Round 2, below the first table, covered AC8 and the raised AC7 floor at `ff93079`.
+Neither `b0a1821` nor `8620638` touches `decide`, `disposition` or `RelayServerKey`, so the round 1
+undos still apply.
+
+**Round 1 (AC1–AC7, at `501727a`).** Each undo is one edit to
 `Sources/DSHRemoteKit/Network/RelayTransport.swift`, run with
 `swift test --disable-sandbox --filter TLSTrustDecisionTests`. It was then restored with
 `git checkout -- .`, and the full kit suite was confirmed green (517 tests) before the next undo.
@@ -336,14 +341,40 @@ Line numbers are in `TLSTrustDecisionTests.swift`.
 | AC7 | Floor line present: `Network/RelayTransport.swift 48` (`Tools/must-test.txt:10`). (1) `TLSTrustDecisionTests.swift` deleted, `Tools/check.sh --fast` | **guarded.** `coverage: FAIL Network/RelayTransport.swift is at 39.19%, below its must-test floor of 48%`. The ratchet also fires (`86.62% is below the baseline 87.08%`); `check: RED … - coverage` |
 | AC7 | (2) floor raised to 60 with every test present, `Tools/check.sh --fast`, to show the floor alone turns it red | **guarded.** `coverage: ok 87.08%`, then `coverage: FAIL Network/RelayTransport.swift is at 51.65%, below its must-test floor of 60%`; `check: RED (fast, 21s) - coverage` |
 
-Two undos are **not guarded by any test**. Both are known, and neither is a regression:
+In round 1, the delegate adapter was not guarded: with `TransportDelegate` ignoring the decision
+and answering `.useCredential` with `URLCredential(trust:)`, all 517 kit tests passed. AC8 was
+added for that gap, and round 2 shows it is now guarded.
 
-- **The delegate adapter.** If `TransportDelegate` ignored the decision and called
-  `completionHandler(.useCredential, URLCredential(trust: trust))`, all 517 kit tests would still
-  pass. The plan's Out of scope already says this needs a real handshake, so `dsh-smoke` is the
-  only guard. What the tests prove is that `decide` and `disposition` are right, not that the
-  delegate uses them. The adapter is three lines and easy to review by eye, but a reviewer has to
-  read it.
+**Round 2 (AC8 and the AC7 floor of 64, at `ff93079`).** Each undo is one edit to
+`RelayTransport.swift`, run with
+`swift test --disable-sandbox --filter "TLSChallengeHandlerTests|TLSTrustDecisionTests"`. It was
+restored with `git checkout -- .`, and the full kit suite was confirmed green (523 tests) before and
+after each undo. Line numbers are in `TLSChallengeHandlerTests.swift`. "Both sessions" means the
+`request` and `socket` cases of the test both fail.
+
+| AC | Undone how | Test failure with it undone |
+|---|---|---|
+| AC8 | (m1) `didReceive` ignores the decision and always calls `completionHandler(.useCredential, URLCredential(trust: trust))`, the round 1 mutation | **guarded, both sessions, 6 issues.** `…cancels a certificate under a different pin` `:158` and `…no pin and no platform trust cancels the challenge` `:188` give answer → `useCredential, credential: present`, expected `cancelAuthenticationChallenge`, nil. `…platform-trust transport leaves the server-trust challenge to the system` `:172` gives the same answer, expected `performDefaultHandling`, nil |
+| AC8 | (m5) a credential with every disposition: `let credential = URLCredential(trust: trust)` | **guarded, both sessions, 6 issues.** `:158` and `:188` give answer → `cancelAuthenticationChallenge, credential: present`. `:172` gives `performDefaultHandling, credential: present` |
+| AC8 | (m2) the socket session is built with `delegate: nil` | **guarded, socket only, 6 issues.** Every AC8 test (`:144`, `:158`, `:172`, `:188`, `:206`, `:223`) on `socket` gives answer → `nil` |
+| AC8 | (m9) the request session is built with `delegate: nil` | **guarded, request only, 6 issues.** Every AC8 test on `request` gives answer → `nil` |
+| AC8 | (m3) the seam returns the request session's delegate for the socket: `(session.delegate, session.delegate)` | **not detected, and harmless alone.** 18 tests pass. Both sessions hold the same `TransportDelegate`, so this is equivalent at runtime |
+| AC8 | (m4) m2 and m3 together: the socket session has no delegate, and the seam hides it | **NOT guarded.** 18 tests pass. See below |
+| AC8 | (m6) HTTP Basic's own condition removed: the guard becomes `guard let trust = …serverTrust` | **guarded, both sessions.** `AC8: a pinned transport leaves an HTTP Basic challenge to the system` `:206` gives answer → `useCredential, credential: present` |
+| AC8 | (m8) HTTP Basic split into its own guard, which cancels; nil trust is unchanged | **guarded, both sessions.** `:206` gives answer → `cancelAuthenticationChallenge, credential: nil`. Only this test fails |
+| AC8 | (m7) nil trust split into its own guard, which cancels; HTTP Basic is unchanged | **guarded, both sessions.** `AC8: a server-trust challenge without a trust is left to the system (today's behaviour)` `:223` gives answer → `cancelAuthenticationChallenge, credential: nil`. Only this test fails |
+| AC7 | The floor line is `Network/RelayTransport.swift 64` (`Tools/must-test.txt:10`). (1) Delete `TLSChallengeHandlerTests.swift`, then run `Tools/check.sh --fast` | **guarded.** `coverage: FAIL Network/RelayTransport.swift is at 50.72%, below its must-test floor of 64%`. The ratchet also fires (`87.02% is below the baseline 87.67%`). `check: RED (fast) - coverage` |
+| AC7 | (2) With every test present, raise the floor to 70 and run `Tools/check.sh --fast` | **guarded.** `coverage: ok 87.67% (baseline 87.67%)`, then `coverage: FAIL Network/RelayTransport.swift is at 67.99%, below its must-test floor of 70%`. `check: RED (fast) - coverage` |
+
+Two undos are still **not guarded by any test**. Both are known, and neither is a regression:
+
+- **The `challengeDelegates` seam can hide a socket session that has no delegate (m4).** The AC8
+  tests reach the delegates through `challengeDelegates`, which is production code. If a later
+  change both built the socket session without the delegate and pointed the seam at
+  `session.delegate`, every test would pass. That takes two coordinated edits, and the seam's
+  comment says why it reads back from each session. A reviewer must check that
+  `challengeDelegates` stays `(session.delegate, socketSession.delegate)`. If only one of the two
+  edits is made, a test fails (m2), or nothing changes in behaviour (m3).
 - **The `.noLeafCertificate` branch of `decide`.** Changing `return .reject(.noLeafCertificate)` to
   `return .acceptPinned` leaves all 12 trust tests green. The builder said the branch can't be
   reached offline, because a `SecTrust` can't have an empty chain. **I agree.** I checked with a
@@ -361,11 +392,16 @@ Other checks:
   SHA-256 over the leaf's DER). All five match `expectedPin`, `issuerOwnPin`, `p384OwnPin`,
   `rsaOwnPin` and `leafWholeCertificatePin`.
 - Version impact: PATCH agrees with RELEASING.md ("a hardening fix"). There is no bump, and the
-  Security line is under `## [Unreleased]` in `CHANGELOG.md`. The coverage baseline (87.08) and the
-  measured value agree, so nothing needs raising.
-- `Tools/check.sh` (full) on `501727a` was green in 401s. Lint, models, version and guard-tests
-  were ok. Kit: 517 tests in 37 suites, coverage 87.08% against a baseline of 87.08%. App builds:
-  Debug ok, Release ok. App tests: 4 tests in 2 suites.
+  Security line is under `## [Unreleased]` in `CHANGELOG.md`. AC8 adds tests and an internal
+  property only, so the impact is unchanged. The coverage baseline (87.67) and the measured value
+  agree, so nothing needs raising.
+- `Tools/check.sh` (full):
+  - Round 1, on `501727a`: green in 401s. Kit: 517 tests in 37 suites, coverage 87.08% against a
+    baseline of 87.08%.
+  - Round 2, on `ff93079`: green in 152s. Kit: 523 tests in 38 suites, coverage 87.67% against a
+    baseline of 87.67%.
+  - Both rounds: lint, models, version and guard-tests ok; app builds ok in Debug and Release; app
+    tests passed (4 tests in 2 suites).
 - S2 checklist:
   - [x] A wrong pin is rejected: `AC1: the same certificate is rejected under a different pin`,
     `AC1: a pin over the whole certificate is not accepted` and
@@ -375,8 +411,9 @@ Other checks:
     `AC4: no pin and no platform trust is rejected`.
   - [ ] `dsh-smoke` against a live relay has **not been run**. Running it means minting a device
     token through `/relay/pair` on Dan's relay (`Smoke/README.md`), which changes host state. The
-    verifier did not do that without approval, and it is still owed before merge. Until it runs,
-    nothing has exercised the delegate adapter, the one unguarded path above.
+    verifier did not do that without approval, and it is still owed before merge. AC8 now guards
+    the delegate adapter offline. Only `dsh-smoke` shows that a real handshake delivers the
+    server-trust challenge to it (plan, Out of scope).
 
 ## Notes for the next person
 
