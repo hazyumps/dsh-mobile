@@ -229,15 +229,17 @@ struct ConversationView: View {
         }
         .fileImporter(
             isPresented: $isImportingFile,
+            // `.item` stays, by decision (#66): the host takes arbitrary files, so the bound is
+            // size (SPEC §3.6, 20 MiB, enforced in staging and again before upload), not type.
             allowedContentTypes: [.item],
             allowsMultipleSelection: false
         ) { result in
-            // The only place a security-scoped URL is touched, and only long enough to hand it
-            // to the upload: SPEC §9 keeps the scope no longer than the copy.
+            // No security scope here. `importFile` copies the file through `AttachmentStaging`,
+            // which holds the scope only for the copy (SPEC §3.6). Starting it in this closure
+            // with a `defer`ed stop ended it before the upload's `Task` read the file (#66);
+            // `Tools/lint.sh` (security-scope) keeps the call out of the app.
             guard case .success(let urls) = result, let url = urls.first else { return }
-            let scoped = url.startAccessingSecurityScopedResource()
-            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-            Task { await model.attachFile(at: url, name: url.lastPathComponent, to: sessionId) }
+            Task { await model.importFile(at: url, to: sessionId) }
         }
         .onChange(of: draft) { _, text in
             // The visible countdown stops while the answer is being written, which is the
@@ -760,15 +762,16 @@ struct ConversationView: View {
         _ = await model.stageImage(data: data, name: URL(fileURLWithPath: path).lastPathComponent, for: sessionId)
     }
 
-    /// Debug builds only: upload a file a launch named, so the receipt path can be exercised
-    /// on a machine that cannot drive a file importer.
+    /// Debug builds only: import a file a launch named, so the staging and receipt path can be
+    /// exercised on a machine that cannot drive a file importer. It goes through `importFile`,
+    /// like a pick, so it is staged, held to the 20 MiB limit, and discarded after upload (#66).
     private func seedAttachmentIfAsked() {
         guard stagedAttachments.isEmpty,
               let path = ProcessInfo.processInfo.environment["DSH_ATTACH"],
               !path.isEmpty
         else { return }
         let url = URL(fileURLWithPath: path)
-        Task { await model.attachFile(at: url, name: url.lastPathComponent, to: sessionId) }
+        Task { await model.importFile(at: url, to: sessionId) }
     }
     #endif
 

@@ -120,6 +120,8 @@ final class AppModel {
     /// saves the list or touches a token itself: the two change together or drift apart.
     private let registry: HostRegistry
     private let drafts: DraftStore
+    /// Where an imported file is copied while its security scope is held (#66).
+    private let staging: AttachmentStaging
     /// The origin the current host was connected with, kept so an interaction result can
     /// be posted on the same trust policy and credential as everything else.
     private var origin: ConnectionCoordinator.Origin?
@@ -277,14 +279,18 @@ final class AppModel {
         #endif
     }
 
-    /// - Parameter stagingDirectory: where imported files are copied before upload (#66). Stub:
-    ///   ignored until slice C sweeps it here.
+    /// - Parameter stagingDirectory: where imported files are copied before upload (#66).
+    ///   Swept here, so copies a killed launch left behind do not accumulate.
     init(draftsDirectory: URL? = nil, stagingDirectory: URL? = nil) {
         drafts = DraftStore(directory: draftsDirectory ?? Self.defaultDraftsDirectory)
         // The registry drops a selection naming a host that is no longer saved. Its list is
         // read synchronously, so a launch with hosts does not flash the pairing introduction.
         registry = HostRegistry(drafts: drafts)
         hosts = registry.initialHosts
+        staging = AttachmentStaging(directory: stagingDirectory ?? Self.defaultStagingDirectory)
+        // Synchronous on purpose: a sweep in a detached task could race a launch-time
+        // `DSH_ATTACH` import and delete the copy it is about to upload (#66).
+        staging.sweep()
         if !hosts.isEmpty { idleStatus = .offline }
     }
 
@@ -292,6 +298,12 @@ final class AppModel {
         FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appending(path: "DSHRemote/Drafts", directoryHint: .isDirectory)
+    }
+
+    /// Not backed up and app-private; a copy only has to last one upload (#66).
+    private static var defaultStagingDirectory: URL {
+        FileManager.default.temporaryDirectory
+            .appending(path: "AttachmentStaging", directoryHint: .isDirectory)
     }
 
     // MARK: - Host selection
@@ -929,13 +941,15 @@ final class AppModel {
         }
     }
 
-    // MARK: - Attachments (SPEC §9)
+    // MARK: - Attachments (SPEC §3.6)
 
-    /// Uploads one prepared file into a session and stages its receipt.
+    /// Uploads one file into a session and stages its receipt.
     ///
-    /// Nothing is retried and nothing is discarded on failure: SPEC §9 keeps the prepared bytes
-    /// so the user does not have to pick the file again, and an uncertain upload is reconciled
-    /// rather than replayed.
+    /// Nothing is retried: an uncertain upload is reported, not replayed (AGENTS.md). Nothing is
+    /// kept for a second try either. An imported file reaches here as a staged copy that
+    /// ``importFile(at:to:)`` discards once this returns, success or failure, so after a failure
+    /// the user picks the file again. SPEC §3.6 asks for attachments to be kept on a refusal;
+    /// persisting copies for that is not done yet (#66 "Out of scope", with #49).
     @discardableResult
     func attachFile(at fileURL: URL, name: String? = nil, to sessionId: String) async -> UploadedAttachment? {
         guard let attachmentUploader else {
@@ -946,13 +960,14 @@ final class AppModel {
         attachmentError = nil
         defer { isUploading = false }
 
-        let size = (try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
         do {
+            // `byteCount` is ignored: the uploader measures the file on disk itself, so no size
+            // is guessed here (#66).
             let uploaded = try await attachmentUploader.upload(
                 sessionId: sessionId,
                 name: name ?? fileURL.lastPathComponent,
                 fileURL: fileURL,
-                byteCount: size
+                byteCount: 0
             )
             stagedAttachments[sessionId, default: []].append(uploaded)
             return uploaded
@@ -976,18 +991,48 @@ final class AppModel {
             "The harness refused that file (\(code)): \(message)"
         case .transport(let reason):
             "That upload may not have arrived: \(reason)"
-        // #66 placeholders so this switch stays exhaustive; slice C writes the real messages.
-        case .tooLarge:
-            "That file could not be attached."
-        case .unreadable:
-            "That file could not be attached."
+        case .tooLarge(_, let limit):
+            // SPEC §3.6: the cap is this app's, not the harness's, so the message says whose it is.
+            "That file was not sent: this app sends files of up to \(Self.mebibytes(limit)) each. The limit is this app's, not the harness's."
+        case .unreadable(let reason):
+            "That file could not be read, so nothing was sent: \(reason)."
         }
     }
 
-    /// Stages an imported file, uploads the copy, and discards it once the upload settles (#66).
+    /// A byte limit in the unit SPEC §3.6 states it in: "20 MiB".
+    private static func mebibytes(_ bytes: Int) -> String {
+        let mebibyte = 1024 * 1024
+        if bytes % mebibyte == 0 { return "\(bytes / mebibyte) MiB" }
+        return "\(bytes) bytes"
+    }
+
+    /// Copies an imported file into staging, uploads the copy, and discards it once the upload
+    /// settles, whether it succeeded or failed (#66, SPEC §3.6).
     ///
-    /// Stub for the planner's red tests: does nothing yet. Slice C implements it.
-    func importFile(at fileURL: URL, to sessionId: String) async {}
+    /// Staging comes first, before ``attachFile(at:name:to:)`` checks for a connection: an
+    /// over-limit or unreadable pick is refused for what it is, and never copied. The copy runs
+    /// off the main actor, because a 20 MiB copy would otherwise stall the UI. The security scope
+    /// is started and stopped inside `AttachmentStaging.stage`, which is synchronous, so no
+    /// suspension point can end it before the file is read.
+    func importFile(at fileURL: URL, to sessionId: String) async {
+        attachmentError = nil
+        isUploading = true
+        let staging = staging
+        let staged = await Task.detached(priority: .userInitiated) {
+            Result { try staging.stage(fileURL) }
+        }.value
+        isUploading = false
+
+        switch staged {
+        case .failure(let failure as AttachmentUploadFailure):
+            attachmentError = Self.describe(failure)
+        case .failure(let error):
+            attachmentError = Self.reason(for: error)
+        case .success(let copy):
+            await attachFile(at: copy.url, name: copy.name, to: sessionId)
+            await Task.detached(priority: .utility) { staging.discard(copy) }.value
+        }
+    }
 
     func clearAttachments(for sessionId: String) {
         stagedAttachments[sessionId] = nil

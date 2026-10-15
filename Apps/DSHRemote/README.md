@@ -267,7 +267,7 @@ shipping app's normal flow is what runs by default.
 | `DSH_FOCUS` | Focuses the composer on Home, so the keyboard's interaction with the rest of the screen can be reviewed without a tap. |
 | `DSH_DRAWER` | Opens the drawer on Home, for the same reason. Pair it with `DSH_FOCUS` to reproduce the composer-focused-then-drawer-opened case. |
 | `DSH_DRAFT` | Prefills the conversation composer, so the `/` command suggestions can be seen on a machine that cannot type. |
-| `DSH_ATTACH` | Uploads this local path into the open conversation and stages its receipt, so the upload path can be exercised without a file importer. |
+| `DSH_ATTACH` | Imports this local path into the open conversation the way a Files pick does: it is copied into staging, held to the app's 20 MiB limit, uploaded, and the copy discarded; the receipt is staged. Exercises the import and upload path without a file importer (#66). |
 | `DSH_IMAGE` | Stages this local image into the open conversation, so the inline-image path can be exercised without a photo picker. |
 | `DSH_ANSWER` | Answers the first live request with this value — a question's option label, or `allow`/`deny` for an approval — so the `$events/result` path can be exercised without a tap. |
 | `DSH_SEND_MESSAGE` | Sends one message once a conversation is open. **Point it at a scratch session**: a duplicate or stray prompt costs real work, and this client never resends on its own. |
