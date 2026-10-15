@@ -29,6 +29,18 @@ struct ForegroundConnectionTests {
         return await condition()
     }
 
+    /// The transport error a refused WebSocket upgrade produces, as the message
+    /// shape a real relay answer takes (SPEC §6.9). Status 403 is what the relay
+    /// answers for *both* a bad credential and a Host-fence refusal, which is why
+    /// #26 is reachable at all — see issue #79.
+    private func upgradeRefused(_ status: Int) throws -> RelayTransportError {
+        let response = try #require(HTTPURLResponse(
+            url: URL(string: "https://relay.test/api/remote.mux")!,
+            statusCode: status, httpVersion: "HTTP/1.1", headerFields: [:]
+        ))
+        return RelayTransportError.webSocketFailure(URLError(.badServerResponse), response: response)
+    }
+
     @Test("returning opens a new ready connection using the saved credential, without pairing or writes")
     func returnToApp() async throws {
         let first = StubRelaySocket(), second = StubRelaySocket()
@@ -179,38 +191,112 @@ struct ForegroundConnectionTests {
         #expect(recovery.status == .offline)
     }
 
-    @Test("a changed certificate stops retries, including after app switching")
-    func changedIdentityStops() async throws {
-        let socket = StubRelaySocket()
-        await socket.fail(with: .tlsPinMismatch("changed key"))
-        let transport = StubRelayTransport(sockets: [socket])
+    @Test("a changed certificate parks, and a wake earns exactly one fresh attempt")
+    func changedIdentityParksAndRevives() async throws {
+        // Rewritten from `changedIdentityStops`, which asserted `count == 1` after a wake and so
+        // encoded the dead end as the contract. The part that is still true is kept below: there is
+        // no *automatic* retry, and one wake buys one attempt, not a loop.
+        let first = StubRelaySocket(), second = StubRelaySocket()
+        await first.fail(with: .tlsPinMismatch("changed key"))
+        await second.fail(with: .tlsPinMismatch("changed key"))
+        let transport = StubRelayTransport(sockets: [first, second])
         let recovery = ForegroundConnection(coordinator: coordinator(transport))
         recovery.setForeground(true)
         #expect(await eventually { recovery.error == .certificateChanged(detail: "changed key") })
+        #expect(recovery.status == .hostUnavailable)
+        #expect(await transport.openedSocketRequests.count == 1)
+
         await recovery.stop()
         recovery.setForeground(true)
+        #expect(await eventually { await transport.openedSocketRequests.count == 2 })
         #expect(await eventually { recovery.status == .hostUnavailable })
-        #expect(await transport.openedSocketRequests.count == 1)
+        #expect(await transport.openedSocketRequests.count == 2)
         await recovery.stop()
     }
 
-    @Test("credential rejection stops automatic retries")
-    func revokedCredentialStops() async throws {
-        let socket = StubRelaySocket()
-        try await ready(socket, generation: 1)
+    @Test("a credential rejected mid-connection parks, and a wake earns exactly one fresh attempt")
+    func revokedCredentialParksAndRevives() async throws {
+        // Rewritten from `revokedCredentialStops` for the same reason as the certificate case: it
+        // asserted `count == 1` after a wake. The backoff claim it was really making — a 403 never
+        // sleeps — is kept and asserted directly.
+        let live = StubRelaySocket(), refused = StubRelaySocket()
+        try await ready(live, generation: 1)
+        await refused.fail(with: try upgradeRefused(403))
         let transport = StubRelayTransport(
-            responses: [.json(status: 403, Data("{}".utf8))], sockets: [socket]
+            responses: [.json(status: 403, Data("{}".utf8))], sockets: [live, refused]
         )
         let coordinator = coordinator(transport)
-        let recovery = ForegroundConnection(coordinator: coordinator)
+        let sleeper = RecordingRelaySleeper()
+        let recovery = ForegroundConnection(coordinator: coordinator, sleeper: sleeper)
         recovery.setForeground(true)
         #expect(await eventually { recovery.status == .connected })
         _ = try? await coordinator.sessions()
         #expect(await eventually { recovery.status == .pairingRequired })
+        #expect(await transport.openedSocketRequests.count == 1)
+        #expect(await sleeper.sleptSeconds.isEmpty)
+
         await recovery.stop()
+        recovery.setForeground(true)
+        #expect(await eventually { await transport.openedSocketRequests.count == 2 })
+        #expect(await eventually { recovery.status == .pairingRequired })
+        #expect(await sleeper.sleptSeconds.isEmpty)
+        await recovery.stop()
+    }
+
+    @Test("a wake earns one fresh attempt after a parked credential rejection")
+    func wakeRevivesParkedCredential() async throws {
+        // The defect: `setForeground` returned early whenever the last failure was non-retryable,
+        // and the stored error is only cleared by a success — so one refused upgrade meant the app
+        // never dialled again, and only a relaunch cured it.
+        let refused = StubRelaySocket()
+        await refused.fail(with: try upgradeRefused(403))
+        let recovered = StubRelaySocket()
+        try await ready(recovered, generation: 2)
+        let transport = StubRelayTransport(sockets: [refused, recovered])
+        let recovery = ForegroundConnection(coordinator: coordinator(transport))
         recovery.setForeground(true)
         #expect(await eventually { recovery.status == .pairingRequired })
         #expect(await transport.openedSocketRequests.count == 1)
+
+        recovery.setForeground(false)
+        recovery.setForeground(true)
+        #expect(await eventually { recovery.status == .connected })
+        #expect(recovery.error == nil)
+        #expect(await transport.openedSocketRequests.count == 2)
+        await recovery.stop()
+    }
+
+    @Test("a parked failure never sleeps and never loops")
+    func parkedFailureDoesNotLoop() async throws {
+        let socket = StubRelaySocket()
+        await socket.fail(with: try upgradeRefused(403))
+        let transport = StubRelayTransport(sockets: [socket])
+        let sleeper = RecordingRelaySleeper()
+        let recovery = ForegroundConnection(coordinator: coordinator(transport), sleeper: sleeper)
+        recovery.setForeground(true)
+        #expect(await eventually { recovery.status == .pairingRequired })
+        // No backoff was scheduled, and no second attempt happened without a wake. "Stop retrying"
+        // (SPEC §6.9) is a statement about the loop, not about the app's ability to try again.
+        #expect(await sleeper.sleptSeconds.isEmpty)
+        #expect(await transport.openedSocketRequests.count == 1)
+        await recovery.stop()
+    }
+
+    @Test("an unpaired host never dials, across wakes")
+    func unpairedNeverDials() async throws {
+        let transport = StubRelayTransport()
+        let coordinator = ConnectionCoordinator(
+            origin: .init(baseURL: URL(string: "https://relay.test")!, authorization: .none),
+            makeTransport: { _ in transport }
+        )
+        let recovery = ForegroundConnection(coordinator: coordinator)
+        recovery.setForeground(true)
+        #expect(await eventually { recovery.status == .pairingRequired })
+        await recovery.stop()
+        // Reviving a park must not turn a local refusal into a network attempt.
+        recovery.setForeground(true)
+        #expect(await eventually { recovery.status == .pairingRequired })
+        #expect(await transport.openedSocketRequests.isEmpty)
         await recovery.stop()
     }
 
