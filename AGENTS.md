@@ -89,10 +89,11 @@ part is that they are not the same person's judgement applied twice.
    planner's tests** — `Tools/guard-tests.sh` fails any later commit that changes a line from a
    `Tests:` commit. If a test is wrong, say so and let the planner change it in a new `Tests:`
    commit. Silently relaxing an assertion is how a suite stops meaning anything.
-3. **Verifier** checks the test actually guards something: reinstate the bug (or stash the fix)
-   and confirm the test fails. This repo has a precedent — a guard test written for a
-   suspected ordering bug **passed with the bug reinstated**, because it asserted values that
-   were always consistent by the time it looked. That test was a liability until it was rewritten.
+3. **Verifier** checks the test actually guards something: reinstate the bug (or revert the fix
+   with `git revert --no-commit`) and confirm the test fails. This repo has a precedent — a guard
+   test written for a suspected ordering bug **passed with the bug reinstated**, because it
+   asserted values that were always consistent by the time it looked. That test was a liability
+   until it was rewritten.
 
 A human approves the plan and the tests before building starts, and the other human approves the
 PR. Agents can hold the three roles; they cannot hold those two gates

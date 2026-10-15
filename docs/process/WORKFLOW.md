@@ -122,9 +122,11 @@ section (or the PR description):
 
 1. `Tools/check.sh` is green — full mode, not `--fast`.
 2. **Every AC is shown to be guarded.** For each one, undo the implementation of that AC only
-   (`git stash`, `git revert --no-commit <sha>`, or re-introduce the bug by hand), run its test, and
-   paste the failure. Then restore. A test that still passes with its fix removed is a liability,
-   and the verifier says so — this repo has a precedent (`AGENTS.md`, "Verifier").
+   (`git revert --no-commit <sha>`, or re-introduce the bug by hand), run its test, and paste the
+   failure. Then restore (`git revert --abort`, or `git checkout -- <file>`). Not with a bare
+   `git stash`: the stash is shared by every worktree, so `git stash pop` can take another
+   session's entry. A test that still passes with its fix removed is a liability, and the
+   verifier says so — this repo has a precedent (`AGENTS.md`, "Verifier").
 3. If any risk flag is ticked, run the matching checklist in [RISK-FLAGS.md](RISK-FLAGS.md) and
    paste it, answered, into the PR.
 4. Check the **version impact** claim against [RELEASING.md](RELEASING.md).

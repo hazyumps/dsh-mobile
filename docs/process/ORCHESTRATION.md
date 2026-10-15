@@ -112,10 +112,11 @@ are the same instructions the Claude Code agent definitions in `.claude/agents/`
 > `docs/process/WORKFLOW.md` (step 4), `docs/process/RISK-FLAGS.md` and the plan file.
 >
 > 1. Run `Tools/check.sh` (full). It must be green.
-> 2. For **each** acceptance criterion: undo just its implementation (`git stash`, `git revert
->    --no-commit <sha>`, or re-introduce the bug), run its test, and record the failure. Restore and
->    confirm green. A test that still passes with its fix undone is a finding — report it, do not
->    fix it.
+> 2. For **each** acceptance criterion: undo just its implementation (`git revert --no-commit
+>    <sha>`, or re-introduce the bug), run its test, and record the failure. Restore
+>    (`git revert --abort`, or `git checkout -- <file>`) and confirm green. Never a bare
+>    `git stash`: every worktree shares the stash, and a `git stash pop` can take another session's
+>    entry. A test that still passes with its fix undone is a finding — report it, do not fix it.
 > 3. Check the version-impact claim against `docs/process/RELEASING.md`, and that a line was added
 >    under `## [Unreleased]` in `CHANGELOG.md`.
 > 4. Write the results into the plan's Verification section and commit as
