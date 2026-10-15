@@ -219,13 +219,94 @@ proven to make `HostStore.save` fail, because the stub never saves. If AC4 or AC
 
 ## Verification
 
-*Filled in by the verifier.*
+Verified 2026-10-15 on `e0a3dcd` by an agent that did not build the branch. Each row undoes one
+behaviour in `Sources/DSHRemoteKit/Persistence/HostRegistry.swift` (or `AppModel.swift` for AC9)
+and runs `swift test --disable-sandbox --filter HostRegistryTests`. After each one the file was
+restored with `git checkout -- <file>` and the full kit suite was green again (514 tests).
 
 | AC | Undone how | Test failure with it undone |
 |---|---|---|
+| AC1 | `forget` skips `store.save(remaining)` | `:80` `relaunched.hosts == [keep]`; `:81` `hostStore.load() == [keep]` (AC4 and AC5 fail too) |
+| AC1 | `forget` skips `deleteRelayDeviceToken` | `:83` `relayDeviceToken(forHostUUID: drop.id) == nil` (AC5 fails too) |
+| AC1 | `forget` skips `reconcileSelection` | **passes.** See finding 1 |
+| AC2 | `forget` calls `drafts.remove` but not `flush()` | `:109` draft text `== ""`; `:110` `draftCount == 0`; `:111` `navigation == DraftNavigation()` (AC5 `:190` fails too) |
+| AC3 | `forget` always clears the selection (`saveSelection(nil)`) | `:127` `loadSelection()?.hostId == keep.id`; `:128` relaunched `selection?.hostId == keep.id` |
+| AC4 | `hosts = remaining` before the save | `:158` `registry.hosts == [keep, drop]` |
+| AC4 | token deleted before the save | `:161` token `== "token-drop.local"` |
+| AC4 | drafts removed and flushed before the save | `:162` draft text `== "half a thought"` |
+| AC4 | selection reconciled before the save | **passes.** See finding 2 |
+| AC5 | a failed token delete is not recorded | `:185` `expected .credentialNotRemoved, got nil` |
+| AC5 | a failed token delete throws at once, skipping drafts | `:190` `draftCount(hostId: drop.id) == 0` |
+| AC5 | a failed token delete is retried once | `:191` `deleteAttempts == 1` |
+| AC6 | `add` skips `store.save(updated)` | `:206` `relaunched.hosts == [paired]` (AC7 `:229` fails too) |
+| AC6 | `add` skips `setRelayDeviceToken` | `:207` `relayDeviceToken(for:) == "fresh-token"` |
+| AC7 | `add` skips the token rollback | `:234` `relayDeviceToken(forHostUUID: paired.id) == nil` |
+| AC7 | `hosts = updated` before the save | `:232` `registry.hosts == [existing]` |
+| AC8 | `init` reads `loadSelection()` instead of reconciling | `:249` `registry.selection == nil`; `:250` `loadSelection() == nil` |
+| AC8 | `setSelection` sets memory only | `:263` relaunched `selection?.hostId == keep.id` |
+| AC9 | added to `AppModel`, one at a time: `HostStore()`, `KeychainSecretStore()`, `store.save(hosts)`, `setRelayDeviceToken(`, `deleteRelayDeviceToken(` | `Tools/lint.sh` exits 1 with `host-lifecycle Apps/DSHRemote/Sources/AppModel.swift:122: …` each time |
+| AC9 | `try store.save(list)` on an injected `HostStore`, or `setSecret(_, for: RelayDeviceCredential.account(...))` | lint passes. The pattern is textual, so these slip through, but each one needs a `HostStore` or a `SecretStore` in hand, and building one is caught. Acceptable |
+| AC10 | not testable (see "Unguarded"); read instead | see below |
 
-- `Tools/check.sh`: …
-- Risk checklist: …
+**AC10, by reading.** On `main`, `select()` cleared 32 things (`AppModel.swift:319-352`): four task
+cancels, then `recovery`, `coordinator`, `hostStore`, `secondaryStore`, `plugins`, `pluginsReport`,
+`scheduledTasks`, `scheduledTasksReport`, `modelModeStore`, `commandStore`, `attachmentUploader`,
+`attachmentReader`, `stagedAttachments`, `attachmentError`, `stagedImages`, `imageError`,
+`hostSnapshot`, `sessionProjections`, `commands`, `commandMessage`, `catalog`, `catalogState`,
+`stagedMode`, `stagedModel`, `interactionStore`, `interactions`, `browse` and `selectionID`.
+`resetHostScopedState()` clears all of them, in the same order. `select()` and `disconnect()` both
+call it. `disconnect()` keeps its own extras: `releaseTimedClaim`, `origin`, `selectedHost`, the
+workspace and session ids, and `idleStatus`. `recovery?.setForeground(false)` now runs before the
+task cancels and not after them. That makes no difference. `ForegroundConnection` is
+`@MainActor`, and `disconnect()` runs from start to end on the main actor with no `await`. A
+`cancel()` only sets a flag, and the shutdown `Task` that `setForeground` starts cannot run until
+`disconnect()` returns. So nothing can see the steps in between.
+
+- `Tools/check.sh` (full): **green**, 135 s. That is lint, models, version 0.2.0 (238), planner
+  tests untouched, 514 kit tests, coverage 86.83% against a baseline of 86.83%
+  (`Persistence/HostRegistry.swift` at 95.95%, floor 90), the Debug and Release builds, and 4 app
+  tests. The first run, on a cold tree, failed only at `coverage`, and printed nothing. At that
+  moment the test binary was newer than `default.profdata`, so `llvm-cov` said "no coverage data
+  found". Under `set -euo pipefail`, `Tools/coverage.sh` then exits 1 inside the `table=`
+  assignment, before it reaches its own error message. Re-running `swift test
+  --enable-code-coverage` and then `Tools/coverage.sh` was green, and so was the second full run.
+  This is a tooling flake, not something this branch caused. See finding 3.
+- Version impact **PATCH**. This agrees with `RELEASING.md` ("a bug fix"). `project.yml` and
+  `Info.plist` are not touched. The formats of `hosts.json`, `selection.json`, the drafts and the
+  Keychain are unchanged. `HostRegistry` adds to the public API and changes nothing that exists.
+  The new `hostError` label only reports a failure of the fix, so it is not a new feature. The
+  `CHANGELOG.md` line is under `## [Unreleased]` → `### Fixed` and cites #65.
+- Risk checklist. **S4**: forget + relaunch removes the host, the token, the selection and the
+  drafts (AC1 and AC2 reload from fresh stores). The token reaches only `SecretStore`, and the error
+  reasons are `String(describing:)` of a file or Keychain error, never a token. S4 is a security
+  flag, so the security reviewer still has to sign it off before the PR. **C3**: one new `actor`,
+  with no `@unchecked` or `unsafe`. The app's two fire-and-forget `Task`s are gone, and the tests
+  await and never sleep. **C6**: AC10 was checked by reading (above). AC9 is held by lint and the
+  app build.
+
+**Findings for the human:**
+
+1. **AC1's selection clause is not guarded on its own.** Remove the
+   `selection = store.reconcileSelection(with: remaining)` in `forget`, and AC1 still passes.
+   `relaunched` is built at `:79`, before the selection asserts at `:84-85`. Its `init` reconcile
+   (AC8) clears the stale file first, so the launch-time reconcile masks the one at forget time.
+   For the user nothing changes, because the next launch reconciles anyway. In memory, though,
+   `registry.selection` keeps naming a forgotten host until relaunch, and no test sees that.
+   Asserting `disk.hostStore.loadSelection() == nil` and `await registry.selection == nil` before
+   relaunching would guard it. That is the planner's call.
+2. **AC4's "selection unchanged" assert cannot fail under its fixture.** Mutation: reconcile the
+   selection before the list save. The test still passes, because the `0o555` host directory also
+   stops `removeItem` of `selection.json`. In real life a save can fail while an unlink succeeds
+   (disk full, for example), so the ordering is untested. The implementation itself is in the right
+   order. This is minor.
+3. **`Tools/coverage.sh` fails silently** when `llvm-cov report` errors. The `set -e` exit fires
+   inside the `table=$(…)` pipeline, before the "could not read a TOTAL line" message. It caused
+   one unexplained red `check: RED … - coverage` here. It is unrelated to #65, but worth its own
+   `process` issue.
+4. Minor, UX: `hostError` is cleared only when the next `forget` starts. A "forgotten, but not
+   completely" message stays up across later pairing and selection.
+5. The `.draftsNotRemoved` path has no test (no AC asks for one). It accounts for some of the 3
+   lines `HostRegistry.swift` leaves uncovered.
 
 ## Notes for the next person
 
