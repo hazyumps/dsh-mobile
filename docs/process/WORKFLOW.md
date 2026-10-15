@@ -181,7 +181,7 @@ call `Tools/check.sh` and nothing else.
 
 | Step | Script | Fails when |
 |---|---|---|
-| Lint | `Tools/lint.sh` | a `retryPolicy: .none` (writes retried), a `DSH_*` read outside `#if DEBUG`, a `print(` in the kit — beyond the counts tracked in `Tools/lint-allowlist.txt` |
+| Lint | `Tools/lint.sh` | a `retryPolicy: .none` or an `RPCFailureRetryPolicy?` declaration (writes retried), a `DSH_*` read outside `#if DEBUG`, a `print(` in the kit — beyond the counts tracked in `Tools/lint-allowlist.txt` |
 | Generated models | `Tools/generate-models.py --check` | `Sources/DSHRemoteKit/Generated/` no longer matches `Protocol/` |
 | Version | `Tools/check-version.sh` | `Info.plist` ≠ `project.yml`; build number went down; a new version lacks a changelog section; a tag names a different version |
 | Planner tests | `Tools/guard-tests.sh` | a builder commit changed a `Tests:` commit's lines |

@@ -22,18 +22,22 @@ public struct PairingClient: Sendable {
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
 
+    /// The claim is a write, so it goes out once under ``RPCFailureRetryPolicy/none``
+    /// and there is no policy to pass (SPEC §3, "Retry rule"). A retry would
+    /// replay a one-time code, and a 429 is the relay's lockout: with
+    /// no `Retry-After` the default policy slept 60 s per retry, most of the
+    /// code's five-minute lifetime, before saying so (#63).
     public init(
         transport: any RelayTransport,
         sleeper: any RelaySleeper = TaskRelaySleeper(),
-        clock: any EpochClock = SystemEpochClock(),
-        retryPolicy: RPCFailureRetryPolicy = .default
+        clock: any EpochClock = SystemEpochClock()
     ) {
         self.transport = transport
         self.exchange = RelayExchange(
             transport: transport,
             sleeper: sleeper,
             clock: clock,
-            retryPolicy: retryPolicy
+            retryPolicy: RPCFailureRetryPolicy.none
         )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
@@ -92,8 +96,7 @@ public struct PairingClient: Sendable {
     @discardableResult
     public func claim(
         _ payload: PairingPayload,
-        deviceName: String,
-        retryPolicy: RPCFailureRetryPolicy? = nil
+        deviceName: String
     ) async throws -> PairingClaimResponse {
         guard let origin = payload.relayURL else {
             throw PairingError.invalidPayload(.invalidURL(payload.url))
@@ -110,14 +113,9 @@ public struct PairingClient: Sendable {
         )
         let request = RelayHTTPRequest(url: url, method: "POST", headers: headers, body: body)
 
-        var usingExchange = exchange
-        if let retryPolicy {
-            usingExchange.retryPolicy = retryPolicy
-        }
-
         let response: RelayHTTPResponse
         do {
-            response = try await usingExchange.perform(request, endpoint: "relay/pair")
+            response = try await exchange.perform(request, endpoint: "relay/pair")
         } catch let error as DshRPCError {
             throw PairingError.exchange(error)
         }
