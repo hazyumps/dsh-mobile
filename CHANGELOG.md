@@ -19,6 +19,9 @@ Fixed / Security, with its issue number. The release renames the section.
 - An app unit-test target, `Tests/DSHRemoteTests/`, for render tests of view-level bugs;
   `Tools/check.sh` runs it on its own "DSH Remote Tests" simulator, and `--red` judges it with the
   kit suite (#74).
+- Several issues can run at once, each in its own worktree: `Tools/check.sh` runs the app tests for
+  one checkout at a time, `/feature` and `/bugfix` start in a worktree, and `Tools/setup-dev.sh`
+  repairs absolute hook and signer paths (#77).
 
 ## [0.2.0] - 2026-10-13
 
