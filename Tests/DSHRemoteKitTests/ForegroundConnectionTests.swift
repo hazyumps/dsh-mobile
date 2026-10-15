@@ -300,6 +300,37 @@ struct ForegroundConnectionTests {
         await recovery.stop()
     }
 
+    @Test("a call that times out leaves the connection alone")
+    func timedOutCallKeepsConnection() async throws {
+        // A slow read is classified `.offline` by the transport (`URLError.timedOut`), and every RPC
+        // path ends in `applyCallFailure`. That made a failed *call* indistinguishable from a dead
+        // *socket* — so with Home refreshing `session/list` every 15 seconds, one slow reply could
+        // rebuild the connection and flip the status chip while every screen still looked fine.
+        let live = StubRelaySocket(), spare = StubRelaySocket()
+        try await ready(live, generation: 1)
+        try await ready(spare, generation: 2)
+        // The spare socket is here so that a teardown has somewhere to go: if the fix regresses, the
+        // reconnect succeeds quietly and the only trace is the status below.
+        let transport = StubRelayTransport(
+            responses: [.failure(.offline("-1001"))], sockets: [live, spare]
+        )
+        let coordinator = coordinator(transport)
+        let recovery = ForegroundConnection(coordinator: coordinator)
+        recovery.setForeground(true)
+        #expect(await eventually { recovery.status == .connected })
+
+        _ = try? await coordinator.sessions()
+
+        // The socket is still there, so the connection is still the connection. This one assertion
+        // is enough to guard "no new socket is opened": the reconnect is *caused* by a non-usable
+        // status, so while this stays `.connected` nothing can tear the connection down. A separate
+        // assertion that the socket count stayed at one would have to watch a window of time — and a
+        // bounded "and nothing happened" check cannot be written without one.
+        #expect(await coordinator.status == .connected)
+        #expect(recovery.status == .connected)
+        await recovery.stop()
+    }
+
     @Test("authentication refused during WebSocket upgrade stops without a retry", arguments: [401, 403])
     func rejectedUpgradeStops(status: Int) async throws {
         let response = try #require(HTTPURLResponse(

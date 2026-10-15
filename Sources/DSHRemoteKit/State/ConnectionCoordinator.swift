@@ -998,16 +998,22 @@ public actor ConnectionCoordinator {
     /// refusal" rows) is not evidence about the socket. Demoting a live connection to
     /// `Host unavailable` because one endpoint 404'd would make the status lie.
     ///
-    /// The two cases that *are* evidence about the connection — ``offline`` and
-    /// ``pairingRequired`` — are the ones that mean "this socket is gone" and "this
-    /// credential is no longer accepted", and those are applied.
+    /// The one case that *is* evidence about the connection is ``pairingRequired``: a 403 is the
+    /// host's own verdict about this credential, so the UI has to say so. ``offline`` is
+    /// deliberately **not** applied — a call failure is evidence about the call. A request that
+    /// timed out is classified `.offline` (`URLError.timedOut`, ``RelayTransportError/classify(_:)``),
+    /// so promoting it made one slow reply tear down and rebuild a healthy socket (#82), while
+    /// `HomeView` refreshes `session/list` every 15 seconds — often enough to see it.
+    ///
+    /// Nothing is lost by that: a socket that really died ends `$events`, and
+    /// ``streamEnded(generation:error:)`` repaints the connection status itself.
     private func applyCallFailure(_ failure: ConnectError) {
         switch failure.status {
-        case .offline, .pairingRequired:
+        case .pairingRequired:
             refreshStatus(from: failure)
-        case .connecting, .connected, .reconnecting, .hostUnavailable:
-            // Leave the connection's own status alone. Only the connect path and the
-            // drain loop may claim the host is unreachable.
+        case .connecting, .connected, .reconnecting, .offline, .hostUnavailable:
+            // Leave the connection's own status alone. Only the connect path, the drain loop,
+            // and the socket's own end may move a live connection's status.
             break
         }
     }

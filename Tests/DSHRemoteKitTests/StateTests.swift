@@ -652,21 +652,28 @@ func sessionListBusinessRefusal() async throws {
     #expect(typed.message.isEmpty == false)
 }
 
-@Test("a transport failure during session/list is a status, not a silent empty list")
+@Test("a transport failure during session/list reaches the caller and leaves the connection alone")
 func sessionListTransportFailureIsReported() async throws {
     let transport = StubRelayTransport(responsesByPath: [
         "/api/session/list": .failure(.offline("no route to host")),
     ])
     let coordinator = ConnectionCoordinator(origin: origin(), makeTransport: { _ in transport })
+    let before = await coordinator.status
 
     let thrown = await failure { try await coordinator.sessions() }
     // `RelayExchange` maps a transport failure to the same error domain as everything
-    // else, so the app has one type to switch on (SPEC §6.9's table).
+    // else, so the app has one type to switch on (SPEC §6.9's table). This is what keeps the
+    // failure from becoming a silent empty list that reads as "this host has no sessions".
     #expect(thrown as? ConnectionCoordinator.ConnectError
         == .transportInterruption(detail: "transport offline: no route to host"))
-    // SPEC §6.9 "Offline": the status says so, rather than the UI rendering an empty list
-    // that reads as "this host has no sessions".
-    #expect(await coordinator.status == .offline)
+    // Rewritten for #82. This used to require `status == .offline`, which encoded the defect:
+    // a *call* failing repainted the *connection*, and because `ForegroundConnection` reads a
+    // non-usable status as "the socket has gone", one slow reply rebuilt a healthy connection.
+    // The claim the old assertion was really making is kept — the failure reaches the caller and
+    // is reported by the resource that made it — while the connection, which this call did not
+    // break, is left exactly as it was. `timedOutCallKeepsConnection` proves the no-rebuild half
+    // against a live connection.
+    #expect(await coordinator.status == before)
 }
 
 // MARK: - 6. Failures arrive as statuses, never as hangs

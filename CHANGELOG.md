@@ -14,6 +14,8 @@ Fixed / Security, with its issue number. The release renames the section.
 - Assistant replies no longer lose the left edge of their first and last letters (#74).
 - A parked connection recovers: returning to the app makes one fresh attempt, where a refusal
   used to stop every later attempt until the app was relaunched (#26).
+- A slow or failed request no longer rebuilds the connection, so the status chip stops flickering
+  on a connection that is working (#82).
 
 ### Added (process, no version impact)
 - A written workflow and local CI: `docs/process/`, `Tools/check.sh` with a pre-push hook, a
