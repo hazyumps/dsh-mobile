@@ -23,6 +23,11 @@
 #                or writing a relay token itself. The list and the token change together, in
 #                `HostRegistry`, or they drift apart: a forget that edited memory and never saved
 #                the list brought the host back, credential-less, on the next launch (#65).
+#   security-scope  `startAccessingSecurityScopedResource` outside
+#                Sources/DSHRemoteKit/Persistence/AttachmentStaging.swift. #66: the importer
+#                started a scope, `defer`ed the stop and handed the URL to a `Task`, so the
+#                upload read the file after the scope had ended. Staging starts the scope, copies
+#                and stops it in one synchronous call; everything else uses the copy.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -55,6 +60,11 @@ while IFS= read -r line; do
   [[ -n "$line" ]] && add "host-lifecycle $line"
 done < <(grep -rnE '\bHostStore\(|KeychainSecretStore\(|\.save\(hosts|(set|delete)RelayDeviceToken\(' Apps \
   --include='*.swift' 2>/dev/null)
+# security-scope: the one place a scope may be held is AttachmentStaging.stage (#66).
+while IFS= read -r line; do
+  [[ -n "$line" ]] && add "security-scope $line"
+done < <(grep -rn 'startAccessingSecurityScopedResource' Sources Apps --include='*.swift' 2>/dev/null \
+  | grep -v '^Sources/DSHRemoteKit/Persistence/AttachmentStaging.swift:')
 
 # debug-env: track `#if DEBUG` nesting per file. A line counts as debug-only when any enclosing
 # conditional block is a DEBUG branch (and not its #else).
