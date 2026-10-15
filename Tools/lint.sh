@@ -6,9 +6,9 @@
 #
 # Rules:
 #   retry-none   `retryPolicy: .none` against an optional parameter is Optional.none, which
-#                means "the default, retrying policy" — the trap documented on
-#                DshRpcClient.mutate. Writes are never retried (AGENTS.md). Use `mutate`, a write
-#                API with no policy parameter, or spell out `RPCFailureRetryPolicy.none`.
+#                means "the default, retrying policy" — the trap that retried approvals (#63).
+#                Writes are never retried (AGENTS.md). Use `mutate`, or a write API with no
+#                policy parameter.
 #   optional-retry-policy
 #                A declaration typed `RPCFailureRetryPolicy?` or
 #                `Optional<RPCFailureRetryPolicy>` (comment lines excluded). An optional policy is

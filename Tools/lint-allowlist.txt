@@ -1,8 +1,4 @@
 # Known violations of Tools/lint.sh rules, each tracked by an issue. The count is exact.
 # <rule>      <path>                                         <count> <issue>  # why tolerated for now
-retry-none    Apps/DSHRemote/Sources/AppModel.swift          1       #63      # approvals/answers retried; the fix removes the parameter
-optional-retry-policy Sources/DSHRemoteKit/Network/DshRpcClient.swift         3 #63 # call/callVoid/perform take an optional policy; the fix removes it
-optional-retry-policy Sources/DSHRemoteKit/Network/DshBareEndpointClient.swift 1 #63 # submitEventResult's optional policy; the fix removes it
-optional-retry-policy Sources/DSHRemoteKit/Network/PairingClient.swift        1 #63 # claim's optional policy; the fix removes it
 debug-env     Apps/DSHRemote/Sources/ConversationView.swift  3       #67      # DSH_TELEMETRY live in Release; DSH_ATTACH/DSH_IMAGE inert behind launchMessage
 debug-env     Apps/DSHRemote/Sources/ScreensGalleryView.swift 1      #67      # only reachable from the DEBUG screen gallery
