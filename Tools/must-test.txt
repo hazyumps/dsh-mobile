@@ -7,7 +7,7 @@
 # saying why in the commit.
 
 Network/SPKIPin.swift                    95   # the trust anchor (SPEC §6.3)
-Network/RelayTransport.swift             48   # trust decision (SPEC §3.2); 51.7% on 2026-10-15
+Network/RelayTransport.swift             64   # trust decision (SPEC §3.2); 68.0% on 2026-10-15
 Models/PairingPayload.swift              80   # pairing input from outside the app
 Network/PairingClient.swift              90   # single-use claim
 Network/DshRpcClient.swift               95   # mutate: writes are never retried

@@ -465,9 +465,9 @@ public final class URLSessionRelayTransport: NSObject, RelayTransport, @unchecke
     /// session's delegate and the socket session's (#68, AC8). It is internal so a test can put
     /// a challenge to the object URLSession actually calls, rather than to a copy of its logic.
     var challengeDelegates: (request: (any URLSessionDelegate)?, socket: (any URLSessionDelegate)?) {
-        // Stub for the `Tests:` commit of #68 (AC8). The build answers with the sessions' own
-        // delegates.
-        (nil, nil)
+        // Read back from the sessions, not from `self.delegate`: what a test reaches here must be
+        // exactly what URLSession calls, for each of the two sessions.
+        (session.delegate, socketSession.delegate)
     }
 
     /// The configuration a long-lived socket needs, given the one the caller uses for requests.
