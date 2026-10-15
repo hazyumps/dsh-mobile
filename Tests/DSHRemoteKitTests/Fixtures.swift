@@ -19,6 +19,7 @@ enum Fixtures {
         case forbiddenUnpaired = "forbidden-unpaired.json"
         case muxStreamFrames = "mux-stream-frames.json"
         case relaySPKIPin = "relay-spki-pin.json"
+        case relayTrustCertificates = "relay-trust-certificates.json"
     }
 
     static let directory: URL = URL(fileURLWithPath: #filePath)

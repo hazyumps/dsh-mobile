@@ -26,6 +26,9 @@ Fixed / Security, with its issue number. The release renames the section.
   `DshBareEndpointClient.init`/`submitEventResult` and `PairingClient.init`/`claim`. Reads use the
   client's policy, writes use `mutate` or a write-only client. Incompatible: MINOR (#63).
 
+### Security
+- A relay connection with neither a pin nor platform validation is refused instead of trusted (#68).
+
 ### Added (process, no version impact)
 - A written workflow and local CI: `docs/process/`, `Tools/check.sh` with a pre-push hook, a
   coverage ratchet, issue and PR templates, and Claude Code agents and commands (#62).

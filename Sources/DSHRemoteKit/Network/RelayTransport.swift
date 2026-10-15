@@ -317,6 +317,101 @@ public struct RelayPinningPolicy: Sendable, Hashable {
     var isPinned: Bool { expectedSPKIPin != nil }
 }
 
+#if canImport(Security)
+/// What the challenge handler does with a server's trust (#68).
+enum RelayTrustDecision: Equatable, Sendable {
+    /// The pin matched, and it stands in for the chain.
+    case acceptPinned
+    /// The system checks the chain and the hostname (SPEC §3.2).
+    case deferToPlatform
+    case reject(RelayTrustRejection)
+}
+
+/// Why a server's trust was refused.
+enum RelayTrustRejection: Equatable, Sendable {
+    /// The trust carried no certificate.
+    case noLeafCertificate
+    /// The leaf key is not P-256, so no pin can be computed. This fails closed (SPEC §6.3).
+    case unsupportedKey
+    case pinMismatch
+    /// There is no pin and no platform validation, so nothing vouches for the server.
+    case noTrustAnchor
+}
+
+extension RelayPinningPolicy {
+    /// Whether to trust the server behind `serverTrust`, without evaluating it.
+    ///
+    /// The order is the rule. A pin, when there is one, is the whole authority:
+    /// it is checked, and a mismatch is a hard error that never falls back to
+    /// the system trust store (SPEC §3.2: "A supplied pin mismatch is a hard
+    /// error … it never silently falls back to normal CA validation"). Without a
+    /// pin, the system checks the chain and the hostname (SPEC §3.2: a payload
+    /// without a fingerprint "must pass normal platform TLS and hostname
+    /// validation"). With neither, nothing vouches for the server, and it is
+    /// refused (#68; it used to be accepted).
+    ///
+    /// A pin together with `requiresPlatformTrust` checks only the pin; whether
+    /// that should mean both is #86.
+    ///
+    /// The pin is computed from the leaf's key, not from the certificate, and
+    /// not from anything in the response (SPEC §3.2 step 3: "Never learn a pin
+    /// from an unverified network response").
+    func decide(serverTrust: SecTrust) -> RelayTrustDecision {
+        guard let expected = expectedSPKIPin else {
+            return requiresPlatformTrust ? .deferToPlatform : .reject(.noTrustAnchor)
+        }
+        guard let leaf = RelayServerKey.leafCertificate(of: serverTrust) else {
+            return .reject(.noLeafCertificate)
+        }
+        guard let actual = RelayServerKey.spkiPin(of: leaf) else {
+            return .reject(.unsupportedKey)
+        }
+        // A pinned self-signed relay cannot satisfy the platform chain; the pin
+        // stands in for it.
+        return SPKIPin.matches(pin: expected, pin: actual) ? .acceptPinned : .reject(.pinMismatch)
+    }
+}
+
+extension RelayTrustDecision {
+    /// What the challenge handler tells `URLSession`. Only ``acceptPinned``
+    /// comes with a credential (`URLCredential(trust:)`); the delegate supplies it.
+    var disposition: URLSession.AuthChallengeDisposition {
+        switch self {
+        case .acceptPinned: .useCredential
+        case .deferToPlatform: .performDefaultHandling
+        case .reject: .cancelAuthenticationChallenge
+        }
+    }
+}
+
+/// The leaf → key → pin steps the decision rests on (SPEC §6.3).
+enum RelayServerKey {
+    /// The server's own certificate: the first in the chain, never an issuer.
+    static func leafCertificate(of trust: SecTrust) -> SecCertificate? {
+        (SecTrustCopyCertificateChain(trust) as? [SecCertificate])?.first
+    }
+
+    /// The certificate's public key as `SecKeyCopyExternalRepresentation` gives
+    /// it. For P-256 that is the 65-byte uncompressed X9.63 point `04 || X || Y`
+    /// that ``SPKIPin/derSPKI(fromRawP256PublicKey:)`` wraps. Observed through a
+    /// real `SecTrust` in `TLSTrustDecisionTests` (#68): the stand-in over the
+    /// relay's captured key gives 65 bytes that hash to the published pin, while
+    /// a P-384 key gives 97 bytes and an RSA key 270 (PKCS#1).
+    static func externalRepresentation(of certificate: SecCertificate) -> Data? {
+        guard let key = SecCertificateCopyKey(certificate) else { return nil }
+        return SecKeyCopyExternalRepresentation(key, nil) as Data?
+    }
+
+    /// The certificate's SPKI pin, or `nil` when its key is not P-256. A key the
+    /// pin cannot describe fails closed rather than being hashed in some other
+    /// shape (SPEC §6.3).
+    static func spkiPin(of certificate: SecCertificate) -> String? {
+        guard let raw = externalRepresentation(of: certificate) else { return nil }
+        return try? SPKIPin.pin(rawP256PublicKey: raw)
+    }
+}
+#endif
+
 /// The real transport (deliverable 1): `URLSession` for HTTP,
 /// `URLSessionWebSocketTask` for the mux socket.
 ///
@@ -364,6 +459,15 @@ public final class URLSessionRelayTransport: NSObject, RelayTransport, @unchecke
     deinit {
         session.invalidateAndCancel()
         socketSession.invalidateAndCancel()
+    }
+
+    /// What URLSession asks about this transport's authentication challenges: the request
+    /// session's delegate and the socket session's (#68, AC8). It is internal so a test can put
+    /// a challenge to the object URLSession actually calls, rather than to a copy of its logic.
+    var challengeDelegates: (request: (any URLSessionDelegate)?, socket: (any URLSessionDelegate)?) {
+        // Read back from the sessions, not from `self.delegate`: what a test reaches here must be
+        // exactly what URLSession calls, for each of the two sessions.
+        (session.delegate, socketSession.delegate)
     }
 
     /// The configuration a long-lived socket needs, given the one the caller uses for requests.
@@ -444,9 +548,9 @@ public final class URLSessionRelayTransport: NSObject, RelayTransport, @unchecke
 
     /// Shared challenge handling for HTTP and the WebSocket upgrade.
     ///
-    /// The pin is computed from the server's key, not from the certificate, and
-    /// not from anything in the response (SPEC §3.2 step 3: "Never learn a pin
-    /// from an unverified network response").
+    /// A thin adapter: whether to trust the server is
+    /// ``RelayPinningPolicy/decide(serverTrust:)``, which reads the pin from the
+    /// server's key and never from the response (SPEC §3.2 step 3).
     private final class TransportDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
         let pinning: RelayPinningPolicy
 
@@ -477,43 +581,12 @@ public final class URLSessionRelayTransport: NSObject, RelayTransport, @unchecke
                 return
             }
 
-            if let expected = pinning.expectedSPKIPin {
-                guard let actual = Self.spkiPin(of: trust) else {
-                    completionHandler(.cancelAuthenticationChallenge, nil)
-                    return
-                }
-                guard SPKIPin.matches(pin: expected, pin: actual) else {
-                    completionHandler(.cancelAuthenticationChallenge, nil)
-                    return
-                }
-                // A pinned self-signed relay cannot satisfy the platform chain;
-                // the pin stands in for it when the policy says so.
-                completionHandler(.useCredential, URLCredential(trust: trust))
-                return
-            }
-
-            if pinning.requiresPlatformTrust {
-                completionHandler(.performDefaultHandling, nil)
-            } else {
-                completionHandler(.useCredential, URLCredential(trust: trust))
-            }
-        }
-
-        /// The server's leaf key as `SecKeyCopyExternalRepresentation` gives it,
-        /// wrapped into SPKI and hashed.
-        ///
-        /// unverified: `SecKeyCopyExternalRepresentation` returning the raw
-        /// uncompressed X9.63 point for P-256 is documented behaviour and the
-        /// reason ``SPKIPin/derSPKI(fromRawP256PublicKey:)`` exists, but this
-        /// environment has no live TLS handshake in tests to observe it on. The
-        /// pin arithmetic itself is proven against the relay's published vector.
-        static func spkiPin(of trust: SecTrust) -> String? {
-            guard let chain = SecTrustCopyCertificateChain(trust) as? [SecCertificate],
-                  let leaf = chain.first,
-                  let key = SecCertificateCopyKey(leaf),
-                  let raw = SecKeyCopyExternalRepresentation(key, nil) as Data?
-            else { return nil }
-            return try? SPKIPin.pin(rawP256PublicKey: raw)
+            // The decision is ``RelayPinningPolicy/decide(serverTrust:)``, tested
+            // offline (#68); this adapter only hands it to URLSession. The trust
+            // is a credential only when the pin vouched for it.
+            let decision = pinning.decide(serverTrust: trust)
+            let credential = decision == .acceptPinned ? URLCredential(trust: trust) : nil
+            completionHandler(decision.disposition, credential)
         }
     }
 }

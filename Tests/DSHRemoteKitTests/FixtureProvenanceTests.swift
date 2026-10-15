@@ -72,6 +72,11 @@ enum FixtureProvenance {
         .rpcRequest: .synthetic(basis: "SPEC §6.2 envelope shape"),
         .rpcTypedError: .synthetic(basis: "SPEC §6.9 typed error shape"),
         .forbiddenUnpaired: .synthetic(basis: "the relay's own 403 body, per SPEC §6.3"),
+        // Issued over the captured key in relay-spki-pin.json by a throwaway issuer whose
+        // key was deleted; the file's own `source` lists the openssl commands (#68).
+        .relayTrustCertificates: .synthetic(
+            basis: "certificates issued over the captured relay key; SPEC §6.3"
+        ),
     ]
 }
 
