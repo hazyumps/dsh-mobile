@@ -4,7 +4,8 @@
 #   Tools/setup-dev.sh
 #
 # It installs nothing; it checks the toolchain, and points this clone's git config at the
-# versioned hook and signers file. Everything it sets is local to this clone (.git/config).
+# versioned hook and signers file, by relative paths. Everything it sets is local to this clone
+# (.git/config), and shared by its worktrees.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -83,10 +84,31 @@ else
 fi
 
 echo "Git"
-git config core.hooksPath .githooks
-ok "core.hooksPath = .githooks (pre-push runs Tools/check.sh)"
-git config gpg.ssh.allowedSignersFile "$ROOT/.gitsigners"
-ok "gpg.ssh.allowedSignersFile = .gitsigners (verifies teammates' signatures)"
+# Both settings name a path in the checkout, and both must be relative. git resolves a relative
+# value from the top of whichever worktree it runs in, so each worktree runs its own hook and
+# verifies against its own .gitsigners. An absolute value sends every worktree to one checkout's
+# copy, and this script used to write one for the signers file (#77). `git config` writes
+# .git/config, which every worktree of this clone shares, so one run fixes them all.
+set_relative() {   # <key> <value> <what it is for> <what the old value did>
+  local key="$1" want="$2" why="$3" effect="$4" old now
+  old="$(git config --get "$key")"
+  # The old value may also come from ~/.gitconfig, which stays in effect for other repos.
+  [[ -n "$old" && "$old" != "$want" ]] \
+    && warn "$key was $old ($(git config --show-origin --get "$key" | cut -f1)): $effect. Setting $want."
+  git config "$key" "$want"
+  # Read the effective value back. A worktree's config.worktree, and GIT_CONFIG_* or `git -c` in
+  # the environment, beat .git/config, so writing .git/config alone may not change what git uses.
+  now="$(git config --get "$key")"
+  if [[ "$now" == "$want" ]]; then
+    ok "$key = $want ($why)"
+  else
+    bad "$key is still $now, from $(git config --show-origin --get "$key" | cut -f1), which overrides .git/config: unset it there"
+  fi
+}
+set_relative core.hooksPath .githooks "pre-push runs Tools/check.sh" \
+  "every worktree ran the hook from there"
+set_relative gpg.ssh.allowedSignersFile .gitsigners "verifies teammates' signatures" \
+  "every worktree verified signatures against that file"
 
 if [[ "$(git config --get commit.gpgsign)" == "true" && -n "$(git config --get user.signingkey)" ]]; then
   ok "commit signing on ($(git config --get gpg.format || echo openpgp))"
