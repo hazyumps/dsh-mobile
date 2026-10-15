@@ -11,7 +11,7 @@ are in `Apps/DSHRemote/README.md`.
 | What | A Swift Package: plain Swift, Foundation, CoreGraphics/ImageIO. No UI. | A SwiftUI iOS app that uses the kit. |
 | Where | `Sources/DSHRemoteKit/`, tests in `Tests/DSHRemoteKitTests/` | `Apps/DSHRemote/Sources/` |
 | Builds with | `swift build` / `swift test` — on your Mac, no simulator | Xcode / `xcodebuild`, for the iOS Simulator or a device |
-| Tests | ~500, run in under a second | none, on purpose |
+| Tests | ~500, run in under a second | a few render tests in `Tests/DSHRemoteTests/`, on a simulator |
 
 `Package.swift` declares the kit for **both iOS 18 and macOS 14**. That is the trick that makes
 `swift test` fast: the kit's tests run as an ordinary macOS process. The price is that kit code
@@ -22,9 +22,13 @@ So when you are about to put an `if` in a view, ask whether it is a *rule* (orde
 what state follows what event). If it is, it goes in the kit, with a test, and the view just reads
 the answer.
 
-App tests would mean XCTest UI tests: they boot a simulator, drive it by accessibility labels, take
-minutes, and fail intermittently. Agents are bad at them, and so are laptops on battery. Issue #30
-tracks adding a small target later; until then, the kit is where tests go.
+The app has a unit-test target, `DSHRemoteTests`, for one job: a bug that lives only in a view's
+rendering, such as a modifier that clips text (#74). Its tests render the real view with
+`ImageRenderer` and count pixels; `Tools/check.sh` runs them on a simulator of their own, "DSH
+Remote Tests", which is not for review or pairing. UI tests that tap and swipe would mean XCTest UI
+tests: they drive a simulator by accessibility labels, take minutes, and fail intermittently.
+Agents are bad at them, and so are laptops on battery. That target is still #30; rules go in the
+kit.
 
 ## The Xcode project is generated
 

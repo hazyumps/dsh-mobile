@@ -17,14 +17,16 @@ those are how to follow them.
 ```sh
 Tools/setup-dev.sh                                 # once per machine: hook, signers, toolchain
 Tools/check.sh                                     # the whole definition of green
-Tools/check.sh --fast                              # the same minus the app builds
+Tools/check.sh --fast                              # the same minus the app builds and app tests
 swift test --disable-sandbox --filter <Suite>      # the inner loop
 ```
 
 `Tools/check.sh` runs the lint, the generated-model and version checks, the planner-test guard, the
-kit tests with the coverage ratchet, and the app build in **Debug and Release**. The pre-push hook
-runs it, so nothing red leaves your machine (WORKFLOW.md, "Local CI"). `--disable-sandbox` is
-required for any `swift` command: SwiftPM's manifest cache lives outside the working tree.
+kit tests with the coverage ratchet, the app build in **Debug and Release**, and the app's render
+tests (`Tests/DSHRemoteTests`) on an iOS simulator, so any machine that runs it, CI included, needs
+an iOS simulator runtime. The pre-push hook runs it, so nothing red leaves your machine
+(WORKFLOW.md, "Local CI"). `--disable-sandbox` is required for any `swift` command: SwiftPM's
+manifest cache lives outside the working tree.
 
 Generated files, and which of them are committed:
 
