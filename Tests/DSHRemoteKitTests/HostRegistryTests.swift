@@ -38,6 +38,18 @@ struct HostRegistryTests {
             try fm.setAttributes([.posixPermissions: 0o555], ofItemAtPath: hostsDirectory.path)
             return { try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: hostsDirectory.path) }
         }
+
+        /// Replaces `hosts.json` with a non-empty directory, so the list write fails while the
+        /// rest of the host directory, `selection.json` included, stays writable and deletable.
+        /// (`makeHostsReadOnly` also blocks deleting the selection, which hides a reconcile run
+        /// before the save.) Call it after the registry has loaded the list.
+        func breakHostsFile() throws {
+            let fm = FileManager.default
+            let url = hostStore.fileURL
+            try fm.removeItem(at: url)
+            try fm.createDirectory(at: url, withIntermediateDirectories: false)
+            try Data("x".utf8).write(to: url.appending(path: "occupied"))
+        }
     }
 
     private func host(_ name: String) -> SavedHost {
@@ -75,6 +87,11 @@ struct HostRegistryTests {
 
         let registry = disk.relaunch(secrets: secrets)
         try await registry.forget(drop.id)
+
+        // Before any relaunch: a relaunched registry reconciles the selection itself (AC8), which
+        // would hide a forget that left it naming the forgotten host until the next launch.
+        #expect(disk.hostStore.loadSelection() == nil, "forget left selection.json naming the forgotten host")
+        #expect(await registry.selection == nil, "forget left the registry's selection on the forgotten host")
 
         let relaunched = disk.relaunch(secrets: secrets)
         #expect(await relaunched.hosts == [keep], "the forgotten host came back from hosts.json")
@@ -162,6 +179,33 @@ struct HostRegistryTests {
         #expect(await disk.draftStore().draft(for: dropKey).text == "half a thought")
     }
 
+    @Test("AC4: a forget whose list cannot be saved leaves the selection alone")
+    func forgetWithUnsavableListKeepsSelection() async throws {
+        let disk = try Disk()
+        let secrets = InMemorySecretStore()
+        let keep = host("keep.local")
+        let drop = host("drop.local")
+        try await pairedEarlier([keep, drop], on: disk, secrets: secrets)
+        try disk.hostStore.saveSelection(HostSelection(hostId: drop.id))
+
+        let registry = disk.relaunch(secrets: secrets)
+        try disk.breakHostsFile()
+
+        var thrown: HostRegistryError?
+        do {
+            try await registry.forget(drop.id)
+        } catch let error as HostRegistryError {
+            thrown = error
+        }
+        guard case .listNotSaved = thrown else {
+            Issue.record("expected .listNotSaved, got \(String(describing: thrown))")
+            return
+        }
+        #expect(disk.hostStore.loadSelection()?.hostId == drop.id, "a failed forget cleared selection.json")
+        #expect(await registry.selection?.hostId == drop.id, "a failed forget cleared the registry's selection")
+        #expect(await registry.hosts == [keep, drop])
+    }
+
     @Test("AC5: a token that cannot be deleted is reported, and the host is still gone from disk")
     func forgetWithUndeletableTokenIsReported() async throws {
         let disk = try Disk()
@@ -189,6 +233,31 @@ struct HostRegistryTests {
         #expect(await registry.hosts == [keep])
         #expect(await disk.draftStore().draftCount(hostId: drop.id) == 0, "a failed token delete left the drafts")
         #expect(await secrets.deleteAttempts == 1, "a failed delete was retried")
+    }
+
+    @Test("AC5: drafts that cannot be written away are reported, and the host and token are still gone")
+    func forgetWithUnwritableDraftsIsReported() async throws {
+        let disk = try Disk()
+        let secrets = InMemorySecretStore()
+        let keep = host("keep.local")
+        let drop = host("drop.local")
+        try await pairedEarlier([keep, drop], on: disk, secrets: secrets)
+        let drafts = DraftStore(directory: disk.draftsDirectory, write: { _, _ in throw DraftsWriteFailed() })
+
+        let registry = HostRegistry(store: disk.hostStore, secrets: secrets, drafts: drafts)
+        var thrown: HostRegistryError?
+        do {
+            try await registry.forget(drop.id)
+        } catch let error as HostRegistryError {
+            thrown = error
+        }
+        guard case .draftsNotRemoved = thrown else {
+            Issue.record("expected .draftsNotRemoved, got \(String(describing: thrown))")
+            return
+        }
+        #expect(disk.hostStore.load() == [keep], "a failed drafts write kept the host on disk")
+        #expect(await registry.hosts == [keep])
+        #expect(try await secrets.relayDeviceToken(forHostUUID: drop.id) == nil, "a failed drafts write kept the token")
     }
 
     // MARK: - Add
@@ -279,3 +348,5 @@ private actor FailingDeleteSecretStore: SecretStore {
         throw DeleteFailed()
     }
 }
+
+private struct DraftsWriteFailed: Error {}

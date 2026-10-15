@@ -308,6 +308,16 @@ task cancels and not after them. That makes no difference. `ForegroundConnection
 5. The `.draftsNotRemoved` path has no test (no AC asks for one). It accounts for some of the 3
    lines `HostRegistry.swift` leaves uncovered.
 
+**Findings 1, 2 and 5, answered in a second `Tests:` commit.** These tests ran against the built
+`HostRegistry.swift`, and the suite is green (516 tests). Each mutation was undone with
+`git checkout --`.
+
+| Change | Mutation that now fails it |
+|---|---|
+| AC1 now asserts `loadSelection() == nil` and `registry.selection == nil` *before* the relaunch (`:93-94`) | `forget` without `reconcileSelection` fails `:93` and `:94` |
+| New test, `"AC4: a forget whose list cannot be saved leaves the selection alone"`. It replaces `hosts.json` with a directory, so only the list write fails | reconcile before the save fails `:204` (`loadSelection()?.hostId == drop.id`) and `:205` (`registry.selection`) |
+| New test, `"AC5: drafts that cannot be written away are reported, and the host and token are still gone"`. It uses an injected failing `DraftStore` write | swallowing the flush error fails `:255` (`expected .draftsNotRemoved, got nil`) |
+
 ## Notes for the next person
 
 `HostStoreTests.forgettingIsScoped` passed throughout the bug, because it tested the store and not
