@@ -1,9 +1,14 @@
 # Issue #66: file import releases security-scoped access before upload; raw upload unbounded
 
-**Status:** red tests written; awaiting gate 1 (tests). The plan was approved by Dan on 2026-10-15
-as written (`7aec420`), including the new `AttachmentUploadFailure.unreadable(reason:)` case and the
-PATCH version impact; the approval is posted on #66 ("Plan approved"). Tests written 2026-10-15 by
-the planner agent.
+**Status:** built, verified and ready for PR (2026-10-15).
+- Gate 1, the plan: approved by Dan as written (`7aec420`), including the new
+  `AttachmentUploadFailure.unreadable(reason:)` case.
+- Gate 1, the red tests: approved (`58d607e`).
+- Follow-up guard tests for verifier findings 1 and 2: approved by Dan (`c6bc9d3`).
+- Version impact: PATCH, Dan's decision.
+- Merge order: after #91 (#63), because S1 "an upload is sent once" depends on it. This branch
+  rebases onto `main` once #91 is in.
+- Device check C4 (one Files pick and one iCloud pick on a physical iPhone): not done yet.
 **Branch:** `issue-66-staged-file-import`
 **Version impact:** PATCH. This is a hardening fix: an oversized or unreadable file is now refused
 instead of sent. The kit's public API only grows. `upload(…byteCount:)` keeps its signature and
