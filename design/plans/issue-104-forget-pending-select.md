@@ -373,6 +373,56 @@ gains `State/HostSelectionGate.swift 95`.
    disconnects, which is right because B carries on. `selectedHost` still names the forgotten A
    until B publishes or fails. That is a short, visible window, not a lasting state.
 
+### Re-verification after the security review (AC7–AC9), at `f711824`
+
+The same method as above. Each change was made alone to `HostSelectionGate.swift` and restored
+with `git checkout --`. Afterwards all 607 tests were green and the tree was clean.
+
+| AC | Undone how | Test failure with it undone |
+|---|---|---|
+| AC7 | `forget` does not insert the mark | AC7: `!gate.isCurrent(during)`; AC8: `!gate.isCurrent(during)` (precondition); AC9: `!gate.isCurrent(ofB)` (precondition) |
+| AC7 | `begin` ignores the mark (`current = ticket`) | the same three failures |
+| AC8 | `finishForgetting` does nothing | AC8: `gate.isCurrent(after)`; AC3 "does not revive": `gate.isCurrent(fresh)` |
+| AC9 | the mark is global (`!forgetting.isEmpty`) | AC9: `gate.isCurrent(ofC)` |
+| AC7-9 | `git revert --no-commit e32d9dd` (slice B's kit commit), then `--abort` | 607 tests, 3 issues: the same set as the second red run |
+| — | `begin` during a forget keeps the previous ticket current (`if !forgetting.contains(hostId) { current = ticket }`) | **passes**: not pinned, see below |
+| — | a single-slot mark (`forgetting = [hostId]`), so a second forget replaces the first | **passes**: not pinned |
+| — | `finishForgetting` clears every host (`removeAll()`) | **passes**: not pinned |
+
+- `Tools/check.sh` (full): green in 124 s. 607 kit tests passed, coverage was 88.54% against an
+  88.50% baseline, Debug and Release built, 4 app tests passed, and the guard-tests check was ok.
+  The added line in the AC3 revive test belongs to the second `Tests:` commit, and guard-tests
+  accepts it.
+- **AC6, `forget`, by reading.** `defer { selections.finishForgetting(host.id) }` is the statement
+  right after `if selections.forget(host.id) { disconnect() }` (which is synchronous and cannot
+  throw), and it comes before the first `await` (`registry.forget`). A Swift `defer` runs on every
+  way out of the scope it was registered in, so it runs on the `listNotSaved` `return`, on the
+  partial-failure `catch`, and on success. In each case it runs after the final
+  `hosts = await registry.hosts`, so the mark is held until the list on screen has been updated.
+  This holds.
+- **`begin(B)` during B's forget also ends the previous ticket: correct.** In the app, nothing
+  observable depends on it. `select` calls `resetHostScopedState()` immediately before `begin`,
+  that reset calls `end()`, and so `current` is already nil when `begin` runs. The previous host's
+  streams and stores are torn down by then too. As a rule of the gate on its own terms it is also
+  the right choice: every `begin` supersedes (AC3). Keeping the previous ticket current would let
+  an older pending selection resume and publish into state that a newer `select` has already
+  reset, after the user asked for a different host. It is untested: the mutation that keeps the
+  previous ticket passes all 25 gate and registry tests. Given the reset, that gap is harmless
+  today.
+- **Size.** Production Swift from the plan commit to `HEAD` is +92/−22: `HostSelectionGate` +58
+  (31 of them code, the rest doc comment), `AppModel` +26/−19 and `HostRegistry` +8/−3. Slice B
+  added +11/−7 (gate +8/−6, `AppModel` +3/−1).
+
+**Finding, not blocking.** Nothing tests that the mark is per host when two forgets overlap. A
+single-slot mark, or a `finishForgetting` that clears every host, passes every test. In the app,
+`forget(B)` and then `forget(C)` can overlap, because each runs in its own `Task` from the hosts
+list. With either of those mutations, C finishing would clear B's mark while B's registry forget
+is still awaiting, and that reopens the AC7 gap for B. The code is right today (`Set.insert` and
+`Set.remove`). One more gate test would pin it: `forget(b)`, `forget(c)`, `finishForgetting(c)`,
+then a `begin(b)` must not be current. The same counting limit applies to forgetting the same host
+twice at once: the first `finishForgetting` clears the mark while the second forget is still in
+flight. In practice that is hard to reach, because the host has already left the list by then.
+
 ## Notes for the next person
 
 - An actor-owned "is this still current?" check is one `await` stale by the time you act on it.
