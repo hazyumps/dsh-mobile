@@ -76,21 +76,41 @@ public struct ConversationSnapshot: Sendable, Hashable {
 /// `throughSeq` is fixed for a follow generation and `beforeSeq` is exclusive
 /// (SPEC §7); both come from the window rather than from the caller.
 public struct ConversationPageRequest: Sendable, Hashable {
-    public var sessionId: String
+    /// Which conversation the page belongs to. A subagent needs its parent address, not its id,
+    /// so the address travels with the window rather than being rebuilt from an id at the call.
+    public var address: SessionAddress
     public var throughSeq: Int64
     public var beforeSeq: Int64?
     public var maxMessages: Int
 
+    /// The session the window is over: the child's id for a subagent.
+    public var sessionId: String { address.sessionId }
+
+    public init(
+        address: SessionAddress,
+        throughSeq: Int64,
+        beforeSeq: Int64? = nil,
+        maxMessages: Int = ChatSession.pageMessages
+    ) {
+        self.address = address
+        self.throughSeq = throughSeq
+        self.beforeSeq = beforeSeq
+        self.maxMessages = maxMessages
+    }
+
+    /// An ordinary session's window, which is the only shape that existed before #13.
     public init(
         sessionId: String,
         throughSeq: Int64,
         beforeSeq: Int64? = nil,
         maxMessages: Int = ChatSession.pageMessages
     ) {
-        self.sessionId = sessionId
-        self.throughSeq = throughSeq
-        self.beforeSeq = beforeSeq
-        self.maxMessages = maxMessages
+        self.init(
+            address: .session(sessionId),
+            throughSeq: throughSeq,
+            beforeSeq: beforeSeq,
+            maxMessages: maxMessages
+        )
     }
 }
 
@@ -147,7 +167,10 @@ public actor ChatSession {
     public typealias PageLoader = @Sendable (ConversationPageRequest) async throws -> ConversationPage
 
     private let client: MuxClient
-    private let sessionId: String
+    /// Where this conversation is read from. A subagent child needs its parent address, so the
+    /// address is what this type holds — not an id it would have to turn back into one
+    /// (``SessionAddress``).
+    private let address: SessionAddress
     private let streamId: String
     private let loadPage: PageLoader?
     /// Stops the turn this session is running. Optional for the same reason `loadPage` is: a
@@ -176,24 +199,43 @@ public actor ChatSession {
 
     /// - Parameters:
     ///   - client: the mux client for a connected host.
-    ///   - sessionId: the session to follow, opaque.
+    ///   - address: the conversation to follow. A subagent's address carries its parent and mode;
+    ///     the session form is refused for a child (`session/agent-busy`).
     ///   - loadPage: fetches older history. Optional because a session that is only
     ///     being read does not need it, and a caller that never pages gets a
     ///     ``snapshot`` with `canLoadOlder` false rather than a silent no-op.
     public init(
         client: MuxClient,
-        sessionId: String,
+        address: SessionAddress,
         loadPage: PageLoader? = nil,
         cancelRun: (() async throws -> Void)? = nil
     ) {
         self.client = client
-        self.sessionId = sessionId
+        self.address = address
         self.loadPage = loadPage
         self.cancelRun = cancelRun
         // Generated, never reused: a cancelled stream's id must not be handed to
         // a later consumer, which is the leak rule the mux client tests assert.
         self.streamId = "follow-\(UUID().uuidString)"
     }
+
+    /// An ordinary session's conversation. The shape every caller before #13 used.
+    public init(
+        client: MuxClient,
+        sessionId: String,
+        loadPage: PageLoader? = nil,
+        cancelRun: (() async throws -> Void)? = nil
+    ) {
+        self.init(
+            client: client,
+            address: .session(sessionId),
+            loadPage: loadPage,
+            cancelRun: cancelRun
+        )
+    }
+
+    /// The session this conversation orbits: the child's id for a subagent.
+    public var sessionId: String { address.sessionId }
 
     /// Builds a session on an already-connected coordinator's socket, with paging
     /// wired to the same connection.
@@ -203,21 +245,29 @@ public actor ChatSession {
     /// coordinator's `status` is what explains why.
     public static func connected(
         to coordinator: ConnectionCoordinator,
-        sessionId: String
+        address: SessionAddress
     ) async -> ChatSession? {
         guard let handle = await coordinator.activeStream() else { return nil }
         return ChatSession(
             client: handle.client,
-            sessionId: sessionId,
+            address: address,
             loadPage: { request in
                 // Through the coordinator, so a page inherits the connection's own
                 // status classification and the read path's retry policy.
                 try await coordinator.page(request)
             },
             cancelRun: {
-                try await coordinator.cancelSession(sessionId)
+                try await coordinator.cancelSession(address.sessionId)
             }
         )
+    }
+
+    /// An ordinary session's conversation, on an already-connected coordinator.
+    public static func connected(
+        to coordinator: ConnectionCoordinator,
+        sessionId: String
+    ) async -> ChatSession? {
+        await connected(to: coordinator, address: .session(sessionId))
     }
 
     // MARK: - Reading
@@ -295,12 +345,12 @@ public actor ChatSession {
         // `maxMessages` is what keeps the baseline receivable. It is optional on the
         // wire, and leaving it out asks the host for the whole transcript — 1.28 MB for a
         // real session here, which destroys the socket (see ``pageMessages``).
+        //
+        // STUB: `address.wire` is the session member for every address, so a subagent follow
+        // sends the form the host refuses. See the plan's AC7.
         let args = JSONValue.object([
             "request": .object([
-                "address": .object([
-                    "kind": .string("session"),
-                    "sessionId": .string(sessionId),
-                ]),
+                "address": address.wire,
                 "assistantStream": .bool(true),
                 "maxMessages": .int(Int64(Self.pageMessages)),
             ]),
@@ -381,7 +431,7 @@ public actor ChatSession {
         }
         let generation = builder.generation
         let request = ConversationPageRequest(
-            sessionId: sessionId,
+            address: address,
             throughSeq: throughSeq,
             beforeSeq: builder.oldestSeq
         )

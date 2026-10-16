@@ -1,6 +1,7 @@
 # Issue #13: a session's subagents, and their timing
 
-**Status:** draft
+**Status:** approved (Patrick, 2026-10-15) — all three slices; the entry point goes on the
+conversation toolbar, as a count badge opening a sheet
 **Branch:** `issue-13-subagents-view`
 **Version impact:** MINOR — a new screen and new kit API (`SubagentRoster`, `SessionAddress`).
 No bump in this PR; a line under `## [Unreleased]`.
@@ -13,7 +14,7 @@ a parent session's whole delegation tree — label, mode, running state, token t
 duration, opened from the conversation header — while on the phone a delegated run is only a row in
 someone else's transcript.
 
-**Captured 2026-10-16** against the live relay (`https://127.0.0.1:3443`, host `0.2.0-rc.2`,
+**Captured 2026-10-15** against the live relay (`https://127.0.0.1:3443`, host `0.2.0-rc.2`,
 protocol 4), on a session with thirty continuable children:
 
 - `session/projections` answers with `values.subagentCatalog`:
@@ -125,7 +126,7 @@ only into the typed ``SessionProjectionValues``, so `HostSessionStore.SessionRec
 `projectionValues: [String: JSONValue]?` — decoded from the same `projections.values` key, which is
 the shape `SessionUsage` and `SessionInputSignal` already consume. `Models/` is not touched.
 
-Why per key rather than per session: the control baseline carried **39** sessions on 2026-10-16 while
+Why per key rather than per session: the control baseline carried **39** sessions on 2026-10-15 while
 `session/list` carried **200**, and a child of the capture session that was *not* in the baseline
 proved the two sets differ. Reading only the control map would leave older children with no timing;
 reading only the index would freeze a running child between the 15-second refreshes.
@@ -170,7 +171,55 @@ reading only the index would freeze a running child between the 15-second refres
 
 ## Red evidence
 
-*To be filled in with the `Tests:` commit.*
+`Tools/check.sh --red` on the `Tests:` commit — the stubs in `Sources/` are deliberately wrong, so
+the tree is the contract and nothing else:
+
+```
+kit tests: fail on assertions (full log: .build/check/test.log)
+app tests: ok
+red: ok it compiles and fails on assertions (kit: fail, app: pass; logs in .build/check).
+check: ok — red for the right reason (33s)
+```
+
+Kit: **577 tests in 41 suites**, 32 issues, all of them assertion failures — 23 new tests in two
+suites, and no compile error, no crash. The 16 that fail:
+
+| Test | First assertion that fails |
+|---|---|
+| `AC1: the roster is the catalog, in the host's order` | `roster.entries.map(\.mode) == [.continuable, …]` → `[.unknown, …]` |
+| `AC1: an unlabelled entry falls back to its session id` | `roster.entries.first?.mode == .oneShot` → `.unknown` |
+| `AC1: an unrecognised mode keeps its raw value rather than failing the catalog` | `roster.entries.first?.mode == .unrecognized("cascading")` → `.unknown` |
+| `AC2: the entry point shows only for a reported, non-empty roster` | `showsEntryPoint == false` for an absent and for an empty catalog → `true` |
+| `AC3: activity follows the index and the last turn` | `map(\.activity) == [.running, .completed, .inactive]` → `[.inactive, …]` |
+| `AC3: a completed turn is told apart from an interrupted one` | `timing?.lastTurnCompleted == true` → `nil` |
+| `AC3: a child the index does not know reports no activity, not inactive` | `activity == nil` → `.inactive` |
+| `AC4: with no turn open the duration is settledMs` | `durationMs(now:) == 500` → `nil` |
+| `AC4: a running child's open turn runs to now` | `== 2_500` → `nil` |
+| `AC4: an inactive child's open turn is bounded by its own through` | `== 900` → `nil` |
+| `AC4: the captured running child's duration is settled plus its open window` | `== 9_634_145` → `nil` |
+| `AC5: the token total sums the four disjoint buckets` | `== 112_414_835` → `nil` |
+| `AC5: a partial usage sums what the host reported` | `== 100` → `nil` |
+| `AC6: the running count is the running children, and the tick follows it` | `runningCount == 1` → `0` |
+| `AC7: a subagent follow opens with the durable parent address` | `address["kind"] == "subagent"` → `"session"` |
+| `AC7: a subagent page carries the durable parent address` | `address["kind"] == "subagent"` → `"session"` |
+
+**Four planned guards pass against the stubs**, and that is what makes them guards rather than
+evidence:
+
+- `AC2: an absent catalog is not an empty one` — the stub's `isReported` is the real rule, so this
+  pins that the *implementation* does not collapse the two.
+- `AC4: no reported timing is nil, not zero` and `AC5: a child with no reported usage has no token
+  total` — the stub's `Entry` carries no timing or usage at all, so both pass; each fails the moment
+  an implementation substitutes `0`.
+- `AC7: an ordinary session still follows / pages by session address`, and
+  `the child's own subagent projection agrees with the catalog` — the unchanged behaviour, which had
+  to keep passing.
+
+The first draft of the `Tests:` commit crashed instead of failing: the stub returned an **empty**
+`entries` array for every catalog, so two tests died on `entries[0]` with `Index out of range` and
+the process ended, hiding every other result. `WORKFLOW.md` step 2 is explicit about this — a stub
+returns a wrong-but-valid value, never a crash — so the stub builds one row per catalog member and
+every assertion gets to speak.
 
 ## Verification
 
