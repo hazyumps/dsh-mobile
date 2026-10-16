@@ -492,7 +492,7 @@ final class AppModel {
                 )
                 // Never retried: two identical results for one event cost a second turn of
                 // the agent's work in the worst case (SPEC §8).
-                try await client.submitEventResult(request, retryPolicy: .none)
+                try await client.submitEventResult(request)
             }
             let store = InteractionStore(
                 identity: { await coordinator.remoteEvents()?.identity },
@@ -1049,6 +1049,26 @@ final class AppModel {
         }
     }
 
+    // MARK: - Subagents (#13)
+
+    /// The subagents a session delegated, from the projections the host publishes for it and for
+    /// each child.
+    ///
+    /// The two-source rule — the live `session/control` value per key, the `session/list` row
+    /// otherwise — lives in ``SubagentRoster`` and is tested there. This only hands it the store's
+    /// two maps, which is why it can be a two-liner rather than a second implementation.
+    ///
+    /// No store yet is "not reported" rather than an empty roster: nothing has arrived, and a
+    /// conversation with a control that opens onto nothing is worse than one without the control.
+    func roster(for parentSessionId: String) -> SubagentRoster {
+        guard let hostSnapshot else { return SubagentRoster(catalog: nil, facts: [:]) }
+        return SubagentRoster(
+            parentSessionId: parentSessionId,
+            rows: hostSnapshot.sessions,
+            live: hostSnapshot.projections
+        )
+    }
+
     /// Prepares a picked image against the host's limits and stages it for the next prompt.
     ///
     /// Conversion happens here, before Send, because SPEC §9 asks for conversion errors up
@@ -1504,8 +1524,16 @@ final class AppModel {
     /// writing to one are different capabilities (SPEC §4), and this is the seam
     /// that keeps them out of the view.
     func chatSession(for sessionId: String) async -> ChatSession? {
+        await chatSession(for: .session(sessionId))
+    }
+
+    /// The chat session for one conversation addressed as a subagent (#13).
+    ///
+    /// The address travels whole because the host needs it whole: a child's session form is refused
+    /// with `session/agent-busy`, so the parent and the mode cannot be reconstructed here.
+    func chatSession(for address: SessionAddress) async -> ChatSession? {
         guard status.isUsable, let coordinator else { return nil }
-        return await ChatSession.connected(to: coordinator, sessionId: sessionId)
+        return await ChatSession.connected(to: coordinator, address: address)
     }
 
     /// Sends a prompt. Never retried — an uncertain send is reported, not

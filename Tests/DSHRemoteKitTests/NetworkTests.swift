@@ -537,8 +537,9 @@ func status502ExhaustsToHarnessUnavailable() async throws {
 
 @Test("the retry policy can forbid retrying a user submission")
 func retryPolicyNoneStopsAfterOneAttempt() async throws {
-    // SPEC §3.4 / §6.6: an uncertain prompt is never automatically resent, so
-    // prompt submission passes `.none`.
+    // SPEC §3.4 / §6.6: an uncertain prompt is never automatically resent. The
+    // policy is the client's, given at construction: `call` takes none of its own
+    // (#63), so this pins that a client built with `.none` makes one attempt.
     let transport = StubRelayTransport(
         responses: Array(
             repeating: .json(status: 429, Data(), headers: ["Retry-After": "5"]),
@@ -546,10 +547,10 @@ func retryPolicyNoneStopsAfterOneAttempt() async throws {
         )
     )
     let sleeper = RecordingRelaySleeper()
-    let client = makeRPCClient(transport: transport, sleeper: sleeper)
+    let client = makeRPCClient(transport: transport, sleeper: sleeper, policy: .none)
 
     let error = await #expect(throws: DshRPCError.self) {
-        try await client.callVoid("session/prompt", args: RPCEmptyRequest(), retryPolicy: RPCFailureRetryPolicy.none)
+        try await client.callVoid("session/prompt", args: RPCEmptyRequest())
     }
     #expect(error == .rateLimited(retryAfterSeconds: 5, attempts: 1))
 
@@ -1562,7 +1563,7 @@ func pairingLockoutIsDistinguished() async throws {
         )
     )
     let sleeper = RecordingRelaySleeper()
-    let client = PairingClient(transport: transport, sleeper: sleeper, retryPolicy: .none)
+    let client = PairingClient(transport: transport, sleeper: sleeper)
 
     let error = await #expect(throws: PairingError.self) {
         try await client.claim(unpinnedPayload(client), deviceName: "phone")

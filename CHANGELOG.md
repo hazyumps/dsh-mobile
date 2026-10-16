@@ -9,6 +9,14 @@ Fixed / Security, with its issue number. The release renames the section.
 
 ## [Unreleased]
 
+### Added
+- A session's subagents, and how long each has been working. The conversation's toolbar carries a
+  count when the session has delegated anything, and opens a roster built from the harness's own
+  `subagentCatalog` and `subagentTiming`: mode, running or completed or inactive, token total, and
+  the active-turn duration, ticking once a second while something is running. A row opens the
+  child's transcript read-only — continuing a child is a separate write path and is not in this
+  change (#13).
+
 ### Fixed
 - A Release build compiles again; it had been failing on a debug-only trace helper (#64).
 - Assistant replies no longer lose the left edge of their first and last letters (#74).
@@ -16,9 +24,24 @@ Fixed / Security, with its issue number. The release renames the section.
   used to stop every later attempt until the app was relaunched (#26).
 - A slow or failed request no longer rebuilds the connection, so the status chip stops flickering
   on a connection that is working (#82).
+- Opening a conversation whose transcript carries a `surfaceOp` the app had not modelled no longer
+  takes the whole connection down with it. The field is kept whole, and a frame body this build
+  cannot decode can no longer fail every stream on the socket (#99).
+- Writes are sent exactly once. Approvals and answers, file uploads, session cancels and the
+  pairing claim were retried up to three times on a 429 or 502, so a write the relay had already
+  applied could be applied again; a rate-limited pairing claim now reports the lockout at once
+  instead of waiting minutes (#63).
 - Forgetting a host is saved: it no longer comes back, without its credential, after a relaunch,
   and its drafts and the selected host's staged files and commands go with it. A forget that
   could not be saved keeps the host and says so (#65).
+
+### Changed
+- Kit API: the `retryPolicy:` parameter is gone from `DshRpcClient.call`/`callVoid`,
+  `DshBareEndpointClient.init`/`submitEventResult` and `PairingClient.init`/`claim`. Reads use the
+  client's policy, writes use `mutate` or a write-only client. Incompatible: MINOR (#63).
+
+### Security
+- A relay connection with neither a pin nor platform validation is refused instead of trusted (#68).
 
 ### Added (process, no version impact)
 - A written workflow and local CI: `docs/process/`, `Tools/check.sh` with a pre-push hook, a

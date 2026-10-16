@@ -134,9 +134,12 @@ Two behaviours that are pinned there and worth knowing before changing anything:
 - **Success is `result.ok`, never the status.** An HTTP 200 carrying `ok: false` is a
   business refusal with the host's `code`, `message` and `details.endpoint` intact
   (SPEC §6.2, SPEC §6.9), and `{"ok":true}` with no `value` key is a success.
-- **Retry is opt-out, not opt-in.** 429 and 502 retry within
-  `RPCFailureRetryPolicy.default`; 403, 401, 404 and a pin mismatch never do. Prompt
-  submission passes `.none`, because SPEC §3.4 forbids resending an uncertain prompt.
+- **Reads retry; writes never do.** A read through `DshRpcClient.call` retries 429 and 502
+  within the client's policy (`RPCFailureRetryPolicy.default`); 403, 401, 404 and a pin
+  mismatch never retry. Writes go through `DshRpcClient.mutate` or a write-only client
+  (`DshBareEndpointClient`, `PairingClient`), whose exchange is always
+  `RPCFailureRetryPolicy.none`, because SPEC §3 forbids resending an uncertain write. No API
+  takes an optional policy (#63).
 
 Host identifiers — session IDs, device IDs, endpoints, provider and model names, error
 codes — are opaque `String`s everywhere, per SPEC §5.

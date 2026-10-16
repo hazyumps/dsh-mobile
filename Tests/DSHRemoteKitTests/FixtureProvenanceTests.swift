@@ -62,6 +62,11 @@ enum FixtureProvenance {
             proto: capturedProtocol,
             basis: "the file's own note: POST /api/scheduledTasks/list against the live relay, 2026-10-12, task text and ids redacted"
         ),
+        .rpcSubagentRoster: .captured(
+            host: capturedHost,
+            proto: capturedProtocol,
+            basis: "the file's own source: POST /api/session/projections and /api/session/list against the relay on 127.0.0.1:3443, 2026-10-15, ids, labels and titles redacted"
+        ),
 
         // The rest are hand-built. The doc comments in `Sources/` say each is "proven by"
         // its fixture, which is the opposite direction: the fixture is how the test knows
@@ -72,6 +77,11 @@ enum FixtureProvenance {
         .rpcRequest: .synthetic(basis: "SPEC §6.2 envelope shape"),
         .rpcTypedError: .synthetic(basis: "SPEC §6.9 typed error shape"),
         .forbiddenUnpaired: .synthetic(basis: "the relay's own 403 body, per SPEC §6.3"),
+        // Issued over the captured key in relay-spki-pin.json by a throwaway issuer whose
+        // key was deleted; the file's own `source` lists the openssl commands (#68).
+        .relayTrustCertificates: .synthetic(
+            basis: "certificates issued over the captured relay key; SPEC §6.3"
+        ),
     ]
 }
 

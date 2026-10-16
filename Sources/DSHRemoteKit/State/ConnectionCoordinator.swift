@@ -519,11 +519,10 @@ public actor ConnectionCoordinator {
             agentPreset: agentPreset
         )
         do {
-            let response = try await client.call(
+            let response = try await client.mutate(
                 Self.sessionCreateMethod,
                 args: SessionCreateArguments(request: request),
-                returning: SessionCreateValue.self,
-                retryPolicy: RPCFailureRetryPolicy.none
+                returning: SessionCreateValue.self
             )
             // A missing value after `ok: true` would leave a session whose identity this
             // client cannot name, which is worse than reporting the anomaly.
@@ -581,19 +580,13 @@ public actor ConnectionCoordinator {
         }
     }
 
-    /// One page of older history, decoded from `session/page`.
-    ///
-    /// A read, so it uses the ordinary read-retry policy rather than the mutation
-    /// policy — but note what SPEC §7 fixes about its arguments: `throughSeq` is the
-    /// *opening follow snapshot's* cursor for the generation the caller is showing, not
-    /// a delivery event's watermark, and `beforeSeq` is exclusive. Both come from the
-    /// conversation window, which is why the request carries them rather than this
-    /// method deriving them.
-    @discardableResult
     /// Stops the turn a session is running.
     ///
     /// Nothing in `userQuestions` can decline a question — `answer` and `attachWait` are the whole
     /// namespace — so this is how a question gets released without an answer.
+    ///
+    /// A write, so it goes once (SPEC §3, "Retry rule"): a 502 after the host has already
+    /// cancelled would otherwise send the cancel again (#63).
     public func cancelSession(_ sessionId: String) async throws {
         let client = DshRpcClient(
             baseURL: origin.baseURL,
@@ -601,7 +594,7 @@ public actor ConnectionCoordinator {
             transport: makeTransport(origin)
         )
         do {
-            _ = try await client.call(
+            _ = try await client.mutate(
                 Self.sessionCancelMethod,
                 args: SessionCancelArguments(request: SessionCancelRequest(sessionId: sessionId)),
                 returning: SessionCancelResponse.self
@@ -614,14 +607,26 @@ public actor ConnectionCoordinator {
         }
     }
 
+    /// One page of older history, decoded from `session/page`.
+    ///
+    /// A read, so it uses the ordinary read-retry policy rather than the mutation
+    /// policy — but note what SPEC §7 fixes about its arguments: `throughSeq` is the
+    /// *opening follow snapshot's* cursor for the generation the caller is showing, not
+    /// a delivery event's watermark, and `beforeSeq` is exclusive. Both come from the
+    /// conversation window, which is why the request carries them rather than this
+    /// method deriving them.
+    @discardableResult
     public func page(_ request: ConversationPageRequest) async throws -> ConversationPage {
         let client = DshRpcClient(
             baseURL: origin.baseURL,
             authorization: origin.authorization,
             transport: makeTransport(origin)
         )
+        // The window's own address, not one rebuilt from `sessionId`: a subagent's session form is
+        // refused by the host (`session/agent-busy`), so the parent address has to survive the trip
+        // from the screen that opened the conversation.
         let argument = SessionPageRequest(
-            address: .session(.init(kind: "session", sessionId: request.sessionId)),
+            address: request.address.pageAddress,
             throughSeq: request.throughSeq,
             beforeSeq: request.beforeSeq,
             maxMessages: Int64(request.maxMessages)
@@ -647,13 +652,17 @@ public actor ConnectionCoordinator {
 
     /// Maps one `session/page` record onto the durable envelope the rest of the app
     /// already folds. The generated record type does the decoding; this is a rename.
+    ///
+    /// `surfaceOp` is passed through **whole**. It used to be narrowed with `.stringValue`,
+    /// which silently dropped the object form the host sends on `tool/result` (#99) — the same
+    /// narrowing that failed the frame on the mux path.
     private static func envelope(from record: SessionPageRecordsItem) -> DurableEventEnvelope {
         DurableEventEnvelope(
             type: record.event.type,
             seq: record.event.seq,
             time: record.event.time,
             data: record.event.data,
-            surfaceOp: record.event.surfaceOp?.stringValue
+            surfaceOp: record.event.surfaceOp
         )
     }
 
@@ -760,11 +769,10 @@ public actor ConnectionCoordinator {
             clientTimeZone: TimeZone.current.identifier
         )
         do {
-            _ = try await client.call(
+            _ = try await client.mutate(
                 Self.sessionPromptMethod,
                 args: SessionPromptArguments(request: request),
-                returning: SessionPromptValue.self,
-                retryPolicy: RPCFailureRetryPolicy.none
+                returning: SessionPromptValue.self
             )
         } catch {
             let failure = Self.failure(from: error)
@@ -812,11 +820,10 @@ public actor ConnectionCoordinator {
             ])
         )
         do {
-            let response = try await client.call(
+            let response = try await client.mutate(
                 Self.userQuestionsAnswerMethod,
                 args: arguments,
-                returning: UserQuestionsAnswerResult.self,
-                retryPolicy: RPCFailureRetryPolicy.none
+                returning: UserQuestionsAnswerResult.self
             )
             // `ok: true` means the call was accepted; this value says whether the
             // host actually applied it. A question that had already been abandoned
@@ -865,11 +872,10 @@ public actor ConnectionCoordinator {
             var answer: JSONValue
         }
         do {
-            let response = try await client.call(
+            let response = try await client.mutate(
                 Self.userQuestionsAnswerMethod,
                 args: ContinuedAnswerArguments(agentId: agentId, callId: callId, answer: body),
-                returning: UserQuestionsAnswerResult.self,
-                retryPolicy: RPCFailureRetryPolicy.none
+                returning: UserQuestionsAnswerResult.self
             )
             return response.result.value ?? false
         } catch {

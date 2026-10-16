@@ -190,6 +190,10 @@ real fix is the per-host state object in the AppModel extraction, which is outsi
   bug this issue is about.
 - **Revoking the device at the relay.** SPEC §6.3 keeps forget and revoke separate, and the
   confirmation text already says so.
+- **SPEC A20's "staging data".** Forget removes credentials and drafts here. #66 (PR #97) does not
+  key staged copies by host: each copy is discarded right after its one upload, and the launch
+  sweep clears anything a kill left behind. So forget has nothing per-host to remove; agreed with
+  the #66 session on 2026-10-16.
 - **Moving the rest of `select`/`disconnect` into the kit.** That is the AppModel extraction. This
   issue moves only the host lifecycle.
 
