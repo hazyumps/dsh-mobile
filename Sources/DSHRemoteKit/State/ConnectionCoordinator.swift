@@ -622,9 +622,9 @@ public actor ConnectionCoordinator {
             authorization: origin.authorization,
             transport: makeTransport(origin)
         )
-        // STUB: `request.address.pageAddress` is the session member for every address, so a
-        // subagent page sends the form the host refuses ("subagent Sessions require their durable
-        // parent address"). See the plan's AC7.
+        // The window's own address, not one rebuilt from `sessionId`: a subagent's session form is
+        // refused by the host (`session/agent-busy`), so the parent address has to survive the trip
+        // from the screen that opened the conversation.
         let argument = SessionPageRequest(
             address: request.address.pageAddress,
             throughSeq: request.throughSeq,

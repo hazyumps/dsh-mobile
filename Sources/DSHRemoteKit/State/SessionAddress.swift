@@ -53,19 +53,38 @@ public enum SessionAddress: Sendable, Hashable {
 
     /// The address object as `session/follow`'s `args.request.address` carries it.
     ///
-    /// STUB: the session member, which is the shape this client already sent for everything.
-    /// See the plan's AC7.
+    /// Written out rather than derived from the generated union, because the follow's args are
+    /// built as raw ``JSONValue`` (`ChatSession.start`). ``pageAddress`` is the generated form of
+    /// the same object and a test asserts both, so the two cannot drift apart.
     var wire: JSONValue {
-        .object([
-            "kind": .string("session"),
-            "sessionId": .string(sessionId),
-        ])
+        switch self {
+        case .session(let sessionId):
+            .object([
+                "kind": .string("session"),
+                "sessionId": .string(sessionId),
+            ])
+        case .subagent(let parentSessionId, let childSessionId, let mode):
+            .object([
+                "kind": .string("subagent"),
+                "parentSessionId": .string(parentSessionId),
+                "childSessionId": .string(childSessionId),
+                "mode": .string(mode.rawValue),
+            ])
+        }
     }
 
     /// The same address, as `session/page`'s generated request types it.
-    ///
-    /// STUB: the session member. See the plan's AC7.
     var pageAddress: SessionPageRequestAddress {
-        .session(.init(kind: "session", sessionId: sessionId))
+        switch self {
+        case .session(let sessionId):
+            .session(.init(kind: "session", sessionId: sessionId))
+        case .subagent(let parentSessionId, let childSessionId, let mode):
+            .subagent(.init(
+                kind: "subagent",
+                parentSessionId: parentSessionId,
+                childSessionId: childSessionId,
+                mode: .init(rawValue: mode.rawValue)
+            ))
+        }
     }
 }

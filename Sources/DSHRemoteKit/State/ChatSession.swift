@@ -346,8 +346,9 @@ public actor ChatSession {
         // wire, and leaving it out asks the host for the whole transcript — 1.28 MB for a
         // real session here, which destroys the socket (see ``pageMessages``).
         //
-        // STUB: `address.wire` is the session member for every address, so a subagent follow
-        // sends the form the host refuses. See the plan's AC7.
+        // The address is the caller's, not this type's: a subagent's session form is refused
+        // outright (`session/agent-busy`, "subagent Sessions require their durable parent
+        // address"), so it travels in from the screen that knew which conversation it opened.
         let args = JSONValue.object([
             "request": .object([
                 "address": address.wire,
