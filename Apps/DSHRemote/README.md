@@ -263,6 +263,7 @@ shipping app's normal flow is what runs by default.
 | `DSH_SETTINGS` | Opens Settings on launch — its only other door is a drawer row. |
 | `DSH_DIAGNOSTICS` | Opens Settings straight to the diagnostics preview. Needs `DSH_SETTINGS` as well: the sheet it lives in has to be open for the flag to mean anything. |
 | `DSH_TELEMETRY` | Starts a conversation with the harness event stream shown rather than folded behind the toolbar toggle. |
+| `DSH_SUBAGENTS` | Opens the conversation's subagents sheet at launch, so a roster that is normally one tap behind a toolbar control can be looked at on a machine that cannot tap. |
 | `DSH_FOCUS` | Focuses the composer on Home, so the keyboard's interaction with the rest of the screen can be reviewed without a tap. |
 | `DSH_DRAWER` | Opens the drawer on Home, for the same reason. Pair it with `DSH_FOCUS` to reproduce the composer-focused-then-drawer-opened case. |
 | `DSH_DRAFT` | Prefills the conversation composer, so the `/` command suggestions can be seen on a machine that cannot type. |

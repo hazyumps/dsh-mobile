@@ -65,7 +65,15 @@ struct ConversationView: View {
     /// behaviour can be reviewed on a machine that cannot tap.
     @State private var composerFocusRequest = 0
     @State private var showsTelemetry = ProcessInfo.processInfo.environment["DSH_TELEMETRY"] != nil
-    @State private var showsSubagents = false
+    /// Opens the subagents sheet at launch, so a screen that is normally one tap away can be looked
+    /// at on a machine that cannot tap. Behind the compiler, so no Release build can read it.
+    @State private var showsSubagents = {
+        #if DEBUG
+        ProcessInfo.processInfo.environment["DSH_SUBAGENTS"] != nil
+        #else
+        false
+        #endif
+    }()
     @Environment(\.scenePhase) private var scenePhase
     @State private var followAttempt = 0
     @State private var didSendLaunchMessage = false

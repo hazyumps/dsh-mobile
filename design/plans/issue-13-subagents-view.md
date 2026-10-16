@@ -301,24 +301,38 @@ empty` **passes** at `a2c8366` but **fails** in this combined tree, because here
 are stubbed too and the stub's `showsEntryPoint` is unconditionally `true`. It is a real assertion,
 guarded by the rules it exercises rather than by the factory.
 
-`Tools/check.sh`: **green** (full, 69 s) — 582 tests in 42 suites, coverage 88.36% with the baseline
-raised from 88.05 in the same commit, Debug **and** Release build, app tests pass, `guard-tests`
-clean, lint clean.
+`Tools/check.sh`: **green** (full, 60 s) — 582 tests in 42 suites, coverage 88.38% against the
+88.36 baseline raised from 88.05 in the same commit, Debug **and** Release build, app tests pass,
+`guard-tests` clean, lint clean (the `DSH_SUBAGENTS` read sits inside `#if DEBUG`, so the
+`debug-env` allowlist count is unchanged).
 
-**AC8 by eye.** `DSH_SCREEN_GALLERY=subagents` on a booted simulator, in **both** appearances, and
-both kept as evidence: `design/mockups/2026-10-15-subagents/01-subagents-light.png` and
-`02-subagents-dark.png`. Five children render as intended: running (a dotted circle, `8m 30s`,
-1,262,840 tokens), completed (a green check, `46m 0s`), interrupted (a small dot, `5m 24s` —
-`settledMs` plus the bounded `through`, not the wall clock), an unlabelled one-shot whose row is
-named by its session id, and one the index has not reported, drawn with no glyph and no figures. The
-header reads `1 running of 5`. Light and dark were both checked, because a single-appearance
-screenshot has been wrong before.
+**AC8 by eye, on the real host.** Paired `dsh-verify` to the running relay on loopback (one-shot
+code, SPKI pin from the pairing page), opened the radiance session with `DSH_OPEN_SESSION=1` and
+`DSH_SESSION_ID=session-4755645d-…`, and opened the sheet with the new **`DSH_SUBAGENTS=1`**.
 
-**Not verified by eye: the conversation's toolbar control** that opens this sheet. The screen gallery
-draws the transcript rather than `ConversationView`, and seeding a roster the toolbar would read
-needs a host snapshot the gallery has no seam for. The control is ten lines over
-`roster.showsEntryPoint` and `roster.runningCount`, both tested; it is reviewed, not looked at, and
-it is the first thing to check on the phone.
+- The **toolbar control read `34`**, and the host's own `session/projections` for that session
+  answers `subagentCatalog` with exactly **34** entries. The badge is the host's number.
+- The **sheet read `4 running of 34`**, and cross-checking the catalog against `session/list` gives
+  exactly **4** rows with `running: true`. The count, the order, the labels, the titles, the
+  durations and the token totals all came from the host.
+- Live screenshots are **not committed**: they are real session labels and titles, and `AGENTS.md`
+  says host data stays local.
+
+So the toolbar control that was going to be "reviewed, not looked at" is looked at, and the only
+part of the live path not exercised by eye is the push from a row into a child's transcript. That
+part is what AC7's tests cover, and the probe above shows the host accepting the subagent address —
+`session/page` refused the *cursor*, not the address.
+
+`DSH_SUBAGENTS` is S7: inside `#if DEBUG` (the compiler, not a runtime check, so no Release build can
+read the variable at all) and listed in `Apps/DSHRemote/README.md`.
+
+**AC8's gallery shots** are kept, because they are synthetic and show the states the live host does
+not: `design/mockups/2026-10-15-subagents/01-subagents-light.png` and `02-subagents-dark.png`. Five
+children render as intended: running (a dotted circle, `8m 30s`, 1,262,840 tokens), completed (a green
+check, `46m 0s`), interrupted (a small dot, `5m 24s` — `settledMs` plus the bounded `through`, not the
+wall clock), an unlabelled one-shot whose row is named by its session id, and one the index has not
+reported, drawn with no glyph and no figures. Light and dark were both checked, because a
+single-appearance screenshot has been wrong before.
 
 ## Notes for the next person
 
