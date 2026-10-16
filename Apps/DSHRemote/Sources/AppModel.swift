@@ -122,6 +122,7 @@ final class AppModel {
     private let drafts: DraftStore
     /// Where an imported file is copied while its security scope is held (#66).
     private let staging: AttachmentStaging
+    private let stageFile: StageFile
     /// The origin the current host was connected with, kept so an interaction result can
     /// be posted on the same trust policy and credential as everything else.
     private var origin: ConnectionCoordinator.Origin?
@@ -279,9 +280,24 @@ final class AppModel {
         #endif
     }
 
+    /// How ``importFile(at:to:)`` copies a picked file into staging.
+    ///
+    /// A parameter only so a test can hold an import between its copy and its upload, which is
+    /// where a host switch has to be checked for (#66 addendum). Production passes nothing and
+    /// gets ``defaultStageFile``. `AttachmentStaging.stage` stays synchronous and stays the only
+    /// place the security scope is held.
+    typealias StageFile = @Sendable (AttachmentStaging, URL) async throws -> StagedFile
+
+    /// The copy runs off the main actor, because a 20 MiB copy would otherwise stall the UI.
+    static let defaultStageFile: StageFile = { staging, url in
+        try await Task.detached(priority: .userInitiated) { try staging.stage(url) }.value
+    }
+
     /// - Parameter stagingDirectory: where imported files are copied before upload (#66).
     ///   Swept here, so copies a killed launch left behind do not accumulate.
-    init(draftsDirectory: URL? = nil, stagingDirectory: URL? = nil) {
+    /// - Parameter stageFile: how an import copies into staging; `nil` is ``defaultStageFile``.
+    init(draftsDirectory: URL? = nil, stagingDirectory: URL? = nil, stageFile: StageFile? = nil) {
+        self.stageFile = stageFile ?? Self.defaultStageFile
         drafts = DraftStore(directory: draftsDirectory ?? Self.defaultDraftsDirectory)
         // The registry drops a selection naming a host that is no longer saved. Its list is
         // read synchronously, so a launch with hosts does not flash the pairing introduction.
@@ -1018,9 +1034,12 @@ final class AppModel {
         attachmentError = nil
         isUploading = true
         let staging = staging
-        let staged = await Task.detached(priority: .userInitiated) {
-            Result { try staging.stage(fileURL) }
-        }.value
+        let staged: Result<StagedFile, any Error>
+        do {
+            staged = .success(try await stageFile(staging, fileURL))
+        } catch {
+            staged = .failure(error)
+        }
         isUploading = false
 
         switch staged {
@@ -1821,6 +1840,19 @@ final class AppModel {
         browse = .idle
         selectionID = UUID()
     }
+
+    #if DEBUG
+    /// Debug builds only: a host switch without a network, for the app tests (#66 addendum).
+    ///
+    /// Goes through ``resetHostScopedState()``, the one reset `select`, `disconnect` and forget
+    /// share, so it replaces the selection generation exactly as they do, then installs the given
+    /// uploader as the new host's. `select` itself needs a Keychain token, a coordinator and a
+    /// socket. Not a launch variable: nothing outside a test can reach it.
+    func replaceHostForTesting(uploader: AttachmentUploader?) {
+        resetHostScopedState()
+        attachmentUploader = uploader
+    }
+    #endif
 
     // MARK: - Fixture seeding
 

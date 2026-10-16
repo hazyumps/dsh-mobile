@@ -411,7 +411,14 @@ and checks after") was wrong, as finding 1 showed; the first test above is what 
 
 ## Addendum: a host switch during an import (PR #97 review)
 
-**Status:** draft, awaiting gate 1 (2026-10-16). **Version impact:** still PATCH (see below).
+**Status:** approved by Dan at gate 1 (2026-10-16), as written; tests red (see "Red evidence"
+below). **Version impact:** still PATCH (see below).
+
+Dan's decisions at the gate:
+- **Wired seams, not stubs**: the `stageFile` init parameter, whose default is exactly today's
+  behaviour, and the `#if DEBUG` `replaceHostForTesting(uploader:)` hook.
+- **A failure that settles after a switch is shown nowhere** (the AC11 gate question).
+- **A follow-up issue for the siblings** (see "Sibling findings"); Dan files it.
 
 ### Context
 
@@ -558,6 +565,25 @@ change, and the app-internal seams are not public.
 | `runCommand` publishes `commands`/`commandMessage` after awaits | stale message on the new host; the store was captured, so nothing is sent to the wrong host | same follow-up |
 | `submit(_:)` (answers, approvals) | captures `interactionStore` before its await and returns its message to the caller; does not publish | none: bound to the original host already |
 | `isUploading` | an abandoned import can clear the spinner of a newer import on the new host | **Not tested here**; the builder may guard it with the same check. Listed in the follow-up |
+
+### Red evidence
+
+`Tools/check.sh --red`, 2026-10-16, on the tree of the `Tests:` commit: "red: ok it compiles and
+fails on assertions (kit: pass, app: fail)". Lint (S7 included) and the planner-test guard pass.
+The five predicted tests fail on the predicted assertion; the three guards pass:
+
+| Test | Result today |
+|---|---|
+| AC9 not uploaded to host B | `sentToB == 0` → `sentToB → 1` (host A: 0, passes) |
+| AC9 leaves no copy | passes (guard) |
+| AC9 no switch, uploaded once | passes (guard) |
+| AC10 no receipt | `held.model.stagedAttachments[sessionId]?.count == nil` → `1`; `stagedAttachments.isEmpty` → `["session-1": [UploadedAttachment(receiptId: "ee7fc538-…", …)]]` |
+| AC10 no error | `held.model.attachmentError == nil` → `"That upload may not have arrived: transport offline: the test host is unreachable"` |
+| AC11 late receipt | `held.model.stagedAttachments[sessionId]?.count == nil` → `1`; host A 1 request, host B 0 (pass) |
+| AC11 late failure | `held.model.attachmentError == nil` → `"That upload may not have arrived: transport offline: host A dropped the connection"`; host A 1, host B 0 (pass) |
+| AC11 copy discarded | passes (guard) |
+
+The Release build (`xcodebuild … -configuration Release`) succeeds with the `#if DEBUG` hook.
 
 ### Verification (to be filled in)
 
