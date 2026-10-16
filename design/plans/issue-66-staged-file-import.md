@@ -585,10 +585,63 @@ The five predicted tests fail on the predicted assertion; the three guards pass:
 
 The Release build (`xcodebuild … -configuration Release`) succeeds with the `#if DEBUG` hook.
 
-### Verification (to be filled in)
+### Verification
 
-Expected undo checks: remove the post-staging check → both AC9 "not uploaded" and both AC10 tests
-fail; remove the post-upload check → both AC11 publication tests fail; abort without the discard →
-the two "leaves no copy" guards fail; upload through the current rather than the captured uploader
-with both checks kept → nothing fails, because a matching generation means the same uploader. That
-last one is by construction, and is said here rather than discovered by the verifier.
+Verifier (a fresh agent, not the builder), 2026-10-16, on `77f5879` (fix `8fb60fb`, tests `fec7ee4`).
+Another agent was building in the issue worktree at the same time, so every run below was made in
+a separate detached worktree of `77f5879` (removed afterwards); the issue worktree was not touched.
+
+- `Tools/check.sh` (full), on `77f5879`: **green**, 146 s. Lint, models, version 0.2.0 (238),
+  guard-tests ok. Kit 607/607. Coverage ok 88.53% (baseline 88.50%). App Debug and Release ok. App
+  tests 15/15, among them all 8 `FileImportHostSwitchTests` by name (AC9 ×3, AC10 ×2, AC11 ×3).
+- Each undo was a hand edit to `AppModel.swift` (or the revert), then the app test target
+  (`xcodebuild test -only-testing:DSHRemoteTests` under the simulator lock), then
+  `git checkout -- .` / `git revert --abort`. After the last one: app 15/15, kit 607/607.
+
+| Part | What was undone | Result |
+|---|---|---|
+| all | `git revert --no-commit 8fb60fb` | the 5 predicted tests fail (6 issues), as in the red evidence: AC9 `sentToB == 0` → `1`; AC10 receipt `stagedAttachments[sessionId]?.count` → `1`, `isEmpty` → `["session-1": [… "ee7fc538-…"]]`; AC10 error `attachmentError` → `"That upload may not have arrived: transport offline: the test host is unreachable"`; AC11 receipt `count` → `1`; AC11 failure `attachmentError` → `"… transport offline: host A dropped the connection"`. The 3 guards pass |
+| (a) | post-staging check: `if selection == selectionID {` → `if true {` | "AC9: a file staged while host A was selected is not uploaded to host B…": `sentToA == 0` → `1` ("host A was sent a file after the user had left it"). **Only this test fails**: the two AC10 tests stay green, because the post-upload check also suppresses the receipt and the error. AC10 is guarded by (a) and (c)/(d) together, not by (a) alone |
+| (b) | upload through the current `attachmentUploader` instead of the captured `uploader`, both checks kept | **nothing fails** (15/15). By construction, as the plan said: past the post-staging check the generation matches, so the current uploader is the captured one |
+| (a)+(b) | both, i.e. the original bug in the staging window | same AC9 test: `sentToB == 0` → `1` ("host B was sent a file picked for host A") |
+| (c) | post-upload check on the receipt only (kept on both failure cases) | "AC11: a receipt that arrives after a host switch…": `stagedAttachments[sessionId]?.count == nil` → `1` |
+| (d) | post-upload check on the error (kept on the receipt only) | "AC11: an upload failure that arrives after a host switch…": `attachmentError == nil` → `"That upload may not have arrived: transport offline: host A dropped the connection"` |
+| (e) | abandoned-after-staging path returns before the discard | "AC9: an import abandoned by a host switch during staging leaves no copy": `stagedEntries.isEmpty` → `["79578BDF-…"]` |
+| (e2) | after `attachFile`, return before the discard if the selection changed | "AC11: a copy whose upload settles after a host switch is still discarded" and the AC9 "leaves no copy" test: `stagedEntries.isEmpty` → one entry left behind |
+| (f) | both `guard selection == selectionID` on the **staging failure** cases removed | **nothing fails** (15/15). See finding 1 |
+| (g) | post-upload check removed from the generic `case .failure(let error)` only | **nothing fails** (15/15). See finding 2 |
+
+Findings for the reviewer (not fixed; the verifier does not change tests or code):
+
+1. **The staging-failure suppression is real and unguarded**, as the builder said. `importFile`
+   returns without publishing when staging *fails* after a switch (`AppModel.swift` the two
+   `guard`s in `case .failure`). No test throws from the injected `stageFile` after a switch, so
+   removing both guards changes nothing. What it protects is small: no bytes leave the phone on a
+   staging failure, so S1 is not at stake. The cost of losing it is one of host A's messages ("That
+   file could not be read…", "That file was not sent: this app sends files of up to 20 MiB…") on
+   host B's screen. That is the S9/AC10 concern, but milder, because it names no host data. It is
+   reachable: a slow iCloud pick that then fails to read. The gap is outside AC9–AC11 as written.
+   A one-test follow-up would close it (a `stageFile` that waits on the gate, then throws).
+2. **The generic `catch` branch after the upload is effectively dead.** `AttachmentUploader.upload`
+   wraps every error in `AttachmentUploadFailure` (`.transport(reason:)`), so only the typed
+   branch is reachable from a test. It is kept and checked consistently; nothing to do.
+3. **(b) cannot be guarded while the post-staging check exists.** That is by construction, and
+   stated in advance. Capturing the uploader is defence in depth: if the post-staging check
+   regresses, (a) shows the captured uploader still keeps the file away from host B (the switch
+   test then sees host A, not B, receive it).
+4. **Unrelated to this branch, a flaky kit test.** A concurrent `Tools/check.sh` in the issue worktree, run
+   by another agent while this one ran, went red on `RemoteEventRouterTests.swift:213`
+   ("a waterfall is answerable until a cancel retires it": `await recorder.events.count == 2`)
+   under load. The test waits for the router's own state (`isDelivered == false`) and then
+   counts what the subscriber has received, which can lag. That is the "assert on the object's
+   internals" smell from AGENTS.md. It comes from `25f4dd1`, already on `main`. It passed in every
+   run here, but it needs its own issue.
+
+- Version impact: PATCH, consistent with RELEASING.md: an unreleased fix inside an unreleased fix.
+  The kit API does not change, and `stageFile:` and `replaceHostForTesting` are internal / `#if DEBUG`.
+- CHANGELOG: the existing #66 line under `## [Unreleased]` is unchanged, as the plan allows. The
+  race never shipped.
+- Risk flags: S1 is evidenced by the AC11 tests' "host A exactly 1, host B 0" (green throughout,
+  and also under the revert). S6 by (e)/(e2). S7: the Release build is green with the `#if DEBUG`
+  hook. S9 by (c)/(d) and the AC10 tests, with finding 1 as the gap. C3: no `Task.sleep`, and no
+  run hung.
