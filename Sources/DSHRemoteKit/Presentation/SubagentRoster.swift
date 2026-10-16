@@ -164,9 +164,32 @@ public struct SubagentRoster: Sendable, Hashable {
         rows: [String: HostSessionStore.SessionRecord],
         live: [String: [String: HostSessionStore.Projection]]
     ) {
-        // STUB: no catalog and no children, so the assertions in `SubagentRosterSourceTests` fail
-        // rather than the sources being ignored. See the plan's AC9.
-        self.init(catalog: nil, facts: [:])
+        /// One key for one session, from whichever source has it. The live stream first because it
+        /// is the one that keeps arriving; the index row supplies every key the live stream has
+        /// never sent. Never both: a key has one source, so there is no ordering to get wrong.
+        func value(_ key: String, _ sessionId: String) -> JSONValue? {
+            if let liveValue = live[sessionId]?[key]?.value { return liveValue }
+            return rows[sessionId]?.projectionValues?[key]
+        }
+
+        let catalog = value("subagentCatalog", parentSessionId)?.arrayValue
+        var facts: [String: SubagentFacts] = [:]
+        for entry in catalog ?? [] {
+            guard let id = entry["id"]?.stringValue else { continue }
+            let row = rows[id]
+            facts[id] = SubagentFacts(
+                projections: [
+                    "subagentTiming": value("subagentTiming", id),
+                    "tokenUsage": value("tokenUsage", id),
+                ].compactMapValues { $0 },
+                // `title` and `running` are `session/list` fields rather than projections: the
+                // control stream carries no status at all, so the row is their only source.
+                title: row?.title,
+                isRunning: row?.running
+            )
+        }
+
+        self.init(catalog: catalog, facts: facts)
     }
 }
 
