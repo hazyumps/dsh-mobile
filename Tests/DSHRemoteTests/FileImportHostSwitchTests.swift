@@ -163,6 +163,43 @@ struct FileImportHostSwitchTests {
         return (model, existed)
     }
 
+    /// Starts an import whose staging step reaches the gate and then throws `failure`, switches
+    /// to `hostB` while it is held, lets it throw, and waits for the import to finish. Returns
+    /// the model, or `nil` if the import never reached staging.
+    private func importFailingAfterSwitch(
+        _ scratch: Scratch,
+        throwing failure: any Error,
+        from hostA: AttachmentUploader,
+        to hostB: AttachmentUploader
+    ) async -> AppModel? {
+        let (stream, reached) = AsyncStream.makeStream(of: Void.self)
+        let gate = Gate()
+        let model = AppModel(
+            draftsDirectory: scratch.drafts,
+            stagingDirectory: scratch.staging,
+            stageFile: { _, _ in
+                reached.yield()
+                await gate.wait()
+                throw failure
+            }
+        )
+        model.replaceHostForTesting(uploader: hostA)
+
+        let importing = Task { @MainActor in
+            await model.importFile(at: scratch.source, to: sessionId)
+            reached.finish()
+        }
+        var signals = stream.makeAsyncIterator()
+        guard await signals.next() != nil else {
+            await importing.value
+            return nil
+        }
+        model.replaceHostForTesting(uploader: hostB)
+        await gate.open()
+        await importing.value
+        return model
+    }
+
     // MARK: - AC9: a switch during staging sends the file nowhere and leaves no copy
 
     @Test("AC9: a file staged while host A was selected is not uploaded to host B after a switch")
@@ -247,6 +284,48 @@ struct FileImportHostSwitchTests {
         let held = try #require(outcome, "the import never reached staging")
 
         #expect(held.model.attachmentError == nil)
+    }
+
+    @Test("AC10: a staging refusal that arrives after a host switch is not shown on the new host")
+    func lateStagingRefusalIsNotShown() async throws {
+        let scratch = try Scratch()
+        let hostA = Self.accepting()
+        let hostB = Self.accepting()
+
+        let model = await importFailingAfterSwitch(
+            scratch,
+            throwing: AttachmentUploadFailure.unreadable(reason: "host A's pick could not be read"),
+            from: Self.uploader(origin: Self.hostA, token: "token-a", transport: hostA),
+            to: Self.uploader(origin: Self.hostB, token: "token-b", transport: hostB)
+        )
+        let held = try #require(model, "the import never reached staging")
+
+        #expect(held.attachmentError == nil, "host A's refusal was shown on host B")
+        let sentToA = await hostA.recordedRequests.count
+        let sentToB = await hostB.recordedRequests.count
+        #expect(sentToA == 0)
+        #expect(sentToB == 0)
+    }
+
+    @Test("AC10: a staging error that arrives after a host switch is not shown on the new host")
+    func lateStagingErrorIsNotShown() async throws {
+        let scratch = try Scratch()
+        let hostA = Self.accepting()
+        let hostB = Self.accepting()
+
+        let model = await importFailingAfterSwitch(
+            scratch,
+            throwing: CocoaError(.fileReadNoPermission),
+            from: Self.uploader(origin: Self.hostA, token: "token-a", transport: hostA),
+            to: Self.uploader(origin: Self.hostB, token: "token-b", transport: hostB)
+        )
+        let held = try #require(model, "the import never reached staging")
+
+        #expect(held.attachmentError == nil, "host A's staging error was shown on host B")
+        let sentToA = await hostA.recordedRequests.count
+        let sentToB = await hostB.recordedRequests.count
+        #expect(sentToA == 0)
+        #expect(sentToB == 0)
     }
 
     // MARK: - AC11: a switch during the upload does not publish into the new host
