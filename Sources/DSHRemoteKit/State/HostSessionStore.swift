@@ -158,16 +158,26 @@ public actor HostSessionStore {
         /// ``projections`` types the keys this client models, and it is missing the ones it does
         /// not — `subagentTiming`'s `active` interval among them. A reader that works on projection
         /// keys uniformly (``SubagentRoster``, and `SessionUsage` through the control stream) wants
-        /// the loose object instead.
-        ///
-        /// STUB: decoded by the synthesised conformance, which looks for a top-level
-        /// `projectionValues` key that `session/list` does not send, so this stays nil and the
-        /// assertions in `SubagentRosterSourceTests` fail rather than the sources being ignored.
-        /// The real read of `projections.values` is the next commit.
+        /// the loose object instead, so both are decoded from the same `projections` subtree in one
+        /// pass. Neither is derived from the other.
         public var projectionValues: [String: JSONValue]?
 
         /// The projected title `session/list` supplies, when it supplies one.
         public var title: String? { projections?.values?.title }
+
+        /// The wire keys, which are exactly the descriptor's — `projectionValues` is a second view
+        /// of `projections`, not a field of its own, so it is absent from both directions.
+        enum CodingKeys: String, CodingKey {
+            case sessionId
+            case updatedAt
+            case running
+            case blank
+            case agentAvailable
+            case cwd
+            case parentSessionId
+            case origin
+            case projections
+        }
 
         public init(
             sessionId: String,
@@ -192,6 +202,42 @@ public actor HostSessionStore {
             self.projections = projections
             self.projectionValues = projectionValues
         }
+
+        public init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            sessionId = try container.decode(String.self, forKey: .sessionId)
+            updatedAt = try container.decodeIfPresent(Int64.self, forKey: .updatedAt)
+            running = try container.decodeIfPresent(Bool.self, forKey: .running)
+            blank = try container.decodeIfPresent(Bool.self, forKey: .blank)
+            agentAvailable = try container.decodeIfPresent(Bool.self, forKey: .agentAvailable)
+            cwd = try container.decodeIfPresent(String.self, forKey: .cwd)
+            parentSessionId = try container.decodeIfPresent(String.self, forKey: .parentSessionId)
+            origin = try container.decodeIfPresent(String.self, forKey: .origin)
+            projections = try container.decodeIfPresent(SessionProjections.self, forKey: .projections)
+
+            // The same subtree read a second time as loose JSON. A probe rather than a conversion,
+            // so a key the typed wrapper drops is never lost between the two.
+            let raw = try container.decodeIfPresent(ProjectionValuesProbe.self, forKey: .projections)
+            projectionValues = raw?.values
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(sessionId, forKey: .sessionId)
+            try container.encodeIfPresent(updatedAt, forKey: .updatedAt)
+            try container.encodeIfPresent(running, forKey: .running)
+            try container.encodeIfPresent(blank, forKey: .blank)
+            try container.encodeIfPresent(agentAvailable, forKey: .agentAvailable)
+            try container.encodeIfPresent(cwd, forKey: .cwd)
+            try container.encodeIfPresent(parentSessionId, forKey: .parentSessionId)
+            try container.encodeIfPresent(origin, forKey: .origin)
+            try container.encodeIfPresent(projections, forKey: .projections)
+        }
+    }
+
+    /// The `projections.values` object on its own, for the loose read in ``SessionRecord``.
+    private struct ProjectionValuesProbe: Decodable {
+        var values: [String: JSONValue]?
     }
 
     /// The `result.value` of `session/list`: `{"items": […]}`.
