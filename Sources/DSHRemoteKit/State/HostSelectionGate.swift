@@ -16,13 +16,15 @@ public struct HostSelectionGate: Sendable {
     }
 
     private var current: Ticket?
+    private var forgetting: Set<UUID> = []
 
     public init() {}
 
-    /// Starts a selection of `hostId`, superseding any earlier ticket.
+    /// Starts a selection of `hostId`, superseding any earlier ticket. While `hostId` is being
+    /// forgotten the ticket is never current, though it still supersedes the earlier one.
     public mutating func begin(_ hostId: UUID) -> Ticket {
         let ticket = Ticket(hostId: hostId, id: UUID())
-        current = ticket
+        current = forgetting.contains(hostId) ? nil : ticket
         return ticket
     }
 
@@ -42,6 +44,7 @@ public struct HostSelectionGate: Sendable {
     /// tells the caller to tear that selection down.
     @discardableResult
     public mutating func forget(_ hostId: UUID) -> Bool {
+        forgetting.insert(hostId)
         guard current?.hostId == hostId else { return false }
         current = nil
         return true
@@ -49,8 +52,7 @@ public struct HostSelectionGate: Sendable {
 
     /// Ends the forget that ``forget(_:)`` started, so `hostId` can be selected again. Call it on
     /// every path out of a forget, a failed list save included.
-    ///
-    /// STUB for the second `Tests:` commit of #104: it does nothing, and ``forget(_:)`` does not
-    /// yet mark the host as being forgotten. The builder implements both.
-    public mutating func finishForgetting(_ hostId: UUID) {}
+    public mutating func finishForgetting(_ hostId: UUID) {
+        forgetting.remove(hostId)
+    }
 }
