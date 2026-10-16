@@ -8,9 +8,6 @@ import Foundation
 /// suspension. The gate is a value owned by one isolation domain (the app's main actor): it is
 /// checked synchronously, so nothing can happen between the check and the publish. An actor-held
 /// ticket would be one `await` stale by the time its answer was acted on.
-///
-/// STUB for the `Tests:` commit of #104: every method returns a wrong value. The builder
-/// implements it.
 public struct HostSelectionGate: Sendable {
     /// One selection attempt, for one host.
     public struct Ticket: Sendable, Equatable {
@@ -18,25 +15,33 @@ public struct HostSelectionGate: Sendable {
         let id: UUID
     }
 
+    private var current: Ticket?
+
     public init() {}
 
     /// Starts a selection of `hostId`, superseding any earlier ticket.
     public mutating func begin(_ hostId: UUID) -> Ticket {
-        Ticket(hostId: hostId, id: UUID())
+        let ticket = Ticket(hostId: hostId, id: UUID())
+        current = ticket
+        return ticket
     }
 
     /// Whether `ticket` is still the current selection.
     public func isCurrent(_ ticket: Ticket) -> Bool {
-        false
+        current == ticket
     }
 
     /// Ends the current selection (disconnect).
-    public mutating func end() {}
+    public mutating func end() {
+        current = nil
+    }
 
     /// Ends the current selection when it is for `hostId`, pending or published. Returns `true`
     /// when it did, which tells the caller to tear that selection down.
     @discardableResult
     public mutating func forget(_ hostId: UUID) -> Bool {
-        false
+        guard current?.hostId == hostId else { return false }
+        current = nil
+        return true
     }
 }
