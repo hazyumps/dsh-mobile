@@ -102,6 +102,11 @@ struct HostsPairingView: View {
                     Text("No hosts yet.")
                         .foregroundStyle(DSHPalette.secondaryText)
                 }
+                // A forget that did not fully happen says so where the host is (#65).
+                if let hostError = model.hostError {
+                    Label(hostError, systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(DSHPalette.secondaryText)
+                }
                 Button("Pair a harness", systemImage: "plus") { isPairing = true }
             } header: {
                 Text("Hosts")
@@ -149,7 +154,7 @@ struct HostsPairingView: View {
             presenting: pendingForget
         ) { host in
             Button("Forget \(host.displayName)", role: .destructive) {
-                model.forget(host)
+                Task { await model.forget(host) }
                 pendingForget = nil
             }
             Button("Cancel", role: .cancel) {

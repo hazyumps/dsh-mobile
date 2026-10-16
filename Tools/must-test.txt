@@ -15,3 +15,4 @@ Network/RelayExchange.swift              80   # the retry loop itself
 Persistence/KeychainStore.swift          80   # the device token
 Persistence/SavedHostStore.swift         90   # hosts.json
 Persistence/DraftStore.swift             80   # drafts.json, navigation.json
+Persistence/HostRegistry.swift           90   # the host list and its token change together (#65)

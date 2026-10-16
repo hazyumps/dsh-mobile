@@ -31,6 +31,9 @@ Fixed / Security, with its issue number. The release renames the section.
   pairing claim were retried up to three times on a 429 or 502, so a write the relay had already
   applied could be applied again; a rate-limited pairing claim now reports the lockout at once
   instead of waiting minutes (#63).
+- Forgetting a host is saved: it no longer comes back, without its credential, after a relaunch,
+  and its drafts and the selected host's staged files and commands go with it. A forget that
+  could not be saved keeps the host and says so (#65).
 
 ### Changed
 - Kit API: the `retryPolicy:` parameter is gone from `DshRpcClient.call`/`callVoid`,

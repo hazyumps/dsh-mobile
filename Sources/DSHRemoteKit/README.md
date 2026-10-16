@@ -110,6 +110,7 @@ Models/RPCEnvelope.swift        unary request/response envelopes and the typed e
 Models/SessionSummary.swift     session/list rows and their projections
 Models/StreamFrames.swift       remote.mux frames, the snapshot, and the live stream
 Persistence/KeychainStore.swift SecretStore, KeychainSecretStore, InMemorySecretStore
+Persistence/HostRegistry.swift  the one owner of the host list, its tokens and the selection
 Network/RelayTransport.swift    RelayTransport, RelaySocket, the URLSession implementation
 Network/RelayTransportStub.swift  in-memory transport, socket, and recording sleeper
 Network/RPCFailure.swift        DshRPCError, the SPEC §6.9 guidance map, retry policy

@@ -16,7 +16,9 @@ final class AppModel {
     var status: ConnectionStatus { recovery?.status ?? idleStatus }
     var connectionID: UUID? { recovery?.connectionID }
     var connectionError: String? { recovery?.error?.description }
-    var hosts: [SavedHost] = []
+    /// The saved hosts, as the registry last reported them. Only the registry changes the
+    /// list, so it is read-only here: a host removed in memory but not on disk is #65.
+    private(set) var hosts: [SavedHost] = []
 
     /// The host whose work is on screen. Nil means there is nothing to show but the
     /// pairing introduction; the shell switches on it.
@@ -110,10 +112,13 @@ final class AppModel {
 
     var isClaiming = false
     var claimError: String?
+    /// Why the last change to the saved hosts (a forget) did not fully happen.
+    private(set) var hostError: String?
 
     private let clock: any EpochClock = SystemEpochClock()
-    private let store = HostStore()
-    private let secrets = KeychainSecretStore()
+    /// The one owner of the host list, its tokens and the selection (#65). The app never
+    /// saves the list or touches a token itself: the two change together or drift apart.
+    private let registry: HostRegistry
     private let drafts: DraftStore
     /// The origin the current host was connected with, kept so an interaction result can
     /// be posted on the same trust policy and credential as everything else.
@@ -273,11 +278,12 @@ final class AppModel {
     }
 
     init(draftsDirectory: URL? = nil) {
-        hosts = store.load()
         drafts = DraftStore(directory: draftsDirectory ?? Self.defaultDraftsDirectory)
+        // The registry drops a selection naming a host that is no longer saved. Its list is
+        // read synchronously, so a launch with hosts does not flash the pairing introduction.
+        registry = HostRegistry(drafts: drafts)
+        hosts = registry.initialHosts
         if !hosts.isEmpty { idleStatus = .offline }
-        // A host the user forgot must not stay selected on disk.
-        store.reconcileSelection(with: hosts)
     }
 
     private static var defaultDraftsDirectory: URL {
@@ -299,7 +305,7 @@ final class AppModel {
             await select(first)
             return
         }
-        guard let selection = store.loadSelection(),
+        guard let selection = await registry.selection,
               let host = hosts.first(where: { $0.id == selection.hostId })
         else { return }
         await select(host)
@@ -316,40 +322,7 @@ final class AppModel {
         }
 
         let previous = recovery
-        statusTask?.cancel()
-        snapshotTask?.cancel()
-        eventsTask?.cancel()
-        interactionsTask?.cancel()
-        recovery = nil
-        coordinator = nil
-        hostStore = nil
-        secondaryStore = nil
-        plugins = nil
-        pluginsReport = .unknown
-        scheduledTasks = []
-        scheduledTasksReport = .unknown
-        modelModeStore = nil
-        commandStore = nil
-        attachmentUploader = nil
-        attachmentReader = nil
-        stagedAttachments = [:]
-        attachmentError = nil
-        stagedImages = [:]
-        imageError = nil
-        hostSnapshot = nil
-        sessionProjections = [:]
-        commands = [:]
-        commandMessage = nil
-        catalog = nil
-        catalogState = nil
-        stagedMode = nil
-        stagedModel = nil
-        // A decision belongs to the host that delivered it: switching hosts must not leave
-        // another host's approval on screen, where it could be answered.
-        interactionStore = nil
-        interactions = []
-        browse = .idle
-        selectionID = UUID()
+        resetHostScopedState()
         let selection = selectionID
         idleStatus = .connecting
         // Take the previous host's streams down before building the next one's, so the
@@ -358,7 +331,7 @@ final class AppModel {
         guard selection == selectionID else { return }
 
         do {
-            let token = try await secrets.secret(for: RelayDeviceCredential.account(hostUUID: host.id))
+            let token = try await registry.relayDeviceToken(for: host.id)
             guard selection == selectionID else { return }
             guard let token else { throw HostConnectionError.missingCredential }
 
@@ -419,7 +392,7 @@ final class AppModel {
 
             observeStatus(of: coordinator, selection: selection)
             observeSnapshots(of: hostStore, selection: selection)
-            try? store.saveSelection(HostSelection(hostId: host.id))
+            try? await registry.setSelection(host.id)
             await restoreNavigation(for: host)
             // After the stored destination, so an explicit launch target wins over it.
             applyLaunchSessionOverride()
@@ -1695,9 +1668,9 @@ final class AppModel {
                 pinnedFingerprint: payload.fingerprint ?? claim.fingerprint,
                 relayDeviceId: claim.deviceId
             )
-            try await secrets.setRelayDeviceToken(claim.token, forHostUUID: host.id)
-            hosts.append(host)
-            try store.save(hosts)
+            // The token and the list are stored together, or neither is (#65).
+            try await registry.add(host, token: claim.token)
+            hosts = await registry.hosts
             pairingOutcome = nil
             idleStatus = .offline
             // Pairing is a deliberate act: land on the host that was just paired.
@@ -1711,30 +1684,57 @@ final class AppModel {
         }
     }
 
-    func forget(_ host: SavedHost) {
-        let wasSelected = selectedHost?.id == host.id
-        hosts.removeAll { $0.id == host.id }
-        Task {
-            try? await secrets.deleteRelayDeviceToken(forHostUUID: host.id)
+    /// Forgets a saved host: the list on disk, the selection, its token and its drafts, all
+    /// through the registry (#65). Disk is the source of truth: a list that could not be
+    /// saved keeps the host and says so; any later failure is shown once the host is gone.
+    /// Nothing is retried.
+    func forget(_ host: SavedHost) async {
+        hostError = nil
+        do {
+            try await registry.forget(host.id)
+        } catch HostRegistryError.listNotSaved(let reason) {
+            hosts = await registry.hosts
+            hostError = "\(host.displayName) was not forgotten: \(reason)"
+            return
+        } catch {
+            hostError = "\(host.displayName) was forgotten, but not completely: \(Self.describe(error))"
         }
-        Task {
-            await drafts.remove(hostId: host.id)
-        }
-        try? store.reconcileSelection(with: hosts)
-        if wasSelected { disconnect() }
+        hosts = await registry.hosts
+        if selectedHost?.id == host.id { disconnect() }
         if hosts.isEmpty { idleStatus = .pairingRequired }
+    }
+
+    private static func describe(_ error: any Error) -> String {
+        switch error as? HostRegistryError {
+        case .credentialNotRemoved(let reason): "its credential is still in the keychain (\(reason))."
+        case .draftsNotRemoved(let reason): "its drafts could not be removed (\(reason))."
+        case .credentialNotSaved(let reason), .listNotSaved(let reason): reason
+        case nil: String(describing: error)
+        }
     }
 
     func disconnect() {
         Task { await releaseTimedClaim() }
+        recovery?.setForeground(false)
+        resetHostScopedState()
+        origin = nil
+        selectedHost = nil
+        selectedWorkspaceId = nil
+        selectedSessionId = nil
+        idleStatus = hosts.isEmpty ? .pairingRequired : .offline
+    }
+
+    /// Everything that belongs to the current host, cleared by both ``select(_:)`` and
+    /// ``disconnect()`` through this one function, so a reset added for one path is added
+    /// for both. `disconnect` once skipped the staged files and commands that `select`
+    /// cleared, and forgetting the selected host left them behind (#65).
+    private func resetHostScopedState() {
         statusTask?.cancel()
         snapshotTask?.cancel()
         eventsTask?.cancel()
         interactionsTask?.cancel()
-        recovery?.setForeground(false)
         recovery = nil
         coordinator = nil
-        origin = nil
         hostStore = nil
         secondaryStore = nil
         plugins = nil
@@ -1742,18 +1742,27 @@ final class AppModel {
         scheduledTasks = []
         scheduledTasksReport = .unknown
         modelModeStore = nil
+        commandStore = nil
+        attachmentUploader = nil
+        attachmentReader = nil
+        stagedAttachments = [:]
+        attachmentError = nil
+        stagedImages = [:]
+        imageError = nil
+        hostSnapshot = nil
+        sessionProjections = [:]
+        commands = [:]
+        commandMessage = nil
         catalog = nil
         catalogState = nil
         stagedMode = nil
         stagedModel = nil
+        // A decision belongs to the host that delivered it: switching hosts must not leave
+        // another host's approval on screen, where it could be answered.
         interactionStore = nil
         interactions = []
-        selectedHost = nil
-        selectedWorkspaceId = nil
-        selectedSessionId = nil
         browse = .idle
         selectionID = UUID()
-        idleStatus = hosts.isEmpty ? .pairingRequired : .offline
     }
 
     // MARK: - Fixture seeding

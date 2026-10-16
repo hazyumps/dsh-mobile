@@ -19,6 +19,10 @@
 #                (DSH_ANSWER) can auto-approve an approval, so none may reach a release build.
 #   kit-print    `print(` in DSHRemoteKit. The kit logs nothing: session content and tokens
 #                pass through it (docs/process/RISK-FLAGS.md, flag 11).
+#   host-lifecycle  The app building a `HostStore` or `KeychainSecretStore`, saving the host list,
+#                or writing a relay token itself. The list and the token change together, in
+#                `HostRegistry`, or they drift apart: a forget that edited memory and never saved
+#                the list brought the host back, credential-less, on the next launch (#65).
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -45,6 +49,12 @@ while IFS= read -r line; do
   [[ -n "$line" ]] && add "kit-print $line"
 done < <(grep -rnE '(^|[^.A-Za-z_])print\(' Sources/DSHRemoteKit --include='*.swift' 2>/dev/null \
   | grep -v '^Sources/DSHRemoteKit/Generated/')
+
+# host-lifecycle
+while IFS= read -r line; do
+  [[ -n "$line" ]] && add "host-lifecycle $line"
+done < <(grep -rnE '\bHostStore\(|KeychainSecretStore\(|\.save\(hosts|(set|delete)RelayDeviceToken\(' Apps \
+  --include='*.swift' 2>/dev/null)
 
 # debug-env: track `#if DEBUG` nesting per file. A line counts as debug-only when any enclosing
 # conditional block is a DEBUG branch (and not its #else).
