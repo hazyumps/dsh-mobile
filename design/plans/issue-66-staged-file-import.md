@@ -1,6 +1,10 @@
 # Issue #66: file import releases security-scoped access before upload; raw upload unbounded
 
-**Status:** built, verified and ready for PR (2026-10-15).
+**Status:** reopened for an addendum (2026-10-16): PR #97's review found that a host switch during
+staging sends the file to the new host. AC9–AC11 are in "Addendum: a host switch during an import"
+at the end of this file, awaiting gate 1. Everything below up to that section is as verified on
+2026-10-15.
+- Built, verified and ready for PR (2026-10-15).
 - Gate 1, the plan: approved by Dan as written (`7aec420`), including the new
   `AttachmentUploadFailure.unreadable(reason:)` case.
 - Gate 1, the red tests: approved (`58d607e`).
@@ -404,3 +408,161 @@ and checks after") was wrong, as finding 1 showed; the first test above is what 
   function that exists to prevent it.
 - The SPEC citations in `AttachmentUploader` and `AppModel` say "SPEC §9" for attachment rules, but
   §9 is the build sequence. The rules are in §3.6. Slice A/C fix the citations they touch.
+
+## Addendum: a host switch during an import (PR #97 review)
+
+**Status:** draft, awaiting gate 1 (2026-10-16). **Version impact:** still PATCH (see below).
+
+### Context
+
+Patrick's static review of PR #97 (tip `273545a`, 2026-10-15) found a bug this branch introduced.
+`importFile` awaits the detached staging copy, then calls `attachFile`, which reads the uploader
+that is current *when the copy finishes* (`AppModel.swift` ~l.954-966), not the one that was
+current at the pick. Pick a file for host A, switch to host B while the copy is slow (a large
+file, an iCloud download), and A's file goes out through B's uploader, to B's origin with B's
+credential, naming A's session. Even if B has no such session, the bytes have left the phone for
+the wrong harness. The same shape exists one await later: `attachFile` publishes the receipt into
+`stagedAttachments[sessionId]` after the upload's await, so a receipt from A (or A's error) can
+land in B's state. Before #66 there was no await between the pick and `attachFile`'s read of the
+uploader, so the window is new.
+
+`AppModel` already has the tool: `selectionID`, a generation that `resetHostScopedState()` replaces
+on every `select`, `disconnect` and forget, and that `select()` and the stream observers check
+after each await (`let selection = selectionID … guard selection == selectionID`). The fix reuses
+it; it does not add a second generation.
+
+### Acceptance criteria
+
+- **AC9: a switch during staging sends the file nowhere and leaves no copy.** `importFile`
+  captures `selectionID` and the uploader before it stages. If the selection has changed when
+  staging returns, it discards the staged copy and returns: no request reaches the old host or the
+  new one. With no switch, the copy is uploaded exactly once to the host that was selected at the
+  pick, and its receipt is published (unchanged behaviour, guarded so the fix cannot be "never
+  upload").
+- **AC10: an import abandoned during staging publishes nothing.** After that abort,
+  `stagedAttachments` and `attachmentError` are what the new host's selection left them (empty and
+  `nil`): no receipt, and no message about a file the user picked on another host.
+- **AC11: a switch during the upload does not publish into the new host.** The upload goes through
+  the uploader captured at the pick. If the selection has changed by the time the upload settles,
+  neither its receipt nor its failure is published (`stagedAttachments`, `attachmentError`). The
+  request already sent is not cancelled and not repeated: the old host saw it exactly once (S1).
+  The copy is still discarded.
+
+**Gate-1 question (AC11):** a failure that settles after the switch is reported nowhere. That is
+consistent with what a switch already does: `resetHostScopedState()` clears A's staged receipts
+and A's `attachmentError`, so the user has already left A's attachment state behind. The
+alternative, a message naming host A on host B's screen, needs a host-tagged error surface that
+does not exist. "Report an uncertain write, don't replay it" is kept in the sense that matters:
+nothing is replayed.
+
+### The seam, and why the logic stays in the app
+
+The race is between `AppModel`'s own await and `AppModel`'s own `selectionID`; the rule is "do not
+act on host-scoped state after a suspension unless the generation still matches". Moving it into
+the kit means moving the ownership of host-scoped state (the uploader, the staged receipts, the
+generation) out of `AppModel`, which is the much larger #69 direction, not a fix to a PR under
+review. The kit pieces (`AttachmentStaging`, `AttachmentUploader`) are already per-host and
+correct; what is wrong is which one the app picks after an await. So the tests go in the app test
+target (`Tests/DSHRemoteTests`, which already holds `FileImportTests`), through two seams:
+
+1. **The staging step is injectable.** `AppModel.init(draftsDirectory:stagingDirectory:stageFile:)`
+   gains `stageFile: StageFile? = nil`, where
+   `typealias StageFile = @Sendable (AttachmentStaging, URL) async throws -> StagedFile`. The
+   default is exactly today's code: `Task.detached(priority: .userInitiated) { try
+   staging.stage(url) }.value`. The test's step calls the real `staging.stage(url)` (so the copy
+   lands in the test's staging directory), then signals "staged" and suspends on a continuation
+   the test holds. `AttachmentStaging.stage` stays synchronous and stays the only place the scope
+   is held (AC8 lint unchanged). Not `#if DEBUG`: it is an internal init parameter whose default is
+   production behaviour.
+2. **A host switch without a network**, `#if DEBUG` only:
+   `func replaceHostForTesting(uploader: AttachmentUploader?)` calls `resetHostScopedState()` (which
+   replaces `selectionID`, exactly as `select`, `disconnect` and forget do) and then installs the
+   given uploader. The test builds host A's and host B's uploaders from two `StubRelayTransport`s
+   (public, in the kit) with different origins. `select()` itself is not used: it needs a Keychain
+   token, a coordinator and a socket. What this does not prove is that `select()` still goes
+   through `resetHostScopedState()`; that function's doc comment already makes it the single reset
+   path (#65), and the builder must not bypass it.
+
+Both seams go in the `Tests:` commit **working, not stubbed**, and that is a departure from "stubs
+return a wrong value" worth naming at the gate: a `stageFile` parameter that was accepted and
+ignored would make the suspended test wait forever for a "staged" signal instead of failing. The
+seams are behaviour-neutral (production passes no `stageFile`; the hook does not exist in Release);
+the fix (the generation checks and the captured uploader) is left to the builder.
+
+**No test can hang.** Each test awaits its "staged" or "request received" signal on a stream that
+is also finished when the import task completes. If an implementation never stages or never
+uploads, the stream ends, the test's `#require` on the premise fails with a message, and the run
+goes on. No `Task.sleep`, no timeout (AGENTS.md, test smells).
+
+The upload-suspended tests (AC11) use a test-local `GatedUploadTransport` (an actor conforming to
+the kit's public `RelayTransport`) in the new test file: it records the request, signals, waits on
+a continuation the test resumes, then answers from its script (the 2026-10-09 captured upload body,
+or `.offline`).
+
+### Test list
+
+New file `Tests/DSHRemoteTests/FileImportHostSwitchTests.swift`; no earlier `Tests:` line changes.
+Every test has its own scratch drafts and staging directories and its own transports.
+
+| AC | Test name | Fails today because |
+|---|---|---|
+| AC9 | `"AC9: a file staged while host A was selected is not uploaded to host B after a switch"` | `attachFile` reads the uploader current after staging: `(hostB.recordedRequests.count → 1) == 0` (host A: 0, passes) |
+| AC9 | `"AC9: an import abandoned by a host switch during staging leaves no copy"` | guard, passes today (the discard runs after `attachFile`). Premise `#require`d: the copy exists while staging is held. Fails if the abort returns before discarding |
+| AC9 | `"AC9: with no switch, the staged file is uploaded once to the selected host and its receipt published"` | guard, passes today: `hostA` count 1, receipt `ee7fc538…` in `stagedAttachments["session-1"]` |
+| AC10 | `"AC10: an import abandoned during staging publishes no receipt into the new host"` | B's upload succeeds today: `(model.stagedAttachments["session-1"]?.count → 1) == nil` (receipt `ee7fc538…`) |
+| AC10 | `"AC10: an import abandoned during staging shows no error on the new host"` | B scripted `.offline`: `(model.attachmentError → "That upload may not have arrived: …") == nil` |
+| AC11 | `"AC11: a receipt that arrives after a host switch is not published into the new host"` | A's upload held, switch to B, A answers the captured body: `(model.stagedAttachments["session-1"]?.count → 1) == nil`; also asserts host A saw exactly 1 request and host B 0 (both pass today) |
+| AC11 | `"AC11: an upload failure that arrives after a host switch is not shown on the new host"` | A held, switch, A answers `.offline`: `(model.attachmentError → "That upload may not have arrived: …") == nil` |
+| AC11 | `"AC11: a copy whose upload settles after a host switch is still discarded"` | guard, passes today; fails if the post-upload abort skips the discard |
+
+Stubs and seams in the `Tests:` commit (app target only; the kit does not change): the
+`stageFile:` init parameter and `StageFile` typealias, wired as above, and the `#if DEBUG`
+`replaceHostForTesting(uploader:)`.
+
+### Slice
+
+One slice, one file: `Apps/DSHRemote/Sources/AppModel.swift`, `importFile` and `attachFile`
+(~l.945-1035). Capture `selectionID` and `attachmentUploader` before staging; after staging, on a
+changed selection, discard and return; upload through the captured uploader; after the upload, on
+a changed selection, publish nothing; discard in every path. `attachFile` has no caller but
+`importFile` (`grep`), so it may be folded in or made private. `CHANGELOG.md`: extend the #66 line
+only if the reviewer wants the race named; it never shipped, so it is not a separate entry.
+
+### Risk flags
+
+- [x] **S1 writes.** The fix is that a write goes to the host the user chose, or nowhere. It adds no
+  send and no retry: the AC11 tests assert the old host saw exactly one request and the new host
+  none. 429/502/drop for the upload stay with #63.
+- [x] **S6 files from outside the app.** A copy staged for an abandoned import is discarded (AC9,
+  AC11 guards). The scope handling is unchanged.
+- [x] **S4 host lifecycle.** The abort keys on the generation that select, disconnect and forget
+  share. Nothing persisted changes, so "reload from disk after the operation" is N/A: no file or
+  Keychain item is written by an import.
+- [x] **S7 debug affordances.** `replaceHostForTesting` is inside `#if DEBUG`; the Release build in
+  `Tools/check.sh` must stay green. It is not a `DSH_*` launch variable, so no README row.
+- [x] **S9.** The point of AC10/AC11 is that one host's error text does not appear on another
+  host's screen.
+- [x] **C3 concurrency.** Two awaits gain generation checks; tests suspend on continuations, never
+  `Task.sleep`, and cannot hang (see above).
+- [x] **C6 UI glue with an app test.** The rule stays in `AppModel` for the reasons above; it is
+  pinned by app tests, not by a render test.
+
+**Version impact:** PATCH, unchanged. The fix is inside an unreleased fix, the kit's API does not
+change, and the app-internal seams are not public.
+
+### Sibling findings
+
+| Where | Same mistake? | Disposition |
+|---|---|---|
+| `stageImage` publishes `stagedImages[sessionId]` after awaiting `loadProjections` | yes: no generation check, and B's image limits could judge A's image. No bytes leave until `sendPrompt`, which reads by session id | **Out of scope**; follow-up issue to file (`client`, `bug`): "host-scoped publication after an await" |
+| `runCommand` publishes `commands`/`commandMessage` after awaits | stale message on the new host; the store was captured, so nothing is sent to the wrong host | same follow-up |
+| `submit(_:)` (answers, approvals) | captures `interactionStore` before its await and returns its message to the caller; does not publish | none: bound to the original host already |
+| `isUploading` | an abandoned import can clear the spinner of a newer import on the new host | **Not tested here**; the builder may guard it with the same check. Listed in the follow-up |
+
+### Verification (to be filled in)
+
+Expected undo checks: remove the post-staging check → both AC9 "not uploaded" and both AC10 tests
+fail; remove the post-upload check → both AC11 publication tests fail; abort without the discard →
+the two "leaves no copy" guards fail; upload through the current rather than the captured uploader
+with both checks kept → nothing fails, because a matching generation means the same uploader. That
+last one is by construction, and is said here rather than discovered by the verifier.
