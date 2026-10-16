@@ -446,6 +446,23 @@ then a `begin(b)` must not be current. The same counting limit applies to forget
 twice at once: the first `finishForgetting` clears the mark while the second forget is still in
 flight. In practice that is hard to reach, because the host has already left the list by then.
 
+### AC10 guard (`8bc93e6`), checked on its own
+
+AC10 was written as a guard, so it passes on the current code. I checked it guards by making each
+change below alone to `HostSelectionGate.swift`, running
+`--filter 'HostSelectionGateTests|HostRegistryTests'` (26 tests), and restoring with
+`git checkout --`.
+
+| Undone how | Test failure with it undone |
+|---|---|
+| `finishForgetting` does `forgetting.removeAll()` | AC10 only: `!gate.isCurrent(whileBIsForgotten)` at `HostSelectionGateTests.swift:134` |
+| single slot, the Set reassigned (`forgetting = [hostId]`) | AC10 only: the same failure |
+| single slot as `UUID?` (assign on forget, `==` in `begin`, cleared by its own host's finish) | AC10 only: the same failure |
+
+After the restore, `swift test --disable-sandbox` passed all 608 tests and the tree was clean. This
+resolves the finding above: the last two rows of the AC7–AC9 table ("passes: not pinned") are now
+caught by AC10. Overlapping forgets of the same host remain out of scope, as #108.
+
 ## Notes for the next person
 
 - An actor-owned "is this still current?" check is one `await` stale by the time you act on it.
