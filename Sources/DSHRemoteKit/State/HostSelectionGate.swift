@@ -36,12 +36,21 @@ public struct HostSelectionGate: Sendable {
         current = nil
     }
 
-    /// Ends the current selection when it is for `hostId`, pending or published. Returns `true`
-    /// when it did, which tells the caller to tear that selection down.
+    /// Ends the current selection when it is for `hostId`, pending or published, and marks
+    /// `hostId` as being forgotten until ``finishForgetting(_:)``. A selection of it begun while
+    /// it is marked is never current. Returns `true` when it ended the current selection, which
+    /// tells the caller to tear that selection down.
     @discardableResult
     public mutating func forget(_ hostId: UUID) -> Bool {
         guard current?.hostId == hostId else { return false }
         current = nil
         return true
     }
+
+    /// Ends the forget that ``forget(_:)`` started, so `hostId` can be selected again. Call it on
+    /// every path out of a forget, a failed list save included.
+    ///
+    /// STUB for the second `Tests:` commit of #104: it does nothing, and ``forget(_:)`` does not
+    /// yet mark the host as being forgotten. The builder implements both.
+    public mutating func finishForgetting(_ hostId: UUID) {}
 }

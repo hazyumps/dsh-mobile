@@ -72,7 +72,9 @@ public struct HostSelectionGate: Sendable {
     public func isCurrent(_ ticket: Ticket) -> Bool
     public mutating func end()                             // disconnect
     @discardableResult
-    public mutating func forget(_ hostId: UUID) -> Bool    // ends the current ticket iff it is for hostId
+    public mutating func forget(_ hostId: UUID) -> Bool    // ends the current ticket iff it is for hostId,
+                                                           // and marks hostId as being forgotten
+    public mutating func finishForgetting(_ hostId: UUID)  // clears the mark (added after review, below)
 }
 ```
 
@@ -80,6 +82,24 @@ public struct HostSelectionGate: Sendable {
 selection down. The app's `forget` becomes `if selections.forget(host.id) { disconnect() }`,
 **before** `await registry.forget`. That one rule covers a pending selection and a published one
 alike, replacing the post-await `selectedHost?.id == host.id` check.
+
+**Added after the security review (Dan, 2026-10-16).** Ending the selection before the first
+`await` leaves a gap. A `select(B)` that *begins* while `forget(B)` is awaiting the registry gets a
+fresh ticket, and nothing ends it. Its token read yields nil, so it throws `missingCredential`, and
+its `catch` path publishes `selectedHost = B` (`AppModel.swift` `:406–414`). The old post-await
+`selectedHost` check used to tear that down. The fix stays in the gate. `forget(_:)` also marks B
+as being forgotten, and `begin(B)` while B is marked returns a ticket that is already not current.
+`finishForgetting(_:)` clears the mark. `AppModel.forget` calls it from a `defer` placed right
+after `selections.forget`, so the mark is cleared on every exit, including `listNotSaved`, and a
+host whose forget failed can be selected again:
+
+```swift
+if selections.forget(host.id) { disconnect() }
+defer { selections.finishForgetting(host.id) }
+```
+
+The mark is per host, so it never blocks a selection of another host. In Python terms, `defer` is
+a `finally:` block for the rest of the function.
 
 **One behaviour change to approve.** Forgetting the host you are connected to now disconnects
 before the list is saved. If the save then fails (`listNotSaved`), the host is still listed, you
@@ -101,7 +121,14 @@ alternative, invalidating first and disconnecting afterwards only on success, le
 - **AC5.** The registry does not record a selection for a host that is not saved.
 - **AC6 (app, guarded by build and reading).** `AppModel.select` checks its ticket after every
   suspension, before publishing anything, on both the success and failure paths. `forget` ends the
-  selection through the gate before its first `await`, and `selectionID` is gone.
+  selection through the gate before its first `await`, and `selectionID` is gone. `forget`
+  finishes forgetting (`selections.finishForgetting`) on every path out, including `listNotSaved`
+  and the partial-failure path.
+- **AC7.** A selection of B begun while B is being forgotten is not current, so it neither
+  publishes nor connects B, and its failure path publishes nothing either.
+- **AC8.** Once forgetting B finishes, whether it succeeded or the list save failed, a new
+  selection of B is current.
+- **AC9.** Forgetting B does not affect a selection of another host C begun meanwhile.
 
 ## Test list
 
@@ -122,6 +149,9 @@ Deletes and writes are never held. The test awaits the stream's first element, n
 | AC3 | `HostSelectionGateTests.swift` | `"AC3: a newer selection supersedes an older one"` | stub `isCurrent(newer)` returns false |
 | AC3 | `HostSelectionGateTests.swift` | `"AC3: ending the selection makes its ticket stale"` | stub `isCurrent` is false before `end()` as well (the test asserts it is current first) |
 | AC3 | `HostSelectionGateTests.swift` | `"AC3: selecting a forgotten host again does not revive the old ticket"` | stub `isCurrent(fresh)` returns false |
+| AC7 | `HostSelectionGateTests.swift`, suite "a host being forgotten" | `"AC7: a selection begun while B is being forgotten is not current"` | `begin` makes every ticket current: `!gate.isCurrent(during)` fails |
+| AC8 | same | `"AC8: once forgetting B finishes, a new selection of B is current (the failed-save case)"` | fails on its precondition `!gate.isCurrent(during)`. The post-finish assertion passes today, because nothing is ever marked, so the precondition is what makes the test bite |
+| AC9 | same | `"AC9: forgetting B does not affect a selection of C begun meanwhile"` | fails on its precondition `!gate.isCurrent(ofB)`, for the same reason. The assertion about C proves nothing unless B's mark is in effect |
 | AC4 | `HostRegistryTests.swift` | `"#104 AC4: no token is handed out for a host that is not saved"` | returns the stored token: `"token-X" == nil` fails |
 | AC5 | `HostRegistryTests.swift` | `"#104 AC5: a selection naming a host that is not saved is not recorded"` | `registry.selection?.hostId` is the unsaved id |
 
@@ -149,6 +179,9 @@ guard is the following:
   4. `try? await registry.setSelection` (`:395`, **check missing today**)
   5. `await drafts.navigation(for:)` inside `restoreNavigation` (`:1458`, **check missing**, and
      it publishes `selectedWorkspaceId` and `selectedSessionId`)
+- And in `forget`: `selections.forget` comes before the first `await`, and
+  `defer { selections.finishForgetting(host.id) }` sits right after it. No `return` and no `throw`
+  can leave the function with the mark still set.
 - A lint rule was considered and rejected. "A check follows every `await`" cannot be expressed in
   `grep` without false positives. A rule banning `selectionID` would only restate what the
   compiler already enforces once the property is deleted.
@@ -203,8 +236,16 @@ if the measured total rises.
   selection is current".
 - An `AppModel` injection seam for a secret store, which would make AC6 testable. If the design
   review wants one, it is its own issue.
-- `seedForGallery` publishes `selectedHost` without a ticket, so forgetting the gallery's host
-  does not disconnect it. It is a debug-only screen, so this is unchanged and noted here only.
+- `seedForGallery` publishes `selectedHost` without a ticket. Correction, from the verifier: this
+  *is* a change. Before #104 the post-await `selectedHost?.id == host.id` check disconnected a
+  gallery-seeded host when it was forgotten. Now it does not, because the gate holds no ticket for
+  it. The gallery is Debug only and is not fixed here.
+- `apply(status:selection:)` checks its ticket on entry only, then awaits (verifier finding 1).
+  That predates #104, and it is filed as #106 in the host-lifecycle cluster.
+- A `select(B)` refused by AC7 returns at its first check, after `resetHostScopedState` has set
+  `idleStatus = .connecting`. Nothing then moves the status on until the next selection or
+  disconnect. That is the existing behaviour of any refused selection, not new to AC7, and it
+  belongs to the lifecycle review (#94, #96).
 
 ## Red evidence
 
@@ -232,6 +273,24 @@ HostRegistryTests
 The second AC1 test does not report `!gate.isCurrent(ticket)` because the stub's `isCurrent` is
 already false. That assertion begins to bite once the builder makes `isCurrent` real, and the
 `ended` assertion pins the same behaviour from the other side.
+
+**Second `Tests:` commit (AC7–AC9, after the security review).** `Tools/check.sh --red`,
+2026-10-16: `red: ok it compiles and fails on assertions (kit: fail, app: pass)`, `check: ok — red
+for the right reason`. Kit: 607 tests, 3 issues. The AC1–AC6 tests are green on the builder's implementation. The only
+failures are the new ones, and each matches its prediction:
+
+```
+HostSelectionGateForgettingTests ("Host selection gate: a host being forgotten")
+AC7: a selection begun while B is being forgotten is not current     Expectation failed: !gate.isCurrent(during)
+AC8: once forgetting B finishes, a new selection of B is current ... Expectation failed: !gate.isCurrent(during)   (precondition)
+AC9: forgetting B does not affect a selection of C begun meanwhile   Expectation failed: !gate.isCurrent(ofB)      (precondition)
+```
+
+One planner line was added to an existing test. `"AC3: selecting a forgotten host again does not
+revive the old ticket"` now calls `gate.finishForgetting(b)` before re-selecting, because under
+AC7 a selection begun mid-forget is rightly not current. The added line goes into this `Tests:`
+commit, and no line of the earlier commit changed. The stub is `finishForgetting` as a no-op,
+with `forget` not yet marking.
 
 ## Verification
 

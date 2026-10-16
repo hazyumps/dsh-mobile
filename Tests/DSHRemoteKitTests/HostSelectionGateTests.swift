@@ -67,9 +67,59 @@ struct HostSelectionGateTests {
         var gate = HostSelectionGate()
         let old = gate.begin(b)
         gate.forget(b)
+        // The forget has finished: a selection begun during it is never current (AC7).
+        gate.finishForgetting(b)
         let fresh = gate.begin(b)
 
         #expect(!gate.isCurrent(old), "the ticket from before the forget came back to life")
         #expect(gate.isCurrent(fresh), "the new selection of B is not current")
+    }
+}
+
+/// #104, from the security review: `AppModel.forget` ends the selection before it awaits the
+/// registry, so a `select(B)` begun during that await would get a fresh ticket nothing ends. Its
+/// token read yields nil, and its failure path would publish B. The gate marks B as being
+/// forgotten from `forget(_:)` until `finishForgetting(_:)`, and a ticket begun meanwhile is
+/// never current.
+@Suite("Host selection gate: a host being forgotten")
+struct HostSelectionGateForgettingTests {
+    private let b = UUID()
+    private let c = UUID()
+
+    @Test("AC7: a selection begun while B is being forgotten is not current")
+    func selectionDuringForgetIsNotCurrent() {
+        var gate = HostSelectionGate()
+        gate.forget(b)
+
+        let during = gate.begin(b)
+
+        #expect(!gate.isCurrent(during), "a selection begun mid-forget is current, so it can publish the forgotten host")
+    }
+
+    @Test("AC8: once forgetting B finishes, a new selection of B is current (the failed-save case)")
+    func selectionAfterForgetFinishesIsCurrent() {
+        var gate = HostSelectionGate()
+        gate.forget(b)
+        // The mark must have taken effect, or the assertion after `finishForgetting` proves nothing.
+        let during = gate.begin(b)
+        #expect(!gate.isCurrent(during), "precondition: B was not marked as being forgotten")
+
+        gate.finishForgetting(b)
+        let after = gate.begin(b)
+
+        #expect(gate.isCurrent(after), "a host whose forget finished (or failed) cannot be selected again")
+    }
+
+    @Test("AC9: forgetting B does not affect a selection of C begun meanwhile")
+    func markingBDoesNotAffectC() {
+        var gate = HostSelectionGate()
+        gate.forget(b)
+        // B's mark must be in effect, or the assertion about C proves nothing.
+        let ofB = gate.begin(b)
+        #expect(!gate.isCurrent(ofB), "precondition: B was not marked as being forgotten")
+
+        let ofC = gate.begin(c)
+
+        #expect(gate.isCurrent(ofC), "forgetting B blocked a selection of C")
     }
 }
