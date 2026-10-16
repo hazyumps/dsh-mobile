@@ -622,8 +622,11 @@ public actor ConnectionCoordinator {
             authorization: origin.authorization,
             transport: makeTransport(origin)
         )
+        // The window's own address, not one rebuilt from `sessionId`: a subagent's session form is
+        // refused by the host (`session/agent-busy`), so the parent address has to survive the trip
+        // from the screen that opened the conversation.
         let argument = SessionPageRequest(
-            address: .session(.init(kind: "session", sessionId: request.sessionId)),
+            address: request.address.pageAddress,
             throughSeq: request.throughSeq,
             beforeSeq: request.beforeSeq,
             maxMessages: Int64(request.maxMessages)

@@ -15,6 +15,7 @@ enum Fixtures {
         case rpcRequest = "rpc-request.json"
         case rpcSessionList = "rpc-response-session-list.json"
         case rpcScheduledTasksList = "rpc-response-scheduled-tasks-list.json"
+        case rpcSubagentRoster = "rpc-response-subagent-roster.json"
         case rpcTypedError = "rpc-response-typed-error.json"
         case forbiddenUnpaired = "forbidden-unpaired.json"
         case muxStreamFrames = "mux-stream-frames.json"
@@ -108,6 +109,20 @@ func followStreamID(on socket: StubRelaySocket) async throws -> String {
         let frame = try JSONDecoder().decode(JSONValue.self, from: Data(text.utf8))
         if frame["endpoint"]?.stringValue == "session/follow" {
             return try #require(frame["streamId"]?.stringValue)
+        }
+    }
+    throw FixtureError.noFollowStream
+}
+
+/// The `payload.args` of the follow frame this socket was asked to send.
+///
+/// The address is what tells a subagent follow from a session one (#13), so the argument object
+/// is read rather than assumed.
+func followArguments(on socket: StubRelaySocket) async throws -> JSONValue {
+    for text in await socket.sentTexts.reversed() {
+        let frame = try JSONDecoder().decode(JSONValue.self, from: Data(text.utf8))
+        if frame["endpoint"]?.stringValue == "session/follow" {
+            return try #require(frame["payload"]?["args"])
         }
     }
     throw FixtureError.noFollowStream

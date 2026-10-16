@@ -9,6 +9,14 @@ Fixed / Security, with its issue number. The release renames the section.
 
 ## [Unreleased]
 
+### Added
+- A session's subagents, and how long each has been working. The conversation's toolbar carries a
+  count when the session has delegated anything, and opens a roster built from the harness's own
+  `subagentCatalog` and `subagentTiming`: mode, running or completed or inactive, token total, and
+  the active-turn duration, ticking once a second while something is running. A row opens the
+  child's transcript read-only — continuing a child is a separate write path and is not in this
+  change (#13).
+
 ### Fixed
 - A Release build compiles again; it had been failing on a debug-only trace helper (#64).
 - Assistant replies no longer lose the left edge of their first and last letters (#74).

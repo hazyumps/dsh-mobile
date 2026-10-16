@@ -42,6 +42,17 @@ struct ScreensGalleryView: View {
                 NavigationStack {
                     NewSessionView(onCreated: { _ in })
                 }
+            case "subagents":
+                // #13's screen. The roster is seeded because the real one needs a host that has
+                // delegated something, and the shapes here are the captured ones: a running child
+                // whose turn is open, one whose last turn completed, one whose last turn did not,
+                // and one the session index has not reported at all.
+                NavigationStack {
+                    SubagentsView(
+                        parentSessionId: "session-example-1",
+                        seededRoster: Self.subagentFixture(now: SystemEpochClock().epochMillis())
+                    )
+                }
             default: HomeView()
             }
         }
@@ -167,6 +178,93 @@ struct ScreensGalleryView: View {
             isLoadingOlder: false,
             pageError: nil
         )
+    }
+
+    /// A roster with the four states the real one can show, in the shapes the host sends.
+    ///
+    /// The values are invented relative to `now`; the *shapes* are the captured ones. Rendering
+    /// from the capture itself would show a three-month duration on a child whose turn closed the
+    /// same afternoon, because `settledMs` is a duration and `active` is absolute.
+    private static func subagentFixture(now: Int64) -> SubagentRoster {
+        let catalog: [JSONValue] = [
+            .object(["mode": .string("continuable"), "label": .string("Map the relay's fence"), "id": .string("subagent-1"), "createdAt": .int(now - 3_600_000)]),
+            .object(["mode": .string("continuable"), "label": .string("Review the mux frame bound"), "id": .string("subagent-2"), "createdAt": .int(now - 7_200_000)]),
+            .object(["mode": .string("continuable"), "label": .string("Sweep fixture coverage"), "id": .string("subagent-3"), "createdAt": .int(now - 9_000_000)]),
+            // An unlabelled one-shot row: the descriptor makes `label` optional there, so the row
+            // falls back to its session id.
+            .object(["mode": .string("one-shot"), "id": .string("subagent-4"), "createdAt": .int(now - 10_800_000)]),
+            // And one the session index has not reported at all, which gets a row and nothing else.
+            .object(["mode": .string("continuable"), "label": .string("Not in the index yet"), "id": .string("subagent-5"), "createdAt": .int(now - 11_400_000)]),
+        ]
+        return SubagentRoster(catalog: catalog, facts: [
+            "subagent-1": SubagentFacts(
+                projections: [
+                    "subagentTiming": .object([
+                        "settledMs": .int(412_000),
+                        "active": .object(["since": .int(now - 96_000), "through": .int(now - 1_000)]),
+                    ]),
+                    "tokenUsage": .object([
+                        "uncachedInputTokens": .int(48_120),
+                        "outputTokens": .int(9_840),
+                        "cacheReadTokens": .int(1_204_880),
+                        "cacheWriteTokens": .int(0),
+                    ]),
+                ],
+                title: "Trace a fence refusal through the relay",
+                isRunning: true
+            ),
+            "subagent-2": SubagentFacts(
+                projections: [
+                    "subagentTiming": .object(["settledMs": .int(2_760_000), "lastTurnCompleted": .bool(true)]),
+                    "tokenUsage": .object([
+                        "uncachedInputTokens": .int(120_400),
+                        "outputTokens": .int(31_220),
+                        "cacheReadTokens": .int(8_402_000),
+                        "cacheWriteTokens": .int(0),
+                    ]),
+                ],
+                title: "Read the mux framing rules",
+                isRunning: false
+            ),
+            // An interrupted turn: `active` with no `turn/end`, and a last turn that did not
+            // complete. The duration is bounded by `through`, so it stopped where the work did.
+            "subagent-3": SubagentFacts(
+                projections: [
+                    "subagentTiming": .object([
+                        "settledMs": .int(64_500),
+                        "active": .object(["since": .int(now - 900_000), "through": .int(now - 640_000)]),
+                        "lastTurnCompleted": .bool(false),
+                    ]),
+                    "tokenUsage": .object([
+                        "uncachedInputTokens": .int(6_100),
+                        "outputTokens": .int(820),
+                        "cacheReadTokens": .int(0),
+                        "cacheWriteTokens": .int(0),
+                    ]),
+                ],
+                title: "Pin the polymorphic surfaceOp shape",
+                isRunning: false
+            ),
+            // The unlabelled one-shot from the catalog: it has a real state, and its row is still
+            // named by its session id because the catalog gave it no label.
+            "subagent-4": SubagentFacts(
+                projections: [
+                    "subagentTiming": .object(["settledMs": .int(154_000), "lastTurnCompleted": .bool(true)]),
+                    "tokenUsage": .object([
+                        "uncachedInputTokens": .int(9_400),
+                        "outputTokens": .int(1_260),
+                        "cacheReadTokens": .int(88_000),
+                        "cacheWriteTokens": .int(0),
+                    ]),
+                ],
+                title: "One-shot: pin the JSONValue shape",
+                isRunning: false
+            ),
+            // No facts at all: the session index has not reported this child. It still lists — the
+            // catalog is membership — with no activity, no duration and no token total rather than
+            // with zeroes.
+            "subagent-5": SubagentFacts(projections: [:], title: nil, isRunning: nil),
+        ])
     }
 
     /// The drawer stands alone here because that is how it is presented: Home's own

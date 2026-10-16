@@ -263,6 +263,7 @@ shipping app's normal flow is what runs by default.
 | `DSH_SETTINGS` | Opens Settings on launch — its only other door is a drawer row. |
 | `DSH_DIAGNOSTICS` | Opens Settings straight to the diagnostics preview. Needs `DSH_SETTINGS` as well: the sheet it lives in has to be open for the flag to mean anything. |
 | `DSH_TELEMETRY` | Starts a conversation with the harness event stream shown rather than folded behind the toolbar toggle. |
+| `DSH_SUBAGENTS` | Opens the conversation's subagents sheet at launch, so a roster that is normally one tap behind a toolbar control can be looked at on a machine that cannot tap. |
 | `DSH_FOCUS` | Focuses the composer on Home, so the keyboard's interaction with the rest of the screen can be reviewed without a tap. |
 | `DSH_DRAWER` | Opens the drawer on Home, for the same reason. Pair it with `DSH_FOCUS` to reproduce the composer-focused-then-drawer-opened case. |
 | `DSH_DRAFT` | Prefills the conversation composer, so the `/` command suggestions can be seen on a machine that cannot type. |
@@ -271,7 +272,7 @@ shipping app's normal flow is what runs by default.
 | `DSH_ANSWER` | Answers the first live request with this value — a question's option label, or `allow`/`deny` for an approval — so the `$events/result` path can be exercised without a tap. |
 | `DSH_SEND_MESSAGE` | Sends one message once a conversation is open. **Point it at a scratch session**: a duplicate or stray prompt costs real work, and this client never resends on its own. |
 | `DSH_DESIGN_GALLERY` | Shows the component gallery instead of the app: every design-system component in each of its states, on the real tokens. |
-| `DSH_SCREEN_GALLERY` | Shows the screens above the components from fixture data — `drawer` draws the drawer, `conversation` the conversation transcript, anything else Home. It renders the **real** screens against a seeded model, so the layout can be reviewed without a host. |
+| `DSH_SCREEN_GALLERY` | Shows the screens above the components from fixture data — `drawer` draws the drawer, `conversation` the conversation transcript, `project` a project's sessions, `new` the new-session screen, `subagents` a session's subagent roster, anything else Home. It renders the **real** screens against a seeded model, so the layout can be reviewed without a host. |
 
 A simulator launch passes them through `simctl`'s `SIMCTL_CHILD_` prefix, and the
 bundle identifier is generated from `bundleIdPrefix` in [project.yml](project.yml):

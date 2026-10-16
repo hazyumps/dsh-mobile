@@ -1,0 +1,96 @@
+{
+  "note": "Subagent projections captured from the installed harness. Ids, labels and titles are redacted; every mode, timestamp, timing and token figure is as the host sent it. `group` is this file's own label for the state a row demonstrates and is not on the wire.",
+  "source": "POST /api/session/projections {request:{sessionId:<parent>}} and POST /api/session/list against the relay on 127.0.0.1:3443, 2026-10-15, host 0.2.0-rc.2, protocol 4.",
+  "parentSessionId": "session-parent-1",
+  "parentSubagentCatalog": [
+    {
+      "mode": "continuable",
+      "label": "Implement native compressor privately",
+      "id": "subagent-child-1",
+      "createdAt": 1792087375461
+    },
+    {
+      "mode": "continuable",
+      "label": "Review independent selector tests",
+      "id": "subagent-child-2",
+      "createdAt": 1792012370832
+    },
+    {
+      "mode": "continuable",
+      "label": "Audit existing postpool transforms",
+      "id": "subagent-child-3",
+      "createdAt": 1792022629774
+    }
+  ],
+  "childRows": [
+    {
+      "group": "running",
+      "sessionId": "subagent-child-1",
+      "running": true,
+      "title": "Read-only review of the new collector",
+      "subagent": {
+        "mode": "continuable",
+        "label": "Implement native compressor privately",
+        "seq": 0
+      },
+      "subagentTiming": {
+        "settledMs": 9634145,
+        "active": {
+          "since": 1792106727891,
+          "through": 1792107446245
+        }
+      },
+      "tokenUsage": {
+        "uncachedInputTokens": 1725429,
+        "outputTokens": 232830,
+        "cacheReadTokens": 110456576,
+        "cacheWriteTokens": 0
+      },
+      "subagentCatalog": []
+    },
+    {
+      "group": "completed",
+      "sessionId": "subagent-child-2",
+      "running": false,
+      "title": "Read-only review independent of the test suite",
+      "subagent": {
+        "mode": "continuable",
+        "label": "Review independent selector tests",
+        "seq": 0
+      },
+      "subagentTiming": {
+        "settledMs": 272425,
+        "lastTurnCompleted": true
+      },
+      "tokenUsage": {
+        "uncachedInputTokens": 157296,
+        "outputTokens": 50472,
+        "cacheReadTokens": 5698688,
+        "cacheWriteTokens": 0
+      },
+      "subagentCatalog": []
+    },
+    {
+      "group": "interrupted",
+      "sessionId": "subagent-child-3",
+      "running": false,
+      "title": "Read-only review of the pooled transforms",
+      "subagent": {
+        "mode": "continuable",
+        "label": "Audit existing postpool transforms",
+        "seq": 0
+      },
+      "subagentTiming": {
+        "settledMs": 20219928,
+        "lastTurnCompleted": false
+      },
+      "tokenUsage": {
+        "uncachedInputTokens": 2526424,
+        "outputTokens": 433623,
+        "cacheReadTokens": 201205760,
+        "cacheWriteTokens": 0
+      },
+      "subagentCatalog": []
+    }
+  ]
+}
