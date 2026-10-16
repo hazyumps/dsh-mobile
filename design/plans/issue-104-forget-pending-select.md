@@ -1,6 +1,6 @@
 # Issue #104: a host forgotten while its selection is in flight is still connected
 
-**Status:** draft
+**Status:** approved (Dan, 2026-10-16, "Plan approved" on #104); tests red
 **Branch:** `issue-104-forget-pending-select`
 **Version impact:** PATCH. A behaviour fix: no persisted format change, no generated model. The
 kit gains a small public type, which is additive. No bump in this PR, and one line under
@@ -113,16 +113,17 @@ Deletes and writes are never held. The test awaits the stream's first element, n
 
 | AC | Suite / file | Test name | Fails today because |
 |---|---|---|---|
-| AC1 | `HostRegistryTests.swift` | `"AC1: a token read that a forget overtakes yields no token"` | the held read returns the captured value: `"token-B" == nil` fails |
-| AC1 | `HostSelectionGateTests.swift` (new) | `"AC1: forgetting B while its token read is held leaves no current selection and no token"`. Mirrors `AppModel`'s order: `begin(B)`, held read, `gate.forget(B)`, `registry.forget(B)`, release | stub `forget` returns false, and the read yields `"token-B"` |
+| AC1 | `HostRegistryTests.swift` | `"#104 AC1: a token read that a forget overtakes yields no token"` | the held read returns the captured value: `"token-B" == nil` fails |
+| AC1 | `HostRegistryTests.swift` (it needs the suite's `Disk`) | `"#104 AC1: forgetting B while its token read is held leaves no current selection and no token"`. Mirrors `AppModel`'s order: `begin(B)`, held read, `gate.forget(B)`, `registry.forget(B)`, release | stub `forget` returns false, and the read yields `"token-B"` |
 | AC1 | `HostSelectionGateTests.swift` | `"AC1: forgetting B ends a pending selection of B"` | stub `forget(B)` returns false |
 | AC2 | `HostSelectionGateTests.swift` | `"AC2: forgetting C leaves a pending selection of B current"` | stub `isCurrent` returns false |
-| AC2 | `HostRegistryTests.swift` | `"AC2: forgetting another host leaves a held token read intact"` | guard: passes today and must keep passing (it catches a fix that drops every in-flight read) |
+| AC2 | `HostRegistryTests.swift` | `"#104 AC2: forgetting another host leaves a held token read intact"` | guard: passes today and must keep passing (it catches a fix that drops every in-flight read) |
+| AC2 | `HostSelectionGateTests.swift` | `"AC2: forgetting a host whose selection was superseded leaves the newer one current"` | stub `isCurrent(newer)` returns false |
 | AC3 | `HostSelectionGateTests.swift` | `"AC3: a newer selection supersedes an older one"` | stub `isCurrent(newer)` returns false |
 | AC3 | `HostSelectionGateTests.swift` | `"AC3: ending the selection makes its ticket stale"` | stub `isCurrent` is false before `end()` as well (the test asserts it is current first) |
 | AC3 | `HostSelectionGateTests.swift` | `"AC3: selecting a forgotten host again does not revive the old ticket"` | stub `isCurrent(fresh)` returns false |
-| AC4 | `HostRegistryTests.swift` | `"AC4: no token is handed out for a host that is not saved"` | returns the stored token: `"token-X" == nil` fails |
-| AC5 | `HostRegistryTests.swift` | `"AC5: a selection naming a host that is not saved is not recorded"` | `registry.selection?.hostId` is the unsaved id |
+| AC4 | `HostRegistryTests.swift` | `"#104 AC4: no token is handed out for a host that is not saved"` | returns the stored token: `"token-X" == nil` fails |
+| AC5 | `HostRegistryTests.swift` | `"#104 AC5: a selection naming a host that is not saved is not recorded"` | `registry.selection?.hostId` is the unsaved id |
 
 AC numbers in `HostRegistryTests.swift` already run AC1–AC8 for #65. The new tests go under
 `// MARK: - Selection in flight (#104)`, and their names say `#104` so they read unambiguously:
@@ -207,10 +208,30 @@ if the measured total rises.
 
 ## Red evidence
 
-*Filled in with the `Tests:` commit.*
+`Tools/check.sh --red`, 2026-10-16: `red: ok it compiles and fails on assertions (kit: fail, app:
+pass)`, `check: ok — red for the right reason`. Kit: 604 tests, 12 issues, all in the tests below.
+The app tests are unchanged and pass. Every failure matches its prediction.
 
 ```
+HostSelectionGateTests
+AC1: forgetting B ends a pending selection of B                         Expectation failed: ended
+AC2: forgetting C leaves a pending selection of B current               Expectation failed: gate.isCurrent(ticket)
+AC2: forgetting a host whose selection was superseded ... newer current  Expectation failed: gate.isCurrent(newer)
+AC3: a newer selection supersedes an older one                          Expectation failed: gate.isCurrent(newer)
+AC3: ending the selection makes its ticket stale                        Expectation failed: gate.isCurrent(ticket)  (before end)
+AC3: selecting a forgotten host again does not revive the old ticket    Expectation failed: gate.isCurrent(fresh)
+HostRegistryTests
+#104 AC1: a token read that a forget overtakes yields no token          Expectation failed: try await read.value == nil
+#104 AC1: forgetting B while its token read is held ...                 Expectation failed: ended; Expectation failed: token == nil
+#104 AC2: forgetting another host leaves a held token read intact       passed (guard, as predicted)
+#104 AC4: no token is handed out for a host that is not saved           Expectation failed: try await registry.relayDeviceToken(for: stray.id) == nil
+#104 AC5: a selection naming a host that is not saved is not recorded   Expectation failed: await registry.selection == nil;
+                                                                        Expectation failed: disk.hostStore.loadSelection() == nil
 ```
+
+The second AC1 test does not report `!gate.isCurrent(ticket)` because the stub's `isCurrent` is
+already false. That assertion begins to bite once the builder makes `isCurrent` real, and the
+`ended` assertion pins the same behaviour from the other side.
 
 ## Verification
 
