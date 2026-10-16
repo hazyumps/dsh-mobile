@@ -1694,8 +1694,10 @@ final class AppModel {
         hostError = nil
         // Before the first await, so a selection of this host that is still in flight ends
         // here too, not only a published one (#104). A list that then cannot be saved leaves
-        // the host listed and disconnected, which is the honest end state.
+        // the host listed and disconnected, which is the honest end state. Until the forget
+        // finishes, on every path out, a selection of this host begun meanwhile is refused.
         if selections.forget(host.id) { disconnect() }
+        defer { selections.finishForgetting(host.id) }
         do {
             try await registry.forget(host.id)
         } catch HostRegistryError.listNotSaved(let reason) {
