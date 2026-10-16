@@ -66,14 +66,28 @@ public struct SubagentRoster: Sendable, Hashable {
         public var displayLabel: String { label ?? id }
 
         /// What the child is doing, or `nil` when nothing said.
-        public var activity: Activity? { .inactive }
+        ///
+        /// `running` is a `session/list` field, not a projection, so it is the only thing that can
+        /// say a child is working and its absence is not evidence of anything. A child with a
+        /// timing and no index row still reports `nil`: a turn left open by an interrupted run is
+        /// not a running child (see ``durationMs(now:)``).
+        public var activity: Activity? {
+            guard let isRunning else { return nil }
+            if isRunning { return .running }
+            // Not running: the last *closed* turn is what tells a normal finish from every other
+            // way a child stops. The desktop's own three-way split, and the reason it has three.
+            return timing?.lastTurnCompleted == true ? .completed : .inactive
+        }
 
         /// How long the child has been working, in the host's own terms.
         ///
         /// `now` is epoch milliseconds and is only consulted for a **running** child with an open
         /// turn: for any other child the end is the turn's own `through`, so a figure does not keep
         /// climbing after the work stopped.
-        public func durationMs(now: Int64) -> Int64? { timing?.settledMs }
+        public func durationMs(now: Int64) -> Int64? {
+            guard let timing else { return nil }
+            return timing.durationMs(isRunning: isRunning == true, now: now)
+        }
     }
 
     /// The children, in the order the host's catalog gave them.
@@ -85,17 +99,20 @@ public struct SubagentRoster: Sendable, Hashable {
     public var count: Int { entries.count }
 
     /// How many children are running, for the entry point's count.
-    public var runningCount: Int { 0 }
+    public var runningCount: Int { entries.filter { $0.activity == .running }.count }
 
     /// Whether the duration has anything to advance this second.
-    public var needsTick: Bool { false }
+    ///
+    /// The screen's clock reads this rather than counting actors: an open turn on an inactive child
+    /// is already frozen at its own `through`, so ticking for it would redraw the same number.
+    public var needsTick: Bool { runningCount > 0 }
 
     /// Whether the conversation should offer the roster at all.
     ///
     /// The desktop's own rule for its header trigger: an absent catalog, an empty loading catalog,
     /// or a successfully loaded empty catalog hides the count. A session with nothing delegated has
     /// no subagents surface, rather than an empty one.
-    public var showsEntryPoint: Bool { true }
+    public var showsEntryPoint: Bool { isReported && !entries.isEmpty }
 
     /// Builds the roster from the parent's catalog and one ``SubagentFacts`` per child.
     ///
@@ -105,13 +122,24 @@ public struct SubagentRoster: Sendable, Hashable {
     ///     row: the catalog is the authority on membership, and a missing row means the host has
     ///     not reported that child's own state yet.
     public init(catalog: [JSONValue]?, facts: [String: SubagentFacts]) {
-        // STUB: membership only. Each catalog member becomes a row, but its mode, label and every
-        // figure derived from `facts` are missing — so `SubagentRosterTests` fails on its
-        // assertions rather than crashing on an empty roster. See the plan's AC1–AC6.
         self.isReported = catalog != nil
-        self.entries = (catalog ?? []).compactMap { entry in
-            guard let id = entry["id"]?.stringValue else { return nil }
-            return Entry(id: id, mode: .unknown)
+        self.entries = (catalog ?? []).compactMap { value in
+            // The id is the one field the catalog needs for a row to be addressable at all; an
+            // entry without one cannot be opened, so it is dropped rather than drawn dead.
+            guard let id = value["id"]?.stringValue else { return nil }
+            let child = facts[id]
+            return Entry(
+                id: id,
+                label: value["label"]?.stringValue,
+                // A catalog entry with no mode is the union's own `unknown` — "not established" —
+                // rather than a refusal to show the row.
+                mode: SubagentMode(rawValue: value["mode"]?.stringValue ?? "unknown"),
+                createdAt: value["createdAt"]?.intValue,
+                title: child?.title,
+                isRunning: child?.isRunning,
+                tokenTotal: child?.tokenTotal,
+                timing: child?.timing
+            )
         }
     }
 }
@@ -131,8 +159,19 @@ public struct SubagentFacts: Sendable, Hashable {
     public init(projections: [String: JSONValue]?, title: String?, isRunning: Bool?) {
         self.title = title
         self.isRunning = isRunning
-        self.tokenTotal = 0
-        self.timing = nil
+        self.tokenTotal = projections?["tokenUsage"].flatMap(Self.tokenTotal(_:))
+        self.timing = projections?["subagentTiming"].flatMap(SubagentTiming.init(json:))
+    }
+
+    /// The four buckets are disjoint, so the total is their sum.
+    ///
+    /// A host that reported only some of them has still reported those: the sum of what is there
+    /// beats a total withheld. None at all is `nil` — "absent is not zero" (`AGENTS.md`), and a
+    /// child that has not run has no tokens rather than 0 of them.
+    static func tokenTotal(_ usage: JSONValue) -> Int64? {
+        let buckets = ["uncachedInputTokens", "outputTokens", "cacheReadTokens", "cacheWriteTokens"]
+        let reported = buckets.compactMap { usage[$0]?.intValue }
+        return reported.isEmpty ? nil : reported.reduce(0, +)
     }
 }
 
@@ -150,10 +189,40 @@ public struct SubagentTiming: Sendable, Hashable {
     /// Decodes the wire value. `settledMs` is required by the descriptor's schema, so a value
     /// without it is not a timing this client understands and is reported as absent rather than
     /// as zero.
-    public init?(json: JSONValue) { return nil }
+    ///
+    /// `active` is all-or-nothing for the same reason: a half-interval has no bounded duration, and
+    /// a guessed `through` would be a figure the host never stated.
+    public init?(json: JSONValue) {
+        guard let settledMs = json["settledMs"]?.intValue else { return nil }
+        self.settledMs = settledMs
+
+        if let active = json["active"],
+           let since = active["since"]?.intValue,
+           let through = active["through"]?.intValue {
+            self.activeSince = since
+            self.activeThrough = through
+        } else {
+            self.activeSince = nil
+            self.activeThrough = nil
+        }
+
+        // Absent until a turn has closed: the host clears it when a turn opens and only sets it on
+        // `turn/end`, so `nil` says "no closed turn to judge" rather than "did not complete".
+        self.lastTurnCompleted = json["lastTurnCompleted"]?.boolValue
+    }
 
     /// The host's own arithmetic. See ``SubagentRoster`` for the definition and its source.
-    public func durationMs(isRunning: Bool, now: Int64) -> Int64 { settledMs }
+    ///
+    /// - Parameters:
+    ///   - isRunning: whether the session index says the child is working. Only a running child's
+    ///     open turn is measured to `now`; every other open turn is bounded by its own `through`,
+    ///     which is what keeps an interrupted turn's figure from climbing.
+    ///   - now: epoch milliseconds, ignored unless `isRunning` and a turn is open.
+    public func durationMs(isRunning: Bool, now: Int64) -> Int64 {
+        guard let since = activeSince else { return settledMs }
+        let end = isRunning ? now : (activeThrough ?? since)
+        return settledMs + max(0, end - since)
+    }
 }
 
 /// How a child was delegated, as the catalog states it.
