@@ -959,40 +959,61 @@ final class AppModel {
 
     // MARK: - Attachments (SPEC §3.6)
 
-    /// Uploads one file into a session and stages its receipt.
+    /// Uploads one staged file into a session through `uploader`, and stages its receipt.
     ///
-    /// Nothing is retried: an uncertain upload is reported, not replayed (AGENTS.md). Nothing is
-    /// kept for a second try either. An imported file reaches here as a staged copy that
-    /// ``importFile(at:to:)`` discards once this returns, success or failure, so after a failure
-    /// the user picks the file again. SPEC §3.6 asks for attachments to be kept on a refusal;
-    /// persisting copies for that is not done yet (#66 "Out of scope", with #49).
-    @discardableResult
-    func attachFile(at fileURL: URL, name: String? = nil, to sessionId: String) async -> UploadedAttachment? {
-        guard let attachmentUploader else {
+    /// `uploader` and `selection` are the ones captured at the pick, before ``importFile(at:to:)``
+    /// awaited the staging copy: reading ``attachmentUploader`` here would send host A's file to
+    /// whichever host is selected when the copy finishes (#66 addendum, AC9). After the upload's
+    /// await, the receipt or the failure is published only if `selection` is still current; a
+    /// switch has already cleared host A's attachment state, so a late answer is shown nowhere
+    /// rather than on host B's screen (AC11, Dan's decision at gate 1).
+    ///
+    /// Nothing is retried, and an upload already in flight is not cancelled: an uncertain upload
+    /// is reported, not replayed (AGENTS.md). Nothing is kept for a second try either. The staged
+    /// copy is discarded by ``importFile(at:to:)`` once this returns, success or failure, so after
+    /// a failure the user picks the file again. SPEC §3.6 asks for attachments to be kept on a
+    /// refusal; persisting copies for that is not done yet (#66 "Out of scope", with #49).
+    private func attachFile(
+        _ copy: StagedFile,
+        to sessionId: String,
+        through uploader: AttachmentUploader?,
+        selection: UUID
+    ) async {
+        guard let uploader else {
             attachmentError = "This phone is not connected to a harness."
-            return nil
+            return
         }
         isUploading = true
         attachmentError = nil
+        // Cleared whatever happens to the selection: `resetHostScopedState()` does not own the
+        // spinner, so skipping this after a switch would leave it on forever. That an abandoned
+        // upload can clear a newer import's spinner is #105.
         defer { isUploading = false }
 
+        let outcome: Result<UploadedAttachment, any Error>
         do {
             // `byteCount` is ignored: the uploader measures the file on disk itself, so no size
             // is guessed here (#66).
-            let uploaded = try await attachmentUploader.upload(
+            outcome = .success(try await uploader.upload(
                 sessionId: sessionId,
-                name: name ?? fileURL.lastPathComponent,
-                fileURL: fileURL,
+                name: copy.name,
+                fileURL: copy.url,
                 byteCount: 0
-            )
-            stagedAttachments[sessionId, default: []].append(uploaded)
-            return uploaded
-        } catch let failure as AttachmentUploadFailure {
-            attachmentError = Self.describe(failure)
-            return nil
+            ))
         } catch {
+            outcome = .failure(error)
+        }
+
+        // The host changed while the upload was out: its answer belongs to a host whose state is
+        // already gone (AC11).
+        guard selection == selectionID else { return }
+        switch outcome {
+        case .success(let uploaded):
+            stagedAttachments[sessionId, default: []].append(uploaded)
+        case .failure(let failure as AttachmentUploadFailure):
+            attachmentError = Self.describe(failure)
+        case .failure(let error):
             attachmentError = Self.reason(for: error)
-            return nil
         }
     }
 
@@ -1025,12 +1046,18 @@ final class AppModel {
     /// Copies an imported file into staging, uploads the copy, and discards it once the upload
     /// settles, whether it succeeded or failed (#66, SPEC §3.6).
     ///
-    /// Staging comes first, before ``attachFile(at:name:to:)`` checks for a connection: an
-    /// over-limit or unreadable pick is refused for what it is, and never copied. The copy runs
-    /// off the main actor, because a 20 MiB copy would otherwise stall the UI. The security scope
-    /// is started and stopped inside `AttachmentStaging.stage`, which is synchronous, so no
-    /// suspension point can end it before the file is read.
+    /// Staging comes first, before the connection check: an over-limit or unreadable pick is
+    /// refused for what it is, and never copied. The copy runs off the main actor, because a
+    /// 20 MiB copy would otherwise stall the UI. The security scope is started and stopped inside
+    /// `AttachmentStaging.stage`, which is synchronous, so no suspension point can end it before
+    /// the file is read.
+    ///
+    /// The selection and its uploader are captured before the copy's await. If the host changed
+    /// while the copy ran, the copy is discarded and nothing is sent or published: the file was
+    /// picked for a host the user has left (#66 addendum, AC9, AC10).
     func importFile(at fileURL: URL, to sessionId: String) async {
+        let selection = selectionID
+        let uploader = attachmentUploader
         attachmentError = nil
         isUploading = true
         let staging = staging
@@ -1044,11 +1071,15 @@ final class AppModel {
 
         switch staged {
         case .failure(let failure as AttachmentUploadFailure):
+            guard selection == selectionID else { return }
             attachmentError = Self.describe(failure)
         case .failure(let error):
+            guard selection == selectionID else { return }
             attachmentError = Self.reason(for: error)
         case .success(let copy):
-            await attachFile(at: copy.url, name: copy.name, to: sessionId)
+            if selection == selectionID {
+                await attachFile(copy, to: sessionId, through: uploader, selection: selection)
+            }
             await Task.detached(priority: .utility) { staging.discard(copy) }.value
         }
     }
