@@ -257,6 +257,12 @@ the same reason as `AC2`'s. The crash above was repeated in this commit's first 
 same way: `entries[0]` in the last test against a stub that reports no members. It now uses
 `#require(entries.first)`, and says why in the test.
 
+A second planner defect was found by the build and fixed in a third `Tests:` commit: the test's row
+helper took a `title:` and dropped it, because `SessionRecord.title` reads the typed
+`projections.values` and the helper only filled `projectionValues`. The test failed with the string
+nowhere in the record, which is the honest kind of failure — the setup was wrong, not the rule. The
+helper now puts the title where the host puts it, and says so.
+
 ## Verification
 
 *To be filled in by the verifier.*

@@ -19,6 +19,13 @@ struct SubagentRosterSourceTests {
         .array(ids.map { .object(["mode": .string("continuable"), "label": .string("Child \($0)"), "id": .string($0), "createdAt": .int(1)]) })
     }
 
+    /// One `session/list` row.
+    ///
+    /// A `title` is a **projection**, so it has to go where the host puts it —
+    /// `projections.values.title` — and not into `projectionValues` alone. The first version of this
+    /// helper took a `title:` and dropped it, because `SessionRecord.title` reads the typed wrapper:
+    /// the test then failed on `child?.title == "The row's title"` with the string nowhere in the
+    /// record at all. Fixed here in the planner's own `Tests:` commit, as `WORKFLOW.md` step 4 says.
     private func row(
         _ id: String,
         values: [String: JSONValue],
@@ -28,7 +35,7 @@ struct SubagentRosterSourceTests {
         HostSessionStore.SessionRecord(
             sessionId: id,
             running: running,
-            projections: nil,
+            projections: title.map { SessionProjections(values: SessionProjectionValues(title: $0)) },
             projectionValues: values
         )
     }
