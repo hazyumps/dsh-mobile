@@ -122,4 +122,19 @@ struct HostSelectionGateForgettingTests {
 
         #expect(gate.isCurrent(ofC), "forgetting B blocked a selection of C")
     }
+
+    @Test("AC10: when two forgets overlap, finishing one keeps the other host marked")
+    func overlappingForgetsKeepEachMark() {
+        var gate = HostSelectionGate()
+        gate.forget(b)
+        gate.forget(c)
+        gate.finishForgetting(c)
+
+        let whileBIsForgotten = gate.begin(b)
+        #expect(!gate.isCurrent(whileBIsForgotten), "finishing C's forget cleared B's mark too")
+
+        gate.finishForgetting(b)
+        let afterB = gate.begin(b)
+        #expect(gate.isCurrent(afterB), "B cannot be selected after its own forget finished")
+    }
 }

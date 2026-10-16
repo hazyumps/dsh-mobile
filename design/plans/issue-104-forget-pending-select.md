@@ -129,6 +129,9 @@ alternative, invalidating first and disconnecting afterwards only on success, le
 - **AC8.** Once forgetting B finishes, whether it succeeded or the list save failed, a new
   selection of B is current.
 - **AC9.** Forgetting B does not affect a selection of another host C begun meanwhile.
+- **AC10.** The mark is kept per host when two forgets overlap. If B and C are both being
+  forgotten and C's forget finishes, B is still marked, and it is unmarked only by its own finish.
+  (This is separate from AC9, which is about selecting C. AC10 is about finishing C.)
 
 ## Test list
 
@@ -152,6 +155,7 @@ Deletes and writes are never held. The test awaits the stream's first element, n
 | AC7 | `HostSelectionGateTests.swift`, suite "a host being forgotten" | `"AC7: a selection begun while B is being forgotten is not current"` | `begin` makes every ticket current: `!gate.isCurrent(during)` fails |
 | AC8 | same | `"AC8: once forgetting B finishes, a new selection of B is current (the failed-save case)"` | fails on its precondition `!gate.isCurrent(during)`. The post-finish assertion passes today, because nothing is ever marked, so the precondition is what makes the test bite |
 | AC9 | same | `"AC9: forgetting B does not affect a selection of C begun meanwhile"` | fails on its precondition `!gate.isCurrent(ofB)`, for the same reason. The assertion about C proves nothing unless B's mark is in effect |
+| AC10 | same | `"AC10: when two forgets overlap, finishing one keeps the other host marked"` | guard: passes against the implementation at `689848f`. It is shown to guard by mutation; see Red evidence |
 | AC4 | `HostRegistryTests.swift` | `"#104 AC4: no token is handed out for a host that is not saved"` | returns the stored token: `"token-X" == nil` fails |
 | AC5 | `HostRegistryTests.swift` | `"#104 AC5: a selection naming a host that is not saved is not recorded"` | `registry.selection?.hostId` is the unsaved id |
 
@@ -246,6 +250,12 @@ if the measured total rises.
   `idleStatus = .connecting`. Nothing then moves the status on until the next selection or
   disconnect. That is the existing behaviour of any refused selection, not new to AC7, and it
   belongs to the lifecycle review (#94, #96).
+- Two leftovers are filed as #108 for the design review. Neither one reads a token or connects:
+  1. A `select(B)` from an out-of-date `SavedHost`, after `forget` has returned, is not refused
+     by the gate, because B is no longer marked. Its token read yields nil (AC4), so it can show B
+     in a failure state.
+  2. Two forgets of the same host at once share one mark in the set. The first to finish clears
+     it while the second is still awaiting the registry.
 
 ## Red evidence
 
@@ -291,6 +301,19 @@ revive the old ticket"` now calls `gate.finishForgetting(b)` before re-selecting
 AC7 a selection begun mid-forget is rightly not current. The added line goes into this `Tests:`
 commit, and no line of the earlier commit changed. The stub is `finishForgetting` as a no-op,
 with `forget` not yet marking.
+
+**Third `Tests:` commit (AC10, at `689848f`).** This is a guard test, so `Tools/check.sh --red`
+does not apply: it passes against the current implementation, and every other test is green too.
+To show that it guards something, `HostSelectionGate.swift` was mutated twice and restored with
+`git checkout --` each time. With either mutant, AC10 was the only failing gate test (10 tests,
+1 issue):
+
+```
+today                                          ✔ AC10 passed
+finishForgetting does forgetting.removeAll()   ✘ AC10: Expectation failed: !gate.isCurrent(whileBIsForgotten)
+mark held in one slot (UUID?, not Set<UUID>)   ✘ AC10: Expectation failed: !gate.isCurrent(whileBIsForgotten)
+restored (git checkout --)                     ✔ AC10 passed
+```
 
 ## Verification
 
