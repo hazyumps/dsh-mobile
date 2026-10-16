@@ -1,7 +1,7 @@
 # Issue #13: a session's subagents, and their timing
 
-**Status:** approved (Patrick, 2026-10-15) — all three slices; the entry point goes on the
-conversation toolbar, as a count badge opening a sheet
+**Status:** verified — all three slices; the entry point goes on the
+conversation toolbar, as a count badge opening a sheet. Approved by Patrick 2026-10-15.
 **Branch:** `issue-13-subagents-view`
 **Version impact:** MINOR — a new screen and new kit API (`SubagentRoster`, `SessionAddress`).
 No bump in this PR; a line under `## [Unreleased]`.
@@ -265,7 +265,60 @@ helper now puts the title where the host puts it, and says so.
 
 ## Verification
 
-*To be filled in by the verifier.*
+The implementation was undone on the finished tree with the tests kept: `Sources/` restored to the
+stubs the `Tests:` commits declared — `SubagentRoster.swift` at `dc33cf0` plus the `a2c8366` factory
+stub, `SessionAddress.swift` at `dc33cf0`, `HostSessionStore.swift` at `a2c8366` — and the suite
+re-run.
+
+```
+✘ Test run with 582 tests in 42 suites failed after 0.291 seconds with 48 issues.
+```
+
+**20 tests fail, every one on assertions, and nothing crashes.** Restoring `Sources/` and re-running
+gives 582 passed.
+
+| AC | Undone how | Tests that fail |
+|---|---|---|
+| AC1 | `Sources/` at the `Tests:` stubs | `the roster is the catalog, in the host's order`; `an unlabelled entry falls back to its session id`; `an unrecognised mode keeps its raw value rather than failing the catalog` |
+| AC2 | same | `the entry point shows only for a reported, non-empty roster` |
+| AC3 | same | `activity follows the index and the last turn`; `a completed turn is told apart from an interrupted one`; `a child the index does not know reports no activity, not inactive` |
+| AC4 | same | `with no turn open the duration is settledMs`; `a running child's open turn runs to now`; `an inactive child's open turn is bounded by its own through`; `the captured running child's duration is settled plus its open window` |
+| AC5 | same | `the token total sums the four disjoint buckets`; `a partial usage sums what the host reported` |
+| AC6 | same | `the running count is the running children, and the tick follows it` |
+| AC7 | same | `a subagent follow opens with the durable parent address`; `a subagent page carries the durable parent address` |
+| AC9 | same | `the live control value wins per key over the session index row`; `a child with no live value and no row still lists, with nothing reported`; `the live catalog is membership too, and the index row is not membership`; `the captured fixture assembles through this path too` |
+
+Six planned guards still pass with the implementation gone, which is what makes them guards:
+
+- `AC2: an absent catalog is not an empty one`
+- `AC4: no reported timing is nil, not zero`
+- `AC5: a child with no reported usage has no token total`
+- `AC7: an ordinary session still follows … / pages … by session address`
+- `the child's own subagent projection carries the same mode and label as the catalog`
+
+One correction to the red evidence above: `AC9: no catalog in either source is not reported, not
+empty` **passes** at `a2c8366` but **fails** in this combined tree, because here the *roster rules*
+are stubbed too and the stub's `showsEntryPoint` is unconditionally `true`. It is a real assertion,
+guarded by the rules it exercises rather than by the factory.
+
+`Tools/check.sh`: **green** (full, 69 s) — 582 tests in 42 suites, coverage 88.36% with the baseline
+raised from 88.05 in the same commit, Debug **and** Release build, app tests pass, `guard-tests`
+clean, lint clean.
+
+**AC8 by eye.** `DSH_SCREEN_GALLERY=subagents` on a booted simulator, in **both** appearances, and
+both kept as evidence: `design/mockups/2026-10-15-subagents/01-subagents-light.png` and
+`02-subagents-dark.png`. Five children render as intended: running (a dotted circle, `8m 30s`,
+1,262,840 tokens), completed (a green check, `46m 0s`), interrupted (a small dot, `5m 24s` —
+`settledMs` plus the bounded `through`, not the wall clock), an unlabelled one-shot whose row is
+named by its session id, and one the index has not reported, drawn with no glyph and no figures. The
+header reads `1 running of 5`. Light and dark were both checked, because a single-appearance
+screenshot has been wrong before.
+
+**Not verified by eye: the conversation's toolbar control** that opens this sheet. The screen gallery
+draws the transcript rather than `ConversationView`, and seeding a roster the toolbar would read
+needs a host snapshot the gallery has no seam for. The control is ten lines over
+`roster.showsEntryPoint` and `roster.runningCount`, both tested; it is reviewed, not looked at, and
+it is the first thing to check on the phone.
 
 ## Notes for the next person
 
@@ -280,3 +333,15 @@ helper now puts the title where the host puts it, and says so.
 - The relay's own message for the wrong address is `session/agent-busy` / "subagent Sessions require
   their durable parent address". That is the string to look for if a child ever renders "Host
   unavailable" again.
+- **`session/list` returned exactly 200 rows on the capture host**, which had 402 session
+  directories on disk. Whether that is a cap or a filter is not established; what is established is
+  that a session outside the index has no catalog here unless the control baseline still carries it
+  (39 sessions on the same host). A parent in neither shows no subagents control at all, which is the
+  honest rendering of "not reported" but is not the whole tree. If it bites, the fix is the unary
+  `session/projections` read the conversation screen already makes — it answers the parent's catalog
+  directly — used as a third source, which needs its own AC.
+- The child's own `subagent` projection carries the same `mode` and `label` as its catalog entry
+  (the capture agrees, and a test pins it). The catalog is still what drives membership: it is the
+  parent's own statement, it is ordered, and it is what the desktop reads.
+- `SubagentRoster.Entry` is built only by the roster, so the memberwise initialiser stays internal.
+  Nothing outside the kit constructs one.
