@@ -645,3 +645,30 @@ Findings for the reviewer (not fixed; the verifier does not change tests or code
   and also under the revert). S6 by (e)/(e2). S7: the Release build is green with the `#if DEBUG`
   hook. S9 by (c)/(d) and the AC10 tests, with finding 1 as the gap. C3: no `Task.sleep`, and no
   run hung.
+
+### Follow-up tests for finding 1 (addendum)
+
+Dan approved closing finding 1 with one more `Tests:` commit on 2026-10-16. The planner added
+two AC10 tests to `Tests/DSHRemoteTests/FileImportHostSwitchTests.swift`, one for each staging-failure
+branch, in `68a59e0`. They share a new helper, `importFailingAfterSwitch`. The injected `stageFile`
+signals, waits on the existing `Gate`, then throws. The test switches A → B while the gate is
+held, opens it, and asserts that B has no `attachmentError` and that neither host received a
+request. The import task finishes the signal stream, so a `stageFile` that is never called fails a
+`#require` and cannot hang. No `Task.sleep`. No production code or earlier `Tests:` line changed.
+Both pass on the branch. They count as guards because each fails when its guard is removed.
+
+| Branch | Test | Guard removed | Failure with it removed |
+|---|---|---|---|
+| typed `AttachmentUploadFailure` | "AC10: a staging refusal that arrives after a host switch is not shown on the new host" (throws `.unreadable`) | `guard selection == selectionID` in `case .failure(let failure as AttachmentUploadFailure)` | "host A's refusal was shown on host B": `held.attachmentError == nil → false`, `attachmentError → "That file could not be read, so nothing was sent: host A's pick could not be read."` |
+| generic `Error` | "AC10: a staging error that arrives after a host switch is not shown on the new host" (throws `CocoaError(.fileReadNoPermission)`) | `guard selection == selectionID` in `case .failure(let error)` | "host A's staging error was shown on host B": `held.attachmentError == nil → false`, `attachmentError → "Error Domain=NSCocoaErrorDomain Code=257 …"` |
+
+I removed each guard on its own, and then both together (verifier's undo (f)). Each time I ran
+`Tools/check.sh --red`, then restored the file with `git checkout`. Each guard alone failed only
+its own test (app 17 tests, 1 issue). Both together failed both tests (2 issues). The kit stayed green
+throughout.
+
+- `Tools/check.sh --fast` on `68a59e0`: **green**, 20 s. Kit 607/607, coverage 88.54%.
+- `Tools/check.sh` (full) on `68a59e0`: **green**, 85 s. Lint, models, version 0.2.0 (238),
+  guard-tests ok. Kit 607/607. Coverage ok 88.53% (baseline 88.50%). App Debug and Release ok.
+  App tests 17/17.
+- Finding 1 is closed. S9/AC10 now covers the staging-failure path as well.
