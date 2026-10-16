@@ -120,18 +120,23 @@ public actor HostRegistry {
         if let firstFailure { throw firstFailure }
     }
 
-    /// Records the selected host, or clears it with `nil`.
+    /// Records the selected host, or clears it with `nil`. A host that is not saved is not
+    /// recorded: a selection that a `forget` overtook must not name it on disk (#104).
     ///
     /// - Throws: the file error from `HostStore.saveSelection`; `selection` is unchanged.
     public func setSelection(_ id: UUID?) throws {
+        if let id, !hosts.contains(where: { $0.id == id }) { return }
         let next = id.map(HostSelection.init(hostId:))
         try store.saveSelection(next)
         selection = next
     }
 
-    /// The relay device token for a saved host, or `nil` when none is stored.
+    /// The relay device token for a saved host, or `nil` when none is stored or the host is not
+    /// saved. Membership is checked after the read, so a `forget` that ran while the read was
+    /// suspended wins and the forgotten host's token is not handed out (#104).
     public func relayDeviceToken(for id: UUID) async throws -> String? {
-        try await secrets.relayDeviceToken(forHostUUID: id)
+        let token = try await secrets.relayDeviceToken(forHostUUID: id)
+        return hosts.contains { $0.id == id } ? token : nil
     }
 
     /// A file or Keychain error as text. Neither carries a secret value (RISK-FLAGS S9).
