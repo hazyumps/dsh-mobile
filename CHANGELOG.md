@@ -52,6 +52,10 @@ Fixed / Security, with its issue number. The release renames the section.
 - Several issues can run at once, each in its own worktree: `Tools/check.sh` runs the app tests for
   one checkout at a time, `/feature` and `/bugfix` start in a worktree, and `Tools/setup-dev.sh`
   repairs absolute hook and signer paths (#77).
+- Bug triage: every bug carries an origin and a priority label, is checked against related issues
+  for a cluster, and states its root cause before it is fixed. P2, P3 and spec-gap bugs wait for
+  a human, and PRs report their production size, the issues found along the way, and notes for a
+  reviewer new to Swift (#102).
 
 ## [0.2.0] - 2026-10-13
 

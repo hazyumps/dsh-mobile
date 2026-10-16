@@ -18,6 +18,13 @@ whole log, and a long probe script goes in the commit body rather than the plan.
 *What is wrong or missing, who notices, and what prompted it. Link the issue, the spec section
 (`SPEC §n`, `design/...`), and any capture or probe. Two to six sentences.*
 
+## Root cause
+
+*Bugs only. One sentence on why it happens, not what the user sees: "`forget` edited the in-memory
+list and never saved it". If you cannot name it yet, write "unknown" and stop: the plan is not
+ready. Also give the origin label (`origin/pre-existing` or `origin/regression` with its PR), and
+the cluster check: which related issues you looked at.*
+
 ## Acceptance criteria
 
 *Numbered, observable, each one able to fail. Write them from the caller's side — what a screen,
