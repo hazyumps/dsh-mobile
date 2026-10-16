@@ -235,13 +235,84 @@ already false. That assertion begins to bite once the builder makes `isCurrent` 
 
 ## Verification
 
-*Filled in by the verifier.*
+Verifier, 2026-10-16, at `f486d1a`. Each mutation was applied alone to the kit source, run with
+`swift test --disable-sandbox --filter 'HostSelectionGateTests|HostRegistryTests'`, and restored
+with `git checkout -- <file>`. Afterwards the whole suite was green again and the tree was clean.
 
 | AC | Undone how | Test failure with it undone |
 |---|---|---|
+| AC1 | `gate.forget` returns true but no longer clears `current` | `AC1: forgetting B ends a pending selection of B`: `!gate.isCurrent(ticket)`; `#104 AC1: forgetting B while its token read is held …`: `!gate.isCurrent(ticket)` |
+| AC1 | `gate.forget` always returns false | both AC1 tests: `ended`, `!gate.isCurrent(ticket)` |
+| AC1 | `relayDeviceToken` checks membership **before** the read, not after | `#104 AC1: a token read that a forget overtakes yields no token`: `try await read.value == nil`; `#104 AC1: forgetting B while …`: `token == nil` |
+| AC2 | `gate.forget` ends the current ticket whatever host it is for | `AC2: forgetting C leaves a pending selection of B current`: `!ended`, `gate.isCurrent(ticket)`; `AC2: forgetting a host whose selection was superseded …`: `!ended`, `gate.isCurrent(newer)` |
+| AC2 | `gate.forget` clears any ticket (`defer { current = nil }`) but reports by host | the same two AC2 tests: `gate.isCurrent(ticket)`, `gate.isCurrent(newer)` |
+| AC3 | `begin` stores the ticket only when none is current (no supersede) | `AC3: a newer selection supersedes an older one`: `!gate.isCurrent(older)`, `gate.isCurrent(newer)`; superseded-forget AC2 test: `!ended`, `gate.isCurrent(newer)` |
+| AC3 | `end()` is a no-op | `AC3: ending the selection makes its ticket stale`: `!gate.isCurrent(ticket)` |
+| AC3 | `isCurrent` compares the host only, not the ticket id | `AC3: selecting a forgotten host again does not revive the old ticket`: `!gate.isCurrent(old)` |
+| AC4 | `relayDeviceToken` returns the store's token with no membership check | `#104 AC4: no token is handed out for a host that is not saved`: `try await registry.relayDeviceToken(for: stray.id) == nil` (and both AC1 registry tests) |
+| AC5 | the saved-host guard removed from `setSelection` | `#104 AC5: a selection naming a host that is not saved is not recorded`: `await registry.selection == nil`, `disk.hostStore.loadSelection() == nil` |
+| AC1-5 | `git revert --no-commit 2532ef7` (the whole kit commit), then `--abort` | 604 tests, 12 issues: the same set as the Red evidence |
+| AC6 | no automated test, as planned; checked by reading `AppModel.swift` | see below |
 
-- `Tools/check.sh`: …
-- Risk checklist: in the PR
+`#104 AC2: forgetting another host leaves a held token read intact` passes under every mutation
+above, as planned: it guards against a fix that drops every in-flight read, and none of these
+mutations does that.
+
+**AC6, by reading `AppModel.swift` at `f486d1a`.** It holds.
+- `selectionID` is gone (`grep` finds nothing). `selections.begin(host.id)` runs after
+  `resetHostScopedState()`, whose `end()` would otherwise clear the new ticket.
+- Every suspension in `select` is followed by `guard selections.isCurrent(selection)` before
+  anything is published: `previous?.stop()` (:331), `relayDeviceToken` (:335), the `catch` entry
+  (:406), `setSelection` (:396, new), and `drafts.navigation` inside `restoreNavigation` (:1460,
+  new), plus a check after `restoreNavigation` returns (:398).
+- `apply(snapshot:)` and the `observeDecisions` loop check synchronously before they publish.
+  `apply(status:)` checks on entry only (see the findings).
+- `forget` calls `selections.forget(host.id)` and `disconnect()` before its first `await`. The
+  post-await `selectedHost` check is gone.
+- **Where the last check moved.** It now runs right after `restoreNavigation`, before
+  `applyLaunchSessionOverride()` and `replayDeferredNotification()`, where it used to run just
+  before `recovery.setForeground`. That is correct. Both calls are synchronous, so nothing can
+  suspend between the new check and `setForeground`. A current selection behaves exactly as
+  before. Only a stale selection behaves differently: it no longer sets `selectedSessionId` from
+  `DSH_SESSION`/`DSH_DESTINATION` (Debug only), and it no longer consumes `deferredNotification`.
+  Before this change a stale replay either deferred the tap again (`selectedHost == nil`) or sent
+  it to whichever host had replaced it. Now the tap stays held for the current selection's own
+  replay, or for the next `select`. No tap is lost. I found no other user-visible difference.
+- **The approved behaviour.** Forgetting the connected host disconnects even if the list save
+  fails. The published selection's ticket is never ended while it is connected (the re-select
+  path does not begin a new one), so `selections.forget` returns true and `disconnect()` runs
+  before `registry.forget`. The `listNotSaved` branch then reloads `hosts`, sets `hostError` and
+  returns without reconnecting. `idleStatus` is `.offline`, because `hosts` is still non-empty.
+
+**Version and size.** PATCH is right under RELEASING.md: a bug fix, and the new public type is
+additive. The CHANGELOG line is under `## [Unreleased]` / `### Fixed` and covers the approved
+behaviour change. Production Swift from `e87023e` to `HEAD` is +44/−29 (`AppModel` 24/19,
+`HostRegistry` 8/3, `HostSelectionGate` 12/7), under the 50-line threshold. `Tools/must-test.txt`
+gains `State/HostSelectionGate.swift 95`.
+
+- `Tools/check.sh` (full): green in 136 s. 604 kit tests passed, coverage was 88.53% against an
+  88.50% baseline, Debug and Release built, and 4 app tests passed. The guard-tests check was ok.
+  Coverage rose by 0.03 points; the baseline was not raised (WORKFLOW step 6), and that is left to
+  the orchestrator.
+- Risk checklist: in the PR.
+
+**Findings, none blocking.**
+1. `apply(status:selection:)` checks the ticket on entry only, then awaits
+   (`coordinator?.remoteEvents()`, `hostStore.start()`, `refreshSessions()`,
+   `subscribeToDecisions`) and reads the *current* `self.hostStore`/`self.coordinator`. A newer
+   selection that publishes during those awaits could have a stale status apply start its store,
+   and `subscribeToDecisions` could build its `interactionStore` with the stale ticket. Then
+   `observeDecisions` would refuse every snapshot, and that host's decision cards would never
+   show. This predates #104: `selectionID` had the same single entry check. It is outside the
+   plan's AC6 list. A forget alone cannot trigger it, because `disconnect` nils `hostStore`. It
+   needs a follow-up issue in the host-lifecycle cluster.
+2. The plan's Out of scope says the gallery case is "unchanged". It is not, strictly. Before #104
+   the post-await `selectedHost?.id == host.id` check disconnected a gallery-seeded host when it
+   was forgotten. Now `seedForGallery` takes no ticket, so forgetting it does not disconnect. The
+   impact is Debug only.
+3. Forgetting the *previously published* host A while `select(B)` is pending no longer
+   disconnects, which is right because B carries on. `selectedHost` still names the forgotten A
+   until B publishes or fails. That is a short, visible window, not a lasting state.
 
 ## Notes for the next person
 
