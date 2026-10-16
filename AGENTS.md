@@ -79,6 +79,35 @@ What a future CI server has to be able to do, so that it keeps working: run `Too
 nothing else. The Xcode project is generated, and the kit suite runs without Xcode. If either stops
 being true, CI is the first thing that breaks.
 
+## Bugs: triage before you fix
+
+A bug gets labels before it gets code. The steps are in WORKFLOW.md, "0. The issue".
+
+- **Origin** (one, required): `origin/pre-existing` (it was already broken; we just found it),
+  `origin/regression` (a recent change broke it; link the PR), or `origin/spec-gap` (the right
+  behaviour was never decided). A spec gap needs a product decision from a human, not a code fix.
+- **Priority** (one, required): `priority/P0` crash, data loss, or the core connection flow broken
+  (fix now). `priority/P1` core feature degraded (this cycle). `priority/P2` minor or edge case
+  (backlog). `priority/P3` cosmetic or rare (may close as won't-fix).
+- **Agents do not start P2, P3 or spec-gap work** without a human saying so on the issue. Filing
+  one is always fine.
+- **Check for a cluster first.** Look through open issues, and issues closed in the last 60 days,
+  for the same file, module or feature (connection state, reconnection, harness sync). If there
+  are three or more, counting this one, do not fix them one by one. Label them all
+  `needs-design-review` and comment on each, naming the others. A P0 still gets its smallest fix;
+  the review follows.
+- **Root cause before code.** State it in one sentence, in the plan and in the PR. If you cannot
+  name it, say so and stop. Guess-and-patch is how the next bug in this area gets written.
+- **Smallest change that fixes the cause.** If production code (`Sources/` and `Apps/`, not
+  counting `Generated/`) grows by more than about 50 lines, the PR says why. Tests and plans do
+  not count.
+- **No special case to hide a symptom.** If the fix seems to need a new flag, branch or
+  conditional around one input, that is a design smell: say so on the issue and ask before
+  building it.
+- **Found something else? File it and keep going.** A bug you discover mid-task gets its own
+  issue, labelled as above. Dead code, duplicated logic, or special cases that could be merged get
+  a `refactor` issue, one per file. Neither goes into the current PR.
+
 ## Test-driven development
 
 **The planner writes the tests; the builder makes them pass.** Three roles, and the important
@@ -164,11 +193,18 @@ One version for the whole project — the app and the kit ship together.
   commits when it helps a reviewer see the behaviour. `.gitsigners` lists each committer's public
   signing key, so `git log --show-signature` verifies everyone, not only yourself.
 - Labels on the issue: `relay`, `parity`, `client`, `ux`, `device`, `blocked`, `bug`, `security`
-  (a risk flag needs the checklist — `docs/process/RISK-FLAGS.md`), `process`, `release`. They are
-  how a backlog of thirty stays legible, and how "what can I do without the harness" is a filter
-  rather than a memory test.
+  (a risk flag needs the checklist — `docs/process/RISK-FLAGS.md`), `process`, `release`,
+  `refactor`, `needs-design-review`, and on every bug one `origin/…` and one `priority/…` (see
+  "Bugs: triage before you fix"). They are how a backlog of thirty stays legible, and how "what can
+  I do without the harness" is a filter rather than a memory test.
 - If you discovered something you could not fix, write it down — an issue, a comment next to the
   code, or a line in the commit body. A silent near-miss is found again by the next person.
+- **Explain the Swift to a Python reader.** The reviewers know Python better than Swift. When a
+  change rests on concurrency (`async`/`await`, actors, `@MainActor`), SwiftUI state (`@State`,
+  `@Observable`, bindings) or object lifetimes, the PR says in plain words what it does and why. A
+  Python analogy helps where one fits: an actor is like an object whose methods all hold one
+  `asyncio.Lock`, but it lets other calls in at every `await`. Terms the primer already explains
+  can link to `docs/process/IOS-PRIMER.md`.
 
 ## Code conventions
 

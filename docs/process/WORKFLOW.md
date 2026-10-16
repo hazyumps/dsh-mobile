@@ -28,6 +28,18 @@ not the judgement that decides it passed.
 Work starts on gitea, on an issue (`AGENTS.md`, "One issue, one branch").
 
 - Use a template: `.gitea/ISSUE_TEMPLATE/feature.md` or `bug.md`.
+- **A bug is triaged before anyone plans it** (`AGENTS.md`, "Bugs: triage before you fix"):
+  - *Origin.* `git log -S'<symbol>' -- <file>` and `git blame` find when the behaviour changed.
+    If a merged PR introduced it, label it `origin/regression` and link the PR. If it was always
+    like this, `origin/pre-existing`. If SPEC and the design docs never say what should happen,
+    `origin/spec-gap`, and ask the question on the issue.
+  - *Priority.* `priority/P0` to `priority/P3`. Whoever files the issue picks one, and a human may
+    change it.
+  - *Cluster.* `tea issues list --state all --labels bug` and a search for the file or feature
+    name. Three or more related issues: label them all `needs-design-review`, comment on each
+    with links to the others, and stop. A P0 still gets its smallest fix.
+  - *Go or wait.* P0 and P1 bugs that are not spec gaps and not in a cluster go to planning. Any
+    other bug waits for a human to say "go" on the issue.
 - **Triage risk now, not at review.** Read [RISK-FLAGS.md](RISK-FLAGS.md) and tick every flag the
   change could touch. Any security flag (S1–S10) adds the `security` label.
 - **Size.** If the plan will need more than about three independent slices, or touches both a
@@ -143,7 +155,8 @@ tea pulls create --base main --head issue-<n>-<slug> --title "<subject> (#n)"
 ```
 
 The PR description follows `.gitea/pull_request_template.md`. Starting it with `Closes #n` links
-the issue.
+the issue. For a bug, the root cause and origin come from the plan. The size line comes from
+`git diff --shortstat main...HEAD -- Sources Apps ':!Sources/DSHRemoteKit/Generated'`.
 
 **Gate 2 (human).** The reviewer approves the PR. A `security`-labelled PR needs the answered
 checklist and an explicit approval from the human who did not drive it.
@@ -259,12 +272,16 @@ Xcode keeps each worktree's build output (300–500 MB) in
 
 ## Definition of done
 
-- [ ] Issue exists, labelled, risk flags triaged
+- [ ] Issue exists, labelled, risk flags triaged; a bug also has its origin, its priority and a
+      cluster check
 - [ ] `design/plans/issue-<n>-*.md` approved on the issue
 - [ ] A `Tests:` commit, red for the right reason, evidence recorded
 - [ ] Planner tests untouched by builders (`Tools/guard-tests.sh`)
 - [ ] Every AC verified by putting its bug back
 - [ ] `Tools/check.sh` green (full)
 - [ ] Risk checklist answered in the PR, where flagged
+- [ ] For a bug, the PR states its root cause in one sentence, and any production growth over ~50
+      lines is explained
+- [ ] Anything found along the way is filed as its own issue and linked, not fixed here
 - [ ] Version impact stated; changelog line under `## [Unreleased]`
 - [ ] PR approved by the other human; merged with a merge commit and `Closes #n`; branch deleted
