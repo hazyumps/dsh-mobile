@@ -142,6 +142,32 @@ public struct SubagentRoster: Sendable, Hashable {
             )
         }
     }
+
+    /// Builds the roster from what a store knows about a host.
+    ///
+    /// Two sources describe the same session and they are not the same age. The
+    /// `session/control` stream is live and per-session sparse — its baseline carried 39 sessions
+    /// where `session/list` carried 200 on 2026-10-15 — while `session/list` is a whole-index
+    /// refresh that carries every projection key for every row. So a key is read from the live
+    /// stream when that stream has sent it and from the index row otherwise, **per key**: reading
+    /// only the live stream would leave older children with no timing, and reading only the index
+    /// would freeze a running child between refreshes.
+    ///
+    /// Membership is still the catalog and nothing else, whichever source supplied it.
+    ///
+    /// - Parameters:
+    ///   - parentSessionId: the session whose children are wanted.
+    ///   - rows: the `session/list` index, keyed by session id.
+    ///   - live: the `session/control` values, keyed by session id and then by projection key.
+    public init(
+        parentSessionId: String,
+        rows: [String: HostSessionStore.SessionRecord],
+        live: [String: [String: HostSessionStore.Projection]]
+    ) {
+        // STUB: no catalog and no children, so the assertions in `SubagentRosterSourceTests` fail
+        // rather than the sources being ignored. See the plan's AC9.
+        self.init(catalog: nil, facts: [:])
+    }
 }
 
 /// What one child's own projections and index row say about it.

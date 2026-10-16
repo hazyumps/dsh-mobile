@@ -153,6 +153,18 @@ public actor HostSessionStore {
         /// control stream, and the two are never merged because a value's version belongs
         /// to whichever shape delivered it.
         public var projections: SessionProjections?
+        /// The row's `projections.values` object, exactly as the host sent it.
+        ///
+        /// ``projections`` types the keys this client models, and it is missing the ones it does
+        /// not — `subagentTiming`'s `active` interval among them. A reader that works on projection
+        /// keys uniformly (``SubagentRoster``, and `SessionUsage` through the control stream) wants
+        /// the loose object instead.
+        ///
+        /// STUB: decoded by the synthesised conformance, which looks for a top-level
+        /// `projectionValues` key that `session/list` does not send, so this stays nil and the
+        /// assertions in `SubagentRosterSourceTests` fail rather than the sources being ignored.
+        /// The real read of `projections.values` is the next commit.
+        public var projectionValues: [String: JSONValue]?
 
         /// The projected title `session/list` supplies, when it supplies one.
         public var title: String? { projections?.values?.title }
@@ -166,7 +178,8 @@ public actor HostSessionStore {
             cwd: String? = nil,
             parentSessionId: String? = nil,
             origin: String? = nil,
-            projections: SessionProjections? = nil
+            projections: SessionProjections? = nil,
+            projectionValues: [String: JSONValue]? = nil
         ) {
             self.sessionId = sessionId
             self.updatedAt = updatedAt
@@ -177,6 +190,7 @@ public actor HostSessionStore {
             self.parentSessionId = parentSessionId
             self.origin = origin
             self.projections = projections
+            self.projectionValues = projectionValues
         }
     }
 

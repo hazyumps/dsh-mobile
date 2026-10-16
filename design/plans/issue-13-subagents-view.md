@@ -83,6 +83,17 @@ this is a call-site change, not a new payload.
   carrying a running, a completed and an interrupted child, so the layout can be reviewed on a
   machine that cannot tap. The variable is inside `#if DEBUG` and listed in
   `Apps/DSHRemote/README.md`.
+- **AC9** — *(added by the planner before slice C, in its own `Tests:` commit.)* The roster
+  assembled from a store reads a projection key from the live `session/control` value when that
+  stream has sent it and from the `session/list` row otherwise, **per key**; membership is the
+  catalog from whichever source has it, and a child with no row and no live value still lists with
+  nothing reported.
+
+  AC1–AC6 take the catalog and the child facts as given and are silent about where they come from.
+  Slice C has to answer that, and it is a rule rather than glue: the two sources disagree about
+  which sessions they carry (39 versus 200 on the capture host), so a whole-session choice is wrong
+  in one direction or the other. Leaving it to the app target would put an untested rule behind a
+  view, which is what C6 is about.
 
 ## Test list
 
@@ -220,6 +231,31 @@ The first draft of the `Tests:` commit crashed instead of failing: the stub retu
 the process ended, hiding every other result. `WORKFLOW.md` step 2 is explicit about this — a stub
 returns a wrong-but-valid value, never a crash — so the stub builds one row per catalog member and
 every assertion gets to speak.
+
+### The AC9 commit (slice C)
+
+`Tools/check.sh --red` on the **second** `Tests:` commit, with slice A and slice B already built:
+
+```
+kit tests: fail on assertions (full log: .build/check/test.log)
+app tests: ok
+red: ok it compiles and fails on assertions (kit: fail, app: pass; logs in .build/check).
+check: ok — red for the right reason (33s)
+```
+
+Kit: **582 tests in 42 suites**, 15 issues, all assertion failures. Four of the five new tests fail:
+
+| Test | First assertion that fails |
+|---|---|
+| `AC9: the live control value wins per key over the session index row` | `child?.id == "subagent-1"` → `nil`: the stub reports no members |
+| `AC9: a child with no live value and no row still lists, with nothing reported` | `roster.entries.count == 1` → `0` |
+| `AC9: the live catalog is membership too, and the index row is not membership` | `isReported == true` → `false` |
+| `AC9: the captured fixture assembles through this path too` | `entries.map(\.id) == […]` → `[]` |
+
+`AC9: no catalog in either source is not reported, not empty` passes against the stub — a guard, for
+the same reason as `AC2`'s. The crash above was repeated in this commit's first draft and caught the
+same way: `entries[0]` in the last test against a stub that reports no members. It now uses
+`#require(entries.first)`, and says why in the test.
 
 ## Verification
 
