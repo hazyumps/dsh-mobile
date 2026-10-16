@@ -14,7 +14,33 @@ import UniformTypeIdentifiers
 /// follow comes from ``ChatSession``, and sending and answering go through ``AppModel``,
 /// which owns the no-retry rule for writes.
 struct ConversationView: View {
-    let sessionId: String
+    /// Which conversation to read.
+    ///
+    /// An address rather than an id, because a subagent child's session form is refused by the host
+    /// (`session/agent-busy`, "subagent Sessions require their durable parent address"): the parent
+    /// and the mode are part of what the follow and the pager have to send.
+    let address: SessionAddress
+    /// Whether this conversation may be written to.
+    ///
+    /// A subagent's transcript opens read-only (#13): continuing a child is `subagents/prompt`, a
+    /// write path with its own rules and its own once-only test, and the desktop's condition for
+    /// electing a composer — a continuable child whose exact parent is unavailable — is subtler
+    /// than "always". A read-only conversation offers no composer and no answerable card.
+    var isReadOnly: Bool = false
+
+    /// An ordinary session, which is every caller from before #13.
+    init(sessionId: String) {
+        self.address = .session(sessionId)
+        self.isReadOnly = false
+    }
+
+    init(address: SessionAddress, isReadOnly: Bool = false) {
+        self.address = address
+        self.isReadOnly = isReadOnly
+    }
+
+    /// The session this screen orbits: a subagent's child id.
+    private var sessionId: String { address.sessionId }
 
     @Environment(AppModel.self) private var model
 
@@ -39,18 +65,20 @@ struct ConversationView: View {
     /// behaviour can be reviewed on a machine that cannot tap.
     @State private var composerFocusRequest = 0
     @State private var showsTelemetry = ProcessInfo.processInfo.environment["DSH_TELEMETRY"] != nil
+    @State private var showsSubagents = false
     @Environment(\.scenePhase) private var scenePhase
     @State private var followAttempt = 0
     @State private var didSendLaunchMessage = false
 
     /// What a follow belongs to.
     ///
-    /// The session id is part of it, and that is not bookkeeping: SwiftUI reuses one
+    /// The address is part of it, and that is not bookkeeping: SwiftUI reuses one
     /// `ConversationView` when the stack navigates from one conversation to another, so a
     /// key of connection-and-attempt alone left the *old* follow running — and the old
-    /// transcript on screen — under the new session's id.
+    /// transcript on screen — under the new session's id. It is the whole address rather than the
+    /// id because two conversations can share an id and differ in kind.
     private struct FollowKey: Hashable {
-        let sessionId: String
+        let address: SessionAddress
         let connectionID: UUID?
         let attempt: Int
     }
@@ -70,6 +98,31 @@ struct ConversationView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 StatusBadge(status: model.status)
+            }
+            // The session's subagents, when it has any (#13). Hidden rather than shown empty: a
+            // control that opens "nothing here" is worse than no control, which is the desktop's
+            // own rule for its header trigger.
+            ToolbarItem(placement: .topBarTrailing) {
+                if roster.showsEntryPoint {
+                    Button {
+                        showsSubagents = true
+                    } label: {
+                        // An explicit HStack, for the reason the telemetry toggle has one: the
+                        // icon-only label style drops the count, and a filled glyph is the only
+                        // thing that says "something of mine is working" at a glance.
+                        HStack(spacing: DSHMetrics.spaceSmall) {
+                            Image(systemName: roster.runningCount > 0 ? "person.2.fill" : "person.2")
+                            Text("\(roster.count)")
+                                .font(.dshMetadata)
+                                .monospacedDigit()
+                        }
+                    }
+                    .accessibilityLabel(
+                        roster.runningCount > 0
+                            ? "Subagents: \(roster.runningCount) running of \(roster.count)"
+                            : "Subagents: \(roster.count)"
+                    )
+                }
             }
             ToolbarItem(placement: .topBarTrailing) {
                 // The host's own event stream, on demand. Everything durable that is not a
@@ -94,6 +147,16 @@ struct ConversationView: View {
                 .accessibilityLabel(showsTelemetry ? "Hide harness events" : "Show harness events")
             }
         }
+        .sheet(isPresented: $showsSubagents) {
+            NavigationStack {
+                SubagentsView(parentSessionId: sessionId)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button("Done") { showsSubagents = false }
+                        }
+                    }
+            }
+        }
         .task {
             #if DEBUG
             if ProcessInfo.processInfo.environment["DSH_FOCUS"] != nil {
@@ -103,7 +166,7 @@ struct ConversationView: View {
             #endif
         }
         .task(id: FollowKey(
-            sessionId: sessionId,
+            address: address,
             connectionID: model.connectionID,
             attempt: followAttempt
         )) {
@@ -271,13 +334,16 @@ struct ConversationView: View {
                         isSubmitting: isSubmittingAnswer,
                         onLoadOlder: { Task { await session?.loadOlder() } },
                         onAnswer: { answers in Task { await answer(answers) } },
-                        approvals: approvalRequests,
+                        // A read-only transcript offers no *actionable* card. The durable record of
+                        // a question survives in the fold; a live Submit that the host would refuse
+                        // does not appear. A child's questions were the parent's to answer.
+                        approvals: isReadOnly ? [] : approvalRequests,
                         onApproval: { eventId, isAllow in Task { await decide(eventId, isAllow: isAllow) } },
                         loadImage: { attachmentId in
                             await model.attachmentImage(sessionId: sessionId, attachmentId: attachmentId)
                         },
                         showsTelemetry: showsTelemetry,
-                        liveQuestions: liveQuestionRequests,
+                        liveQuestions: isReadOnly ? [] : liveQuestionRequests,
                         onAnswerLive: { eventId, answers in
                             Task { await answerLive(eventId, answers) }
                         },
@@ -321,8 +387,16 @@ struct ConversationView: View {
             }
         }
         .safeAreaInset(edge: .bottom) {
-            composer
+            // A subagent's transcript has no composer: continuing a child is a different write path
+            // (`subagents/prompt`) with its own rules, and one that offers nothing is better than
+            // one whose every send the host would refuse.
+            if !isReadOnly { composer }
         }
+    }
+
+    /// The session's subagents, for the toolbar control and the sheet.
+    private var roster: SubagentRoster {
+        model.roster(for: sessionId)
     }
 
     /// Files uploaded for this session and waiting to be cited by the next prompt.
@@ -547,7 +621,7 @@ struct ConversationView: View {
     /// (UX spec acceptance: "Follow never supplies a snapshot").
     private func follow(connectionID: UUID) async {
         openError = nil
-        guard let opened = await model.chatSession(for: sessionId),
+        guard let opened = await model.chatSession(for: address),
               !Task.isCancelled, connectionID == model.connectionID else { return }
         session = opened
         let watchdog = Task {
@@ -557,10 +631,13 @@ struct ConversationView: View {
                 openError = "The harness has not sent the conversation yet."
             }
         }
-        await model.loadCommands(for: sessionId)
-        // The projections carry the image limits, and they are read before anything is staged
-        // so the photo control can refuse locally rather than after a failed prompt.
-        await model.loadProjections(for: sessionId)
+        // Both of these are the composer's: the slash-command catalog, and the projections that
+        // carry the image limits. A read-only transcript has no use for either, and the command
+        // catalog is an `agentId`-scoped read this screen has no business making for a child.
+        if !isReadOnly {
+            await model.loadCommands(for: sessionId)
+            await model.loadProjections(for: sessionId)
+        }
         #if DEBUG
         await seedImageIfAsked()
         #endif
@@ -572,7 +649,7 @@ struct ConversationView: View {
                 if value.hasSnapshot {
                     openError = nil
                     watchdog.cancel()
-                    await sendLaunchMessageIfAsked()
+                    if !isReadOnly { await sendLaunchMessageIfAsked() }
                 }
                 if let failure = value.followError {
                     openError = failure
