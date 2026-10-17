@@ -21,6 +21,11 @@ pasted into whatever agent you use.
    branches, and reports. If it starts fixing things itself, the roles have collapsed.
 5. **Stop and ask** when a test looks wrong, when two slices turn out to share a file, when a risk
    flag appears that the plan did not tick, or when the same failure survives two attempts.
+   For a bug, also stop when its root cause cannot be named, when it is P2, P3 or a spec gap
+   without a human's go-ahead, or when it belongs to a cluster (`AGENTS.md`, "Bugs: triage before
+   you fix").
+6. **What turns up is filed, not fixed.** Any role that finds another bug or a refactor
+   opportunity reports it. The orchestrator files it with its labels and links it in the PR.
 
 ## Where a branch is, and who goes next
 
@@ -96,7 +101,8 @@ are the same instructions the Claude Code agent definitions in `.claude/agents/`
 >    stubs and plan together as `Tests: <what they pin> (#<n>)`.
 >
 > You do not implement the behaviour. If a rule lives in the app target, plan a first slice that
-> moves it into `DSHRemoteKit`.
+> moves it into `DSHRemoteKit`. For a bug, fill in the plan's **Root cause** section first. If you
+> cannot name the cause, stop and say so rather than planning a patch.
 
 ### Builder
 
@@ -111,7 +117,8 @@ are the same instructions the Claude Code agent definitions in `.claude/agents/`
 > **Never edit, weaken, or delete a line from a `Tests:` commit** — `Tools/guard-tests.sh` will
 > fail. You may add tests. If a planner test looks wrong, stop and report why instead of working
 > around it. Follow the code conventions in `AGENTS.md`: logic in the kit, writes never retried,
-> bounds on anything large, absent is not zero.
+> bounds on anything large, absent is not zero. Do not fix anything outside your slice. List it in
+> your report (another bug, dead code, duplicated logic) so it can be filed.
 
 ### Verifier
 

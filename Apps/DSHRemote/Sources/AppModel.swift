@@ -145,7 +145,7 @@ final class AppModel {
     private var snapshotTask: Task<Void, Never>?
     private var eventsTask: Task<Void, Never>?
     private var interactionsTask: Task<Void, Never>?
-    private var selectionID = UUID()
+    private var selections = HostSelectionGate()
     private var isForeground = false
 
     /// Raised when a chat action is attempted with no live connection. The
@@ -353,16 +353,16 @@ final class AppModel {
 
         let previous = recovery
         resetHostScopedState()
-        let selection = selectionID
+        let selection = selections.begin(host.id)
         idleStatus = .connecting
         // Take the previous host's streams down before building the next one's, so the
         // two hosts never share a generation (SPEC §2, "one connection owner per host").
         await previous?.stop()
-        guard selection == selectionID else { return }
+        guard selections.isCurrent(selection) else { return }
 
         do {
             let token = try await registry.relayDeviceToken(for: host.id)
-            guard selection == selectionID else { return }
+            guard selections.isCurrent(selection) else { return }
             guard let token else { throw HostConnectionError.missingCredential }
 
             let origin = ConnectionCoordinator.Origin(
@@ -423,16 +423,17 @@ final class AppModel {
             observeStatus(of: coordinator, selection: selection)
             observeSnapshots(of: hostStore, selection: selection)
             try? await registry.setSelection(host.id)
-            await restoreNavigation(for: host)
+            guard selections.isCurrent(selection) else { return }
+            await restoreNavigation(for: host, selection: selection)
+            guard selections.isCurrent(selection) else { return }
             // After the stored destination, so an explicit launch target wins over it.
             applyLaunchSessionOverride()
             // After both, so a notification tap beats the restored conversation: the user
             // asked for that screen, the restore is a convenience.
             replayDeferredNotification()
-            guard selection == selectionID else { return }
             recovery.setForeground(isForeground)
         } catch {
-            guard selection == selectionID else { return }
+            guard selections.isCurrent(selection) else { return }
             claimError = nil
             selectedHost = host
             let reason = Self.reason(for: error)
@@ -461,7 +462,7 @@ final class AppModel {
     /// them when it is not. Reading `statusUpdates()` rather than polling `status` is
     /// what makes "an event arriving immediately after ready is not lost" true: the
     /// subscription is live before the first refresh runs.
-    private func observeStatus(of coordinator: ConnectionCoordinator, selection: UUID) {
+    private func observeStatus(of coordinator: ConnectionCoordinator, selection: HostSelectionGate.Ticket) {
         statusTask?.cancel()
         statusTask = Task { [weak self] in
             for await status in await coordinator.statusUpdates() {
@@ -481,8 +482,8 @@ final class AppModel {
     /// default: a large file legitimately takes longer than this.
     nonisolated static let readTimeoutSeconds: TimeInterval = 20
 
-    private func apply(status: ConnectionStatus, selection: UUID) async {
-        guard selection == selectionID else { return }
+    private func apply(status: ConnectionStatus, selection: HostSelectionGate.Ticket) async {
+        guard selections.isCurrent(selection) else { return }
         // Recorded before the usability guard: a connection that failed to become usable is
         // exactly the thing a later diagnostic report is about.
         record(status: status, generation: await coordinator?.remoteEvents()?.identity.generation)
@@ -502,7 +503,7 @@ final class AppModel {
     /// abandoned generation is refused by the store's own generation check. What must be
     /// re-established on every ready connection is the *subscription*, because the router is
     /// per generation and the old one is retired with its socket.
-    private func subscribeToDecisions(of coordinator: ConnectionCoordinator, selection: UUID) async {
+    private func subscribeToDecisions(of coordinator: ConnectionCoordinator, selection: HostSelectionGate.Ticket) async {
         guard let router = await coordinator.remoteEvents() else {
             // Nothing to subscribe to means no decisions will ever arrive on this connection.
             // That is worth saying out loud, because the failure looks like a quiet list.
@@ -558,12 +559,12 @@ final class AppModel {
         await interactionStore.observe(event, generation: generation)
     }
 
-    private func observeDecisions(of store: InteractionStore, selection: UUID) {
+    private func observeDecisions(of store: InteractionStore, selection: HostSelectionGate.Ticket) {
         interactionsTask?.cancel()
         interactionsTask = Task { [weak self] in
             for await requests in await store.snapshots() {
                 guard !Task.isCancelled else { return }
-                guard let self, selection == self.selectionID else { return }
+                guard let self, self.selections.isCurrent(selection) else { return }
                 self.interactions = requests
                 // A live request is a "needs input" signal the projections cannot carry, so the
                 // cards are rebuilt from the snapshot already held rather than waiting for the
@@ -1331,7 +1332,7 @@ final class AppModel {
         }
     }
 
-    private func observeSnapshots(of store: HostSessionStore, selection: UUID) {
+    private func observeSnapshots(of store: HostSessionStore, selection: HostSelectionGate.Ticket) {
         snapshotTask?.cancel()
         snapshotTask = Task { [weak self] in
             for await snapshot in await store.snapshots() {
@@ -1446,8 +1447,8 @@ final class AppModel {
         recordResourceStates()
     }
 
-    private func apply(snapshot: HostSessionStore.Snapshot, selection: UUID) {
-        guard selection == selectionID else { return }
+    private func apply(snapshot: HostSessionStore.Snapshot, selection: HostSelectionGate.Ticket) {
+        guard selections.isCurrent(selection) else { return }
         hostSnapshot = snapshot
         let next = BrowseState.from(snapshot, liveWaiters: liveWaiters)
         browse = next
@@ -1561,8 +1562,9 @@ final class AppModel {
         handleTaskNotification(payload)
     }
 
-    private func restoreNavigation(for host: SavedHost) async {
+    private func restoreNavigation(for host: SavedHost, selection: HostSelectionGate.Ticket) async {
         let saved = await drafts.navigation(for: host.id)
+        guard selections.isCurrent(selection) else { return }
         selectedWorkspaceId = saved.workspaceId
         selectedSessionId = saved.sessionId
     }
@@ -1797,6 +1799,12 @@ final class AppModel {
     /// Nothing is retried.
     func forget(_ host: SavedHost) async {
         hostError = nil
+        // Before the first await, so a selection of this host that is still in flight ends
+        // here too, not only a published one (#104). A list that then cannot be saved leaves
+        // the host listed and disconnected, which is the honest end state. Until the forget
+        // finishes, on every path out, a selection of this host begun meanwhile is refused.
+        if selections.forget(host.id) { disconnect() }
+        defer { selections.finishForgetting(host.id) }
         do {
             try await registry.forget(host.id)
         } catch HostRegistryError.listNotSaved(let reason) {
@@ -1807,7 +1815,6 @@ final class AppModel {
             hostError = "\(host.displayName) was forgotten, but not completely: \(Self.describe(error))"
         }
         hosts = await registry.hosts
-        if selectedHost?.id == host.id { disconnect() }
         if hosts.isEmpty { idleStatus = .pairingRequired }
     }
 
@@ -1869,7 +1876,7 @@ final class AppModel {
         interactionStore = nil
         interactions = []
         browse = .idle
-        selectionID = UUID()
+        selections.end()
     }
 
     #if DEBUG

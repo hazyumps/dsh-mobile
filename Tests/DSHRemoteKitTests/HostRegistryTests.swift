@@ -331,6 +331,147 @@ struct HostRegistryTests {
 
         #expect(await disk.relaunch(secrets: secrets).selection?.hostId == keep.id)
     }
+
+    // MARK: - Selection in flight (#104)
+    //
+    // `AppModel.select(B)` suspends on B's token read. These tests hold that read in a
+    // `HeldReadSecretStore` and run a `forget` while it is held. That works because the
+    // registry is an actor that lets other calls in at every `await`: `forget` runs while
+    // `relayDeviceToken` is suspended in the store. The read is observed to have started through
+    // the store's signal, never a sleep.
+
+    @Test("#104 AC1: a token read that a forget overtakes yields no token", .timeLimit(.minutes(1)))
+    func overtakenReadYieldsNoToken() async throws {
+        let disk = try Disk()
+        let secrets = HeldReadSecretStore()
+        let a = host("a.local")
+        let b = host("b.local")
+        try await pairedEarlier([a, b], on: disk, secrets: secrets)
+        let registry = disk.relaunch(secrets: secrets)
+
+        let read = Task { try await registry.relayDeviceToken(for: b.id) }
+        await secrets.readHasStarted()
+        try await registry.forget(b.id)
+        await secrets.release()
+
+        #expect(try await read.value == nil, "a read started before forget handed out the forgotten host's token")
+    }
+
+    @Test(
+        "#104 AC1: forgetting B while its token read is held leaves no current selection and no token",
+        .timeLimit(.minutes(1))
+    )
+    func forgetDuringHeldReadEndsTheSelection() async throws {
+        let disk = try Disk()
+        let secrets = HeldReadSecretStore()
+        let a = host("a.local")
+        let b = host("b.local")
+        try await pairedEarlier([a, b], on: disk, secrets: secrets)
+        let registry = disk.relaunch(secrets: secrets)
+
+        // The order `AppModel` uses: begin the selection, read the token; forget ends the
+        // selection through the gate before it awaits the registry.
+        var gate = HostSelectionGate()
+        let ticket = gate.begin(b.id)
+        let read = Task { try await registry.relayDeviceToken(for: b.id) }
+        await secrets.readHasStarted()
+        let ended = gate.forget(b.id)
+        try await registry.forget(b.id)
+        await secrets.release()
+        let token = try await read.value
+
+        #expect(ended, "forget did not end the pending selection of B, so nothing tears it down")
+        #expect(!gate.isCurrent(ticket), "the pending selection of a forgotten host is still current")
+        #expect(token == nil, "the pending selection of a forgotten host got its token")
+    }
+
+    @Test("#104 AC2: forgetting another host leaves a held token read intact", .timeLimit(.minutes(1)))
+    func forgettingAnotherHostKeepsTheHeldRead() async throws {
+        let disk = try Disk()
+        let secrets = HeldReadSecretStore()
+        let b = host("b.local")
+        let c = host("c.local")
+        try await pairedEarlier([b, c], on: disk, secrets: secrets)
+        let registry = disk.relaunch(secrets: secrets)
+
+        let read = Task { try await registry.relayDeviceToken(for: b.id) }
+        await secrets.readHasStarted()
+        try await registry.forget(c.id)
+        await secrets.release()
+
+        #expect(try await read.value == "token-b.local", "forgetting C cost B its token")
+    }
+
+    @Test("#104 AC4: no token is handed out for a host that is not saved")
+    func noTokenForAnUnsavedHost() async throws {
+        let disk = try Disk()
+        let secrets = InMemorySecretStore()
+        let saved = host("saved.local")
+        let stray = host("stray.local")
+        try await pairedEarlier([saved], on: disk, secrets: secrets)
+        // A token left behind for an id the list does not hold.
+        try await secrets.setRelayDeviceToken("token-stray.local", forHostUUID: stray.id)
+        let registry = disk.relaunch(secrets: secrets)
+
+        #expect(try await registry.relayDeviceToken(for: stray.id) == nil, "the registry handed out a token for a host it does not hold")
+        #expect(try await registry.relayDeviceToken(for: saved.id) == "token-saved.local")
+    }
+
+    @Test("#104 AC5: a selection naming a host that is not saved is not recorded")
+    func selectionOfAnUnsavedHostIsNotRecorded() async throws {
+        let disk = try Disk()
+        let secrets = InMemorySecretStore()
+        let saved = host("saved.local")
+        let stray = host("stray.local")
+        try await pairedEarlier([saved], on: disk, secrets: secrets)
+        let registry = disk.relaunch(secrets: secrets)
+
+        try await registry.setSelection(stray.id)
+
+        #expect(await registry.selection == nil, "the registry recorded a selection of a host it does not hold")
+        #expect(disk.hostStore.loadSelection() == nil, "selection.json names a host that is not saved")
+    }
+}
+
+/// A secret store whose reads are held until the test releases them (#104).
+///
+/// A read captures the stored value first, as a Keychain read that had already returned would,
+/// then signals that it has started and suspends. Writes and deletes are never held, so a
+/// `forget` can run to completion while a read is held. One instance per test.
+actor HeldReadSecretStore: SecretStore {
+    private var values: [SecretAccount: String] = [:]
+    private var held: [CheckedContinuation<Void, Never>] = []
+    private let started: AsyncStream<Void>
+    private let startedSignal: AsyncStream<Void>.Continuation
+
+    init() {
+        (started, startedSignal) = AsyncStream<Void>.makeStream()
+    }
+
+    func secret(for account: SecretAccount) async throws -> String? {
+        let captured = values[account]
+        await withCheckedContinuation { continuation in
+            held.append(continuation)
+            startedSignal.yield()
+        }
+        return captured
+    }
+
+    func setSecret(_ secret: String, for account: SecretAccount) async throws { values[account] = secret }
+    func deleteSecret(for account: SecretAccount) async throws { values[account] = nil }
+
+    /// Returns once a read is held, so the caller knows the read is suspended in the store.
+    func readHasStarted() async {
+        var signals = started.makeAsyncIterator()
+        _ = await signals.next()
+    }
+
+    /// Lets every held read return.
+    func release() {
+        let waiting = held
+        held = []
+        for continuation in waiting { continuation.resume() }
+    }
 }
 
 /// A secret store whose delete always fails, for AC5. It counts attempts so the test can

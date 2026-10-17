@@ -37,6 +37,9 @@ Fixed / Security, with its issue number. The release renames the section.
 - A file picked from Files is copied into the app while it may still be read, then uploaded and
   the copy removed; a file over this app's 20 MiB limit, or one that cannot be read, is refused
   before anything is sent, on either upload route (#66).
+- Forgetting a host while the app is still connecting to it stops that connection, where it used
+  to finish connecting to the host you had just forgotten. Forgetting the connected host now
+  disconnects even when the list then cannot be saved (#104).
 
 ### Changed
 - Kit API: the `retryPolicy:` parameter is gone from `DshRpcClient.call`/`callVoid`,
@@ -55,6 +58,10 @@ Fixed / Security, with its issue number. The release renames the section.
 - Several issues can run at once, each in its own worktree: `Tools/check.sh` runs the app tests for
   one checkout at a time, `/feature` and `/bugfix` start in a worktree, and `Tools/setup-dev.sh`
   repairs absolute hook and signer paths (#77).
+- Bug triage: every bug carries an origin and a priority label, is checked against related issues
+  for a cluster, and states its root cause before it is fixed. P2, P3 and spec-gap bugs wait for
+  a human, and PRs report their production size, the issues found along the way, and notes for a
+  reviewer new to Swift (#102).
 
 ## [0.2.0] - 2026-10-13
 

@@ -21,4 +21,9 @@ agents and humans can follow the same steps.
 - `Tools/check.sh` in full mode builds the app twice and can take several minutes cold; give it a
   long timeout rather than falling back to `--fast` before a push.
 - Explain iOS-specific causes in a sentence when they come up; `docs/process/IOS-PRIMER.md` is the
-  shared vocabulary.
+  shared vocabulary. In chat as in PRs, use a Python analogy for Swift concurrency and SwiftUI
+  state (AGENTS.md, "Commits and pull requests").
+- **Triage is `/bugfix`'s first step**: no worktree for a bug that is P2, P3, a spec gap or part of
+  a cluster without the user's go-ahead. Subagents report what they find to the orchestrator,
+  which files it (`tea issues create … -L bug,origin/…,priority/…`); they do not file or fix it
+  themselves.
