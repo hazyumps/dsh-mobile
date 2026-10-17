@@ -16,3 +16,4 @@ Persistence/KeychainStore.swift          80   # the device token
 Persistence/SavedHostStore.swift         90   # hosts.json
 Persistence/DraftStore.swift             80   # drafts.json, navigation.json
 Persistence/HostRegistry.swift           90   # the host list and its token change together (#65)
+State/HostSelectionGate.swift            95   # which selection is current; forget ends a pending one (#104)
