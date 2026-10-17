@@ -28,8 +28,19 @@ public struct HostSelectionGate: Sendable {
         return ticket
     }
 
-    /// Whether `ticket` is still the current selection.
-    public func isCurrent(_ ticket: Ticket) -> Bool {
+    /// The ticket in force, or `nil` when nothing is selected.
+    ///
+    /// For work that has to notice later whether the selection it started under has changed,
+    /// without starting one of its own — a file import that outlives its pick (#66):
+    /// `let selection = gate.ticket` … `gate.isCurrent(selection)`.
+    public var ticket: Ticket? { current }
+
+    /// Whether the selection in force is still the one `ticket` names.
+    ///
+    /// `nil` means "nothing was selected". A `nil` ticket stays current while nothing is
+    /// selected: a file picked when no host is connected has no host to protect, and the
+    /// caller's "not connected" answer is the honest one (#66).
+    public func isCurrent(_ ticket: Ticket?) -> Bool {
         current == ticket
     }
 

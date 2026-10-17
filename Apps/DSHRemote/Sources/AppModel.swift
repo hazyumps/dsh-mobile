@@ -978,7 +978,7 @@ final class AppModel {
         _ copy: StagedFile,
         to sessionId: String,
         through uploader: AttachmentUploader?,
-        selection: UUID
+        selection: HostSelectionGate.Ticket?
     ) async {
         guard let uploader else {
             attachmentError = "This phone is not connected to a harness."
@@ -1007,7 +1007,7 @@ final class AppModel {
 
         // The host changed while the upload was out: its answer belongs to a host whose state is
         // already gone (AC11).
-        guard selection == selectionID else { return }
+        guard selections.isCurrent(selection) else { return }
         switch outcome {
         case .success(let uploaded):
             stagedAttachments[sessionId, default: []].append(uploaded)
@@ -1053,11 +1053,13 @@ final class AppModel {
     /// `AttachmentStaging.stage`, which is synchronous, so no suspension point can end it before
     /// the file is read.
     ///
-    /// The selection and its uploader are captured before the copy's await. If the host changed
-    /// while the copy ran, the copy is discarded and nothing is sent or published: the file was
-    /// picked for a host the user has left (#66 addendum, AC9, AC10).
+    /// The selection and its uploader are captured before the copy's await: `selections.ticket`
+    /// is the selection in force, so a switch — a newer `begin`, or `end` — leaves the captured
+    /// ticket no longer current. If the host changed while the copy ran, the copy is discarded
+    /// and nothing is sent or published: the file was picked for a host the user has left
+    /// (#66 addendum, AC9, AC10).
     func importFile(at fileURL: URL, to sessionId: String) async {
-        let selection = selectionID
+        let selection = selections.ticket
         let uploader = attachmentUploader
         attachmentError = nil
         isUploading = true
@@ -1072,13 +1074,13 @@ final class AppModel {
 
         switch staged {
         case .failure(let failure as AttachmentUploadFailure):
-            guard selection == selectionID else { return }
+            guard selections.isCurrent(selection) else { return }
             attachmentError = Self.describe(failure)
         case .failure(let error):
-            guard selection == selectionID else { return }
+            guard selections.isCurrent(selection) else { return }
             attachmentError = Self.reason(for: error)
         case .success(let copy):
-            if selection == selectionID {
+            if selections.isCurrent(selection) {
                 await attachFile(copy, to: sessionId, through: uploader, selection: selection)
             }
             await Task.detached(priority: .utility) { staging.discard(copy) }.value
@@ -1883,11 +1885,15 @@ final class AppModel {
     /// Debug builds only: a host switch without a network, for the app tests (#66 addendum).
     ///
     /// Goes through ``resetHostScopedState()``, the one reset `select`, `disconnect` and forget
-    /// share, so it replaces the selection generation exactly as they do, then installs the given
-    /// uploader as the new host's. `select` itself needs a Keychain token, a coordinator and a
-    /// socket. Not a launch variable: nothing outside a test can reach it.
+    /// share, so it ends the selection exactly as they do, then begins one for the host being
+    /// switched to, as `select` does before it connects, and installs the given uploader as that
+    /// host's. The `begin` is what makes the switch visible to work already in flight: `end`
+    /// alone leaves a gate that was never begun at `nil`, so an import that captured `nil` would
+    /// still look current. `select` itself needs a Keychain token, a coordinator and a socket.
+    /// Not a launch variable: nothing outside a test can reach it.
     func replaceHostForTesting(uploader: AttachmentUploader?) {
         resetHostScopedState()
+        _ = selections.begin(UUID())
         attachmentUploader = uploader
     }
     #endif
