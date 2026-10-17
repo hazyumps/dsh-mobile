@@ -34,6 +34,9 @@ Fixed / Security, with its issue number. The release renames the section.
 - Forgetting a host is saved: it no longer comes back, without its credential, after a relaunch,
   and its drafts and the selected host's staged files and commands go with it. A forget that
   could not be saved keeps the host and says so (#65).
+- A file picked from Files is copied into the app while it may still be read, then uploaded and
+  the copy removed; a file over this app's 20 MiB limit, or one that cannot be read, is refused
+  before anything is sent, on either upload route (#66).
 - Forgetting a host while the app is still connecting to it stops that connection, where it used
   to finish connecting to the host you had just forgotten. Forgetting the connected host now
   disconnects even when the list then cannot be saved (#104).

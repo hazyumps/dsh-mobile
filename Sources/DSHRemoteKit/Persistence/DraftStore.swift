@@ -2,10 +2,11 @@ import Foundation
 
 /// One attachment chosen for a draft, before or after it reaches the host.
 ///
-/// Only a reference: the bytes live in the app's private directory and are copied there
-/// once, from the security-scoped location the picker handed over. SPEC §5 requires the
-/// import to be retained "only long enough to copy the file", so nothing here holds a
-/// bookmark or a security scope.
+/// Only a reference: nothing here holds a bookmark or a security scope. The copy out of the
+/// picker's security-scoped location is made by `AttachmentStaging.stage`, which holds the scope
+/// "only long enough to copy the file" (SPEC §5, §3.6). Since #66 that copy lasts one upload and
+/// is discarded once it settles; no staged copy is persisted with a draft yet, so
+/// `storedRelativePath` and `byteCount` are not written by the import path.
 public struct DraftAttachment: Sendable, Hashable, Codable, Identifiable {
     public enum Preparation: String, Sendable, Codable {
         /// Copied into app storage, not yet sent.

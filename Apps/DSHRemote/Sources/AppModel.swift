@@ -120,6 +120,9 @@ final class AppModel {
     /// saves the list or touches a token itself: the two change together or drift apart.
     private let registry: HostRegistry
     private let drafts: DraftStore
+    /// Where an imported file is copied while its security scope is held (#66).
+    private let staging: AttachmentStaging
+    private let stageFile: StageFile
     /// The origin the current host was connected with, kept so an interaction result can
     /// be posted on the same trust policy and credential as everything else.
     private var origin: ConnectionCoordinator.Origin?
@@ -277,12 +280,33 @@ final class AppModel {
         #endif
     }
 
-    init(draftsDirectory: URL? = nil) {
+    /// How ``importFile(at:to:)`` copies a picked file into staging.
+    ///
+    /// A parameter only so a test can hold an import between its copy and its upload, which is
+    /// where a host switch has to be checked for (#66 addendum). Production passes nothing and
+    /// gets ``defaultStageFile``. `AttachmentStaging.stage` stays synchronous and stays the only
+    /// place the security scope is held.
+    typealias StageFile = @Sendable (AttachmentStaging, URL) async throws -> StagedFile
+
+    /// The copy runs off the main actor, because a 20 MiB copy would otherwise stall the UI.
+    static let defaultStageFile: StageFile = { staging, url in
+        try await Task.detached(priority: .userInitiated) { try staging.stage(url) }.value
+    }
+
+    /// - Parameter stagingDirectory: where imported files are copied before upload (#66).
+    ///   Swept here, so copies a killed launch left behind do not accumulate.
+    /// - Parameter stageFile: how an import copies into staging; `nil` is ``defaultStageFile``.
+    init(draftsDirectory: URL? = nil, stagingDirectory: URL? = nil, stageFile: StageFile? = nil) {
+        self.stageFile = stageFile ?? Self.defaultStageFile
         drafts = DraftStore(directory: draftsDirectory ?? Self.defaultDraftsDirectory)
         // The registry drops a selection naming a host that is no longer saved. Its list is
         // read synchronously, so a launch with hosts does not flash the pairing introduction.
         registry = HostRegistry(drafts: drafts)
         hosts = registry.initialHosts
+        staging = AttachmentStaging(directory: stagingDirectory ?? Self.defaultStagingDirectory)
+        // Synchronous on purpose: a sweep in a detached task could race a launch-time
+        // `DSH_ATTACH` import and delete the copy it is about to upload (#66).
+        staging.sweep()
         if !hosts.isEmpty { idleStatus = .offline }
     }
 
@@ -290,6 +314,12 @@ final class AppModel {
         FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appending(path: "DSHRemote/Drafts", directoryHint: .isDirectory)
+    }
+
+    /// Not backed up and app-private; a copy only has to last one upload (#66).
+    private static var defaultStagingDirectory: URL {
+        FileManager.default.temporaryDirectory
+            .appending(path: "AttachmentStaging", directoryHint: .isDirectory)
     }
 
     // MARK: - Host selection
@@ -928,39 +958,63 @@ final class AppModel {
         }
     }
 
-    // MARK: - Attachments (SPEC §9)
+    // MARK: - Attachments (SPEC §3.6)
 
-    /// Uploads one prepared file into a session and stages its receipt.
+    /// Uploads one staged file into a session through `uploader`, and stages its receipt.
     ///
-    /// Nothing is retried and nothing is discarded on failure: SPEC §9 keeps the prepared bytes
-    /// so the user does not have to pick the file again, and an uncertain upload is reconciled
-    /// rather than replayed.
-    @discardableResult
-    func attachFile(at fileURL: URL, name: String? = nil, to sessionId: String) async -> UploadedAttachment? {
-        guard let attachmentUploader else {
+    /// `uploader` and `selection` are the ones captured at the pick, before ``importFile(at:to:)``
+    /// awaited the staging copy: reading ``attachmentUploader`` here would send host A's file to
+    /// whichever host is selected when the copy finishes (#66 addendum, AC9). After the upload's
+    /// await, the receipt or the failure is published only if `selection` is still current; a
+    /// switch has already cleared host A's attachment state, so a late answer is shown nowhere
+    /// rather than on host B's screen (AC11, Dan's decision at gate 1).
+    ///
+    /// Nothing is retried, and an upload already in flight is not cancelled: an uncertain upload
+    /// is reported, not replayed (AGENTS.md). Nothing is kept for a second try either. The staged
+    /// copy is discarded by ``importFile(at:to:)`` once this returns, success or failure, so after
+    /// a failure the user picks the file again. SPEC §3.6 asks for attachments to be kept on a
+    /// refusal; persisting copies for that is not done yet (#66 "Out of scope", with #49).
+    private func attachFile(
+        _ copy: StagedFile,
+        to sessionId: String,
+        through uploader: AttachmentUploader?,
+        selection: HostSelectionGate.Ticket?
+    ) async {
+        guard let uploader else {
             attachmentError = "This phone is not connected to a harness."
-            return nil
+            return
         }
         isUploading = true
         attachmentError = nil
+        // Cleared whatever happens to the selection: `resetHostScopedState()` does not own the
+        // spinner, so skipping this after a switch would leave it on forever. That an abandoned
+        // upload can clear a newer import's spinner is #105.
         defer { isUploading = false }
 
-        let size = (try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        let outcome: Result<UploadedAttachment, any Error>
         do {
-            let uploaded = try await attachmentUploader.upload(
+            // `byteCount` is ignored: the uploader measures the file on disk itself, so no size
+            // is guessed here (#66).
+            outcome = .success(try await uploader.upload(
                 sessionId: sessionId,
-                name: name ?? fileURL.lastPathComponent,
-                fileURL: fileURL,
-                byteCount: size
-            )
-            stagedAttachments[sessionId, default: []].append(uploaded)
-            return uploaded
-        } catch let failure as AttachmentUploadFailure {
-            attachmentError = Self.describe(failure)
-            return nil
+                name: copy.name,
+                fileURL: copy.url,
+                byteCount: 0
+            ))
         } catch {
+            outcome = .failure(error)
+        }
+
+        // The host changed while the upload was out: its answer belongs to a host whose state is
+        // already gone (AC11).
+        guard selections.isCurrent(selection) else { return }
+        switch outcome {
+        case .success(let uploaded):
+            stagedAttachments[sessionId, default: []].append(uploaded)
+        case .failure(let failure as AttachmentUploadFailure):
+            attachmentError = Self.describe(failure)
+        case .failure(let error):
             attachmentError = Self.reason(for: error)
-            return nil
         }
     }
 
@@ -975,6 +1029,61 @@ final class AppModel {
             "The harness refused that file (\(code)): \(message)"
         case .transport(let reason):
             "That upload may not have arrived: \(reason)"
+        case .tooLarge(_, let limit):
+            // SPEC §3.6: the cap is this app's, not the harness's, so the message says whose it is.
+            "That file was not sent: this app sends files of up to \(Self.mebibytes(limit)) each. The limit is this app's, not the harness's."
+        case .unreadable(let reason):
+            "That file could not be read, so nothing was sent: \(reason)."
+        }
+    }
+
+    /// A byte limit in the unit SPEC §3.6 states it in: "20 MiB".
+    private static func mebibytes(_ bytes: Int) -> String {
+        let mebibyte = 1024 * 1024
+        if bytes % mebibyte == 0 { return "\(bytes / mebibyte) MiB" }
+        return "\(bytes) bytes"
+    }
+
+    /// Copies an imported file into staging, uploads the copy, and discards it once the upload
+    /// settles, whether it succeeded or failed (#66, SPEC §3.6).
+    ///
+    /// Staging comes first, before the connection check: an over-limit or unreadable pick is
+    /// refused for what it is, and never copied. The copy runs off the main actor, because a
+    /// 20 MiB copy would otherwise stall the UI. The security scope is started and stopped inside
+    /// `AttachmentStaging.stage`, which is synchronous, so no suspension point can end it before
+    /// the file is read.
+    ///
+    /// The selection and its uploader are captured before the copy's await: `selections.ticket`
+    /// is the selection in force, so a switch — a newer `begin`, or `end` — leaves the captured
+    /// ticket no longer current. If the host changed while the copy ran, the copy is discarded
+    /// and nothing is sent or published: the file was picked for a host the user has left
+    /// (#66 addendum, AC9, AC10).
+    func importFile(at fileURL: URL, to sessionId: String) async {
+        let selection = selections.ticket
+        let uploader = attachmentUploader
+        attachmentError = nil
+        isUploading = true
+        let staging = staging
+        let staged: Result<StagedFile, any Error>
+        do {
+            staged = .success(try await stageFile(staging, fileURL))
+        } catch {
+            staged = .failure(error)
+        }
+        isUploading = false
+
+        switch staged {
+        case .failure(let failure as AttachmentUploadFailure):
+            guard selections.isCurrent(selection) else { return }
+            attachmentError = Self.describe(failure)
+        case .failure(let error):
+            guard selections.isCurrent(selection) else { return }
+            attachmentError = Self.reason(for: error)
+        case .success(let copy):
+            if selections.isCurrent(selection) {
+                await attachFile(copy, to: sessionId, through: uploader, selection: selection)
+            }
+            await Task.detached(priority: .utility) { staging.discard(copy) }.value
         }
     }
 
@@ -1771,6 +1880,23 @@ final class AppModel {
         browse = .idle
         selections.end()
     }
+
+    #if DEBUG
+    /// Debug builds only: a host switch without a network, for the app tests (#66 addendum).
+    ///
+    /// Goes through ``resetHostScopedState()``, the one reset `select`, `disconnect` and forget
+    /// share, so it ends the selection exactly as they do, then begins one for the host being
+    /// switched to, as `select` does before it connects, and installs the given uploader as that
+    /// host's. The `begin` is what makes the switch visible to work already in flight: `end`
+    /// alone leaves a gate that was never begun at `nil`, so an import that captured `nil` would
+    /// still look current. `select` itself needs a Keychain token, a coordinator and a socket.
+    /// Not a launch variable: nothing outside a test can reach it.
+    func replaceHostForTesting(uploader: AttachmentUploader?) {
+        resetHostScopedState()
+        _ = selections.begin(UUID())
+        attachmentUploader = uploader
+    }
+    #endif
 
     // MARK: - Fixture seeding
 

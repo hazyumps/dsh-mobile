@@ -210,9 +210,11 @@ public struct DshBareEndpointClient: Sendable {
     /// networking layer, so cost stops scaling with the file's size.
     ///
     /// The file must remain readable at this URL until the call returns — the
-    /// transport reads it during the upload, not before. That is why the caller
-    /// copies a security-scoped import into its own directory first rather than
-    /// streaming straight from the picker's temporary location.
+    /// transport reads it during the upload, not before. That is why a
+    /// security-scoped import is copied into the app's own directory by
+    /// ``AttachmentStaging`` while the scope is held, and this is given the copy
+    /// rather than the picker's URL (#66). No size limit is applied here;
+    /// ``AttachmentUploader`` measures the file and enforces one before calling.
     ///
     /// - Throws: the same errors as the in-memory form, including
     ///   ``DshRPCError/capabilityUnavailable(endpoint:)`` for a 404, which is the
