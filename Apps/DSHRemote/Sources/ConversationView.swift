@@ -77,6 +77,7 @@ struct ConversationView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var followAttempt = 0
     @State private var didSendLaunchMessage = false
+    @State private var isPairing = false
 
     /// What a follow belongs to.
     ///
@@ -103,6 +104,11 @@ struct ConversationView: View {
         }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $isPairing) {
+            // The unavailable state's Re-pair door (#89): the same sheet the
+            // pairing introduction uses, so the flow is one place, not two.
+            PairHarnessView()
+        }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 StatusBadge(status: model.status)
@@ -301,6 +307,14 @@ struct ConversationView: View {
             Label(model.status.label, systemImage: "wifi.exclamationmark")
         } description: {
             Text(model.connectionError ?? "Open the host to check its connection.")
+        } actions: {
+            // SPEC §6.9 "offer re-pair": the description already says the pin
+            // mismatch in words (the carried error); the action is the half the
+            // spec adds, and it belongs only on the certificate-changed failure.
+            if ConnectionNotice.certificateChanged(status: model.status, lastError: model.lastConnectError) {
+                Button("Re-pair") { isPairing = true }
+                    .buttonStyle(.borderedProminent)
+            }
         }
     }
 

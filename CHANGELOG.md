@@ -18,6 +18,13 @@ Fixed / Security, with its issue number. The release renames the section.
   change (#13).
 
 ### Fixed
+- A refused pin says what it is. When the relay's certificate no longer matches the pin this
+  phone trusts, the app used to classify the handshake refusal as a plain cancellation and sit
+  on **Offline** (or loop Reconnecting) with nothing to show. The transport now records its own
+  refusal and maps it to a TLS pin mismatch, so a saved host ends on **Host unavailable** with
+  the certificate-changed reason, pairing says "the relay's certificate changed" instead of a
+  debug string, and Home and the conversation offer **Re-pair** — the SPEC §6.9 "offer re-pair"
+  half that was never built (#89).
 - A Release build compiles again; it had been failing on a debug-only trace helper (#64).
 - Assistant replies no longer lose the left edge of their first and last letters (#74).
 - A parked connection recovers: returning to the app makes one fresh attempt, where a refusal

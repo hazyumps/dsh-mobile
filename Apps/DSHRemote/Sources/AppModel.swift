@@ -24,6 +24,12 @@ final class AppModel {
     /// pairing introduction; the shell switches on it.
     private(set) var selectedHost: SavedHost?
 
+    /// The last connection failure, carried separately from the status it painted (#89):
+    /// SPEC §3.1's status is a closed six-word list with no certificate word, so the
+    /// "the relay's certificate changed — re-pair" notice is derived from this pair.
+    /// Cleared with the rest of the host-scoped state, so it cannot outlive its host.
+    private(set) var lastConnectError: ConnectionCoordinator.ConnectError? = nil
+
     /// What the browse screens render, mapped from the host store's snapshot.
     private(set) var browse: BrowseState = .idle
 
@@ -487,6 +493,10 @@ final class AppModel {
         // Recorded before the usability guard: a connection that failed to become usable is
         // exactly the thing a later diagnostic report is about.
         record(status: status, generation: await coordinator?.remoteEvents()?.identity.generation)
+        // The carried error travels with the status it painted (#89): a host-unavailable
+        // status alone cannot say "certificate changed", and once the connection is usable
+        // the coordinator's own `lastError = nil` clears this on the next status.
+        lastConnectError = await coordinator?.lastError
         guard status.isUsable, let hostStore, let coordinator else { return }
         // Both calls are idempotent for a generation that is already open, so a status
         // stream that repeats `connected` cannot open a second pair of streams.
@@ -1851,6 +1861,7 @@ final class AppModel {
         interactionsTask?.cancel()
         recovery = nil
         coordinator = nil
+        lastConnectError = nil
         hostStore = nil
         secondaryStore = nil
         plugins = nil
@@ -1913,12 +1924,14 @@ final class AppModel {
         host: SavedHost,
         status: ConnectionStatus,
         browse: BrowseState,
-        workspaceId: String?
+        workspaceId: String?,
+        lastError: ConnectionCoordinator.ConnectError? = nil
     ) {
         selectedHost = host
         idleStatus = status
         self.browse = browse
         selectedWorkspaceId = workspaceId
+        lastConnectError = lastError
     }
 }
 

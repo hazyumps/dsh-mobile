@@ -1094,7 +1094,9 @@ public actor ConnectionCoordinator {
     /// *inside* `openSocket`, `MuxClient.classify` then reports it as
     /// `.socketFailed(detail: "TLS pin mismatch: …")`, and the distinction between "the
     /// certificate changed, stop and re-pair" and "the network dropped, retry" is gone
-    /// unless it is recovered here.
+    /// unless it is recovered here. Since #89 the transport's premise is real: the
+    /// challenge handler records its refusal, and the socket's failure seam maps the
+    /// refusal's own `-999` to that error, which is where this prefix comes from.
     ///
     /// So the kind is recovered from the one thing that survives — the prefix of
     /// ``RelayTransportError/safeDescription``, which is stable and is the *only* prefix

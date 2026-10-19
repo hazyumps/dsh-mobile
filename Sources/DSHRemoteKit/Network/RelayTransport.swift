@@ -221,8 +221,40 @@ public enum RelayTransportError: Error, Sendable, Hashable {
         return .other(String(describing: type(of: error)))
     }
 
-    static func webSocketFailure(_ error: any Error, response: HTTPURLResponse?) -> RelayTransportError {
-        guard let response, response.statusCode != 101 else { return classify(error) }
+    /// ``classify(_:)`` plus the one case the platform cannot carry: the
+    /// `URLError.cancelled` that the transport's own pin refusal causes (#89).
+    ///
+    /// Internal rather than public: the rejection type is internal, and the
+    /// only callers are the two seams in this file. A caller cancellation is
+    /// still `.cancelled` — checked by the callers, who alone can see their
+    /// own `Task`.
+    static func classify(
+        _ error: any Error,
+        rejectedRejection: RelayTrustRejection?
+    ) -> RelayTransportError {
+        if let error = error as? RelayTransportError { return error }
+        if error is CancellationError { return .cancelled }
+        // The refusal's own -999: the pin said no, and the platform reports the
+        // consequence as a plain cancellation, which is exactly what it is not.
+        if let urlError = error as? URLError, urlError.code == .cancelled,
+           let rejectedRejection {
+            return .tlsPinMismatch(rejectedRejection.reason)
+        }
+        return classify(error)
+    }
+
+    static func webSocketFailure(
+        _ error: any Error,
+        response: HTTPURLResponse?,
+        rejection: RelayTrustRejection? = nil
+    ) -> RelayTransportError {
+        // No upgrade response means the failure happened before the relay
+        // answered — including the pin's own refusal, which the `rejection`
+        // carries (#89). A real status is the relay's verdict and keeps its
+        // own mapping.
+        guard let response, response.statusCode != 101 else {
+            return classify(error, rejectedRejection: rejection)
+        }
         let failure: DshRPCError
         switch response.statusCode {
         case 401:
@@ -291,6 +323,13 @@ public struct TaskRelaySleeper: RelaySleeper {
 /// ``RelayTransportError/tlsPinMismatch(_:)`` and never falls back to the system
 /// trust store when a pin is configured (SPEC §3.2: "A supplied pin mismatch is
 /// a hard error … it never silently falls back to normal CA validation").
+///
+/// The mechanism, since #89: a refusal cancels the task, and the platform
+/// reports that cancellation as a bare `URLError.cancelled` that says nothing
+/// about why. The challenge handler therefore records its refusal per
+/// authority, and the failure seams map a `-999` to ``tlsPinMismatch(_:)``
+/// when the record names one — which is also what keeps a caller's own
+/// cancellation a `.cancelled`.
 public struct RelayPinningPolicy: Sendable, Hashable {
     /// Base64 SHA-256 of the DER SubjectPublicKeyInfo, as the relay publishes it
     /// (SPEC §6.3).
@@ -336,6 +375,18 @@ enum RelayTrustRejection: Equatable, Sendable {
     case pinMismatch
     /// There is no pin and no platform validation, so nothing vouches for the server.
     case noTrustAnchor
+
+    /// The words a refusal becomes once it reaches a user (#89): the detail of
+    /// ``RelayTransportError/tlsPinMismatch(_:)``, and with it the diagnostics line
+    /// and the pairing sheet.
+    var reason: String {
+        switch self {
+        case .noLeafCertificate: "the relay presented no certificate to pin"
+        case .unsupportedKey: "the relay's key is a curve this phone cannot pin"
+        case .pinMismatch: "the relay's certificate no longer matches the pin this phone trusts"
+        case .noTrustAnchor: "this phone has no trust anchor for the relay"
+        }
+    }
 }
 
 extension RelayPinningPolicy {
@@ -470,6 +521,13 @@ public final class URLSessionRelayTransport: NSObject, RelayTransport, @unchecke
         (session.delegate, socketSession.delegate)
     }
 
+    /// The pin refusal this transport's challenge handler last recorded for the
+    /// authority `url` names, if any (#89). Internal so a test can put a challenge
+    /// to the object URLSession actually calls and read back what it remembered.
+    func trustRejection(for url: URL) -> RelayTrustRejection? {
+        delegate.rejection(for: url)
+    }
+
     /// The configuration a long-lived socket needs, given the one the caller uses for requests.
     ///
     /// Built field by field rather than by copying: `URLSessionConfiguration.copy()` returns an
@@ -518,14 +576,22 @@ public final class URLSessionRelayTransport: NSObject, RelayTransport, @unchecke
             }
             return RelayHTTPResponse(status: http.statusCode, headers: headers, body: data)
         } catch {
-            throw RelayTransportError.classify(error)
+            // A -999 is the platform's word for "the delegate cancelled the
+            // task", and the pin's refusal is one such cancellation (#89).
+            // The caller's own cancellation is checked here, because it is
+            // the only one this scope can see.
+            var rejection: RelayTrustRejection?
+            if !Task.isCancelled, let url = urlRequest.url {
+                rejection = delegate.rejection(for: url)
+            }
+            throw RelayTransportError.classify(error, rejectedRejection: rejection)
         }
     }
 
     public func openSocket(_ request: RelayHTTPRequest) async throws -> any RelaySocket {
         let task = socketSession.webSocketTask(with: Self.urlRequest(from: request))
         task.resume()
-        return URLSessionRelaySocket(task: task)
+        return URLSessionRelaySocket(task: task, rejections: delegate)
     }
 
     /// Internal rather than private so the streaming contract below can be asserted:
@@ -551,8 +617,13 @@ public final class URLSessionRelayTransport: NSObject, RelayTransport, @unchecke
     /// A thin adapter: whether to trust the server is
     /// ``RelayPinningPolicy/decide(serverTrust:)``, which reads the pin from the
     /// server's key and never from the response (SPEC §3.2 step 3).
-    private final class TransportDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    ///
+    /// One more job since #89: this handler is where a refusal becomes a
+    /// `URLError.cancelled` that says nothing, so it also records what it
+    /// refused, per authority, for the two failure seams to read back.
+    private final class TransportDelegate: NSObject, URLSessionTaskDelegate, TrustRejectionLookup, @unchecked Sendable {
         let pinning: RelayPinningPolicy
+        let rejections = TrustRejectionStore()
 
         init(pinning: RelayPinningPolicy) {
             self.pinning = pinning
@@ -585,25 +656,123 @@ public final class URLSessionRelayTransport: NSObject, RelayTransport, @unchecke
             // offline (#68); this adapter only hands it to URLSession. The trust
             // is a credential only when the pin vouched for it.
             let decision = pinning.decide(serverTrust: trust)
+            // A refusal is the one decision that outlives the handshake: the
+            // task it ends fails as a bare cancellation, and without this
+            // record the pin's verdict is lost (#89). Accepting — or deferring
+            // to the platform — clears whatever an earlier re-challenge recorded.
+            let authority = TrustAuthority.key(of: challenge.protectionSpace)
+            switch decision {
+            case .reject(let rejection):
+                rejections.record(rejection, forAuthority: authority)
+            default:
+                rejections.clear(authority: authority)
+            }
             let credential = decision == .acceptPinned ? URLCredential(trust: trust) : nil
             completionHandler(decision.disposition, credential)
         }
+
+        /// What the socket asks when its failure might be the pin's doing (#89).
+        func rejection(for url: URL) -> RelayTrustRejection? {
+            rejections.rejection(forAuthority: TrustAuthority.key(of: url))
+        }
     }
+}
+
+/// The TLS identity is a property of the server behind an authority — scheme,
+/// host, port — not of the path. The challenge handler sees the authority from
+/// the protection space, and the callers see it from their request URLs; this
+/// is the one spelling both sides agree on, so a refusal recorded at one is
+/// found at the other (#89).
+enum TrustAuthority {
+    /// `https://host:3443`, or `https://host` when the port is the scheme's
+    /// default — the same string from the two sources a caller can have.
+    static func key(scheme: String, host: String, port: Int?) -> String {
+        let defaultPort = scheme == "https" ? 443 : 80
+        guard let port, port != defaultPort else { return "\(scheme)://\(host)" }
+        return "\(scheme)://\(host):\(port)"
+    }
+
+    /// From the request URL a caller is about to classify a failure for.
+    static func key(of url: URL) -> String {
+        key(scheme: url.scheme ?? "", host: url.host ?? "", port: url.port)
+    }
+
+    /// From the protection space a challenge carries.
+    static func key(of space: URLProtectionSpace) -> String {
+        let scheme = space.protocol == NSURLProtectionSpaceHTTPS ? "https" : "http"
+        return key(scheme: scheme, host: space.host, port: space.port)
+    }
+}
+
+/// The latest server-trust refusal per authority, kept by the challenge
+/// handler for the two failure seams to read back (#89).
+///
+/// A refusal is recorded, and an accept or a defer to the platform clears, so
+/// the value a failing request finds is the one its own handshake produced.
+/// Bounded by design: one entry per authority ever challenged, and a
+/// transport is short-lived — the coordinator hands out a fresh one per
+/// attempt.
+///
+/// `@unchecked Sendable`: every access is under the lock — the same shape the
+/// answer boxes in the TLS challenge tests use.
+final class TrustRejectionStore: @unchecked Sendable {
+    private let lock = NSLock()
+    private var byAuthority: [String: RelayTrustRejection] = [:]
+
+    func record(_ rejection: RelayTrustRejection, forAuthority authority: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        byAuthority[authority] = rejection
+    }
+
+    func clear(authority: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        byAuthority[authority] = nil
+    }
+
+    func rejection(forAuthority authority: String) -> RelayTrustRejection? {
+        lock.lock()
+        defer { lock.unlock() }
+        return byAuthority[authority]
+    }
+}
+
+/// The seam the socket asks when its `-999` might be the pin's doing (#89):
+/// the latest recorded refusal for a URL, or none.
+protocol TrustRejectionLookup: Sendable {
+    func rejection(for url: URL) -> RelayTrustRejection?
 }
 
 /// One `URLSessionWebSocketTask` behind ``RelaySocket``.
 private final class URLSessionRelaySocket: RelaySocket, @unchecked Sendable {
     private let task: URLSessionWebSocketTask
+    private let rejections: any TrustRejectionLookup
 
-    init(task: URLSessionWebSocketTask) {
+    init(task: URLSessionWebSocketTask, rejections: any TrustRejectionLookup) {
         self.task = task
+        self.rejections = rejections
+    }
+
+    /// The refusal the pin recorded for this socket's authority — read only
+    /// when the socket is failing, never for the caller's own cancellation,
+    /// which is the only one this scope can see (#89).
+    private var refusal: RelayTrustRejection? {
+        guard !Task.isCancelled,
+              let url = task.originalRequest?.url ?? task.currentRequest?.url
+        else { return nil }
+        return rejections.rejection(for: url)
     }
 
     func send(text: String) async throws {
         do {
             try await task.send(.string(text))
         } catch {
-            throw RelayTransportError.webSocketFailure(error, response: task.response as? HTTPURLResponse)
+            throw RelayTransportError.webSocketFailure(
+                error,
+                response: task.response as? HTTPURLResponse,
+                rejection: refusal
+            )
         }
     }
 
@@ -616,7 +785,11 @@ private final class URLSessionRelaySocket: RelaySocket, @unchecked Sendable {
                 throw RelayTransportError.other("unknown WebSocket message kind")
             }
         } catch {
-            throw RelayTransportError.webSocketFailure(error, response: task.response as? HTTPURLResponse)
+            throw RelayTransportError.webSocketFailure(
+                error,
+                response: task.response as? HTTPURLResponse,
+                rejection: refusal
+            )
         }
     }
 
