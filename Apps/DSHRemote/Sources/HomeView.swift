@@ -37,6 +37,7 @@ struct HomeView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var path: [Route] = []
     @State private var isDrawerOpen = false
+    @State private var isPairing = false
 
     private var browse: BrowseState { model.browse }
 
@@ -50,6 +51,11 @@ struct HomeView: View {
             .toolbar { toolbar }
             .navigationDestination(for: Route.self) { route in
                 destination(route)
+            }
+            .sheet(isPresented: $isPairing) {
+                // The banner's Re-pair door (#89): the same sheet the pairing
+                // introduction uses, so the flow is one place, not two.
+                PairHarnessView()
             }
         }
         .task {
@@ -219,15 +225,42 @@ struct HomeView: View {
     }
 
     /// Shown when the state is not connected, and only then.
+    @ViewBuilder
     private var offlineBanner: some View {
-        Label {
-            Text("\(DSHHostState(model.status).text) — showing what this phone last loaded.")
-                .fixedSize(horizontal: false, vertical: true)
-        } icon: {
-            Image(systemName: "bolt.horizontal.circle")
+        if ConnectionNotice.certificateChanged(status: model.status, lastError: model.lastConnectError) {
+            certificateChangedBanner
+        } else {
+            Label {
+                Text("\(DSHHostState(model.status).text) — showing what this phone last loaded.")
+                    .fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: "bolt.horizontal.circle")
+            }
+            .font(.dshSupporting)
+            .foregroundStyle(DSHPalette.attention)
+            .padding(DSHMetrics.spaceCard)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .dshCard()
         }
-        .font(.dshSupporting)
-        .foregroundStyle(DSHPalette.attention)
+    }
+
+    /// SPEC §6.9 "TLS pin mismatch: stop, say the certificate changed, offer
+    /// re-pair" — the one banner with an action, because it is the one failure
+    /// this phone can fix on its own. The wording comes from the notice rule
+    /// (`ConnectionNotice`), not from the status, which has no certificate word.
+    private var certificateChangedBanner: some View {
+        VStack(alignment: .leading, spacing: DSHMetrics.space) {
+            Label {
+                Text("The relay's certificate changed — this phone no longer matches it.")
+                    .fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: "lock.shield")
+            }
+            .font(.dshSupporting)
+            .foregroundStyle(DSHPalette.attention)
+            Button("Re-pair") { isPairing = true }
+                .buttonStyle(.borderedProminent)
+        }
         .padding(DSHMetrics.spaceCard)
         .frame(maxWidth: .infinity, alignment: .leading)
         .dshCard()

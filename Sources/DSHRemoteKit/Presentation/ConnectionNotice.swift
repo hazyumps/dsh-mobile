@@ -21,8 +21,8 @@ public enum ConnectionNotice {
         status: ConnectionStatus,
         lastError: ConnectionCoordinator.ConnectError?
     ) -> Bool {
-        // Stub carried by the Tests: commit of issue-89: the rule always
-        // returns false, which the red table fails on its one true case.
-        false
+        guard status == .hostUnavailable else { return false }
+        if case .certificateChanged = lastError { return true }
+        return false
     }
 }

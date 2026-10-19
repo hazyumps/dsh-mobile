@@ -53,10 +53,15 @@ struct ScreensGalleryView: View {
                         seededRoster: Self.subagentFixture(now: SystemEpochClock().epochMillis())
                     )
                 }
+            case "home-cert-changed":
+                // #89's banner, reviewed the same way: Home seeded into host-unavailable
+                // with the certificate-changed error, so the Re-pair door is reachable
+                // on a machine that cannot tap it.
+                HomeView()
             default: HomeView()
             }
         }
-        .task { model.seedForScreensGallery() }
+        .task { model.seedForScreensGallery(screen: screen) }
     }
 
     /// A conversation with the constructs a real one carries: prose, a fenced block,
@@ -287,7 +292,7 @@ extension AppModel {
     /// Fixture values only — no connection, no credential, no store. The screen it
     /// produces is real; the data behind it is not, and nothing here claims otherwise.
     /// Reachable only through ``shouldShowScreenGalleryOnLaunch``.
-    func seedForScreensGallery() {
+    func seedForScreensGallery(screen: String = "home") {
         let workspaces = [
             BrowseWorkspace(
                 id: "workspace-dsh-mobile",
@@ -351,15 +356,22 @@ extension AppModel {
             origin: URL(string: "https://10.1.0.138:3443")!,
             pinnedFingerprint: "7pcXvn2Kosz4qWgFpUmIao9YQ05bXYTLbfP0IskaeN4="
         )
+        // #89's banner state seeds the status and the carried error together, because
+        // the notice is the pair (SPEC §3.1's status has no certificate word); every
+        // other screen renders the connected fixture.
+        let certificateChanged = screen == "home-cert-changed"
         seedForGallery(
             host: host,
-            status: .connected,
+            status: certificateChanged ? .hostUnavailable : .connected,
             browse: BrowseState(
                 workspaces: workspaces,
                 workspacesState: .current,
                 sessionsState: .current
             ),
-            workspaceId: workspaces.first?.id
+            workspaceId: workspaces.first?.id,
+            lastError: certificateChanged
+                ? .certificateChanged(detail: "the relay's certificate no longer matches the pin this phone trusts")
+                : nil
         )
     }
 }

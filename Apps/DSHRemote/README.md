@@ -272,7 +272,7 @@ shipping app's normal flow is what runs by default.
 | `DSH_ANSWER` | Answers the first live request with this value — a question's option label, or `allow`/`deny` for an approval — so the `$events/result` path can be exercised without a tap. |
 | `DSH_SEND_MESSAGE` | Sends one message once a conversation is open. **Point it at a scratch session**: a duplicate or stray prompt costs real work, and this client never resends on its own. |
 | `DSH_DESIGN_GALLERY` | Shows the component gallery instead of the app: every design-system component in each of its states, on the real tokens. |
-| `DSH_SCREEN_GALLERY` | Shows the screens above the components from fixture data — `drawer` draws the drawer, `conversation` the conversation transcript, `project` a project's sessions, `new` the new-session screen, `subagents` a session's subagent roster, anything else Home. It renders the **real** screens against a seeded model, so the layout can be reviewed without a host. |
+| `DSH_SCREEN_GALLERY` | Shows the screens above the components from fixture data — `drawer` draws the drawer, `conversation` the conversation transcript, `project` a project's sessions, `new` the new-session screen, `subagents` a session's subagent roster, `home-cert-changed` Home with the relay-certificate-changed banner (#89), anything else Home. It renders the **real** screens against a seeded model, so the layout can be reviewed without a host. |
 
 A simulator launch passes them through `simctl`'s `SIMCTL_CHILD_` prefix, and the
 bundle identifier is generated from `bundleIdPrefix` in [project.yml](project.yml):
