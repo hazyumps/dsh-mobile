@@ -221,8 +221,32 @@ public enum RelayTransportError: Error, Sendable, Hashable {
         return .other(String(describing: type(of: error)))
     }
 
-    static func webSocketFailure(_ error: any Error, response: HTTPURLResponse?) -> RelayTransportError {
-        guard let response, response.statusCode != 101 else { return classify(error) }
+    /// ``classify(_:)`` plus the one case the platform cannot carry: the
+    /// `URLError.cancelled` that the transport's own pin refusal causes (#89).
+    ///
+    /// Internal rather than public: the rejection type is internal, and the
+    /// only callers are the two seams in this file. A caller cancellation is
+    /// still `.cancelled` — checked by the callers, who alone can see their
+    /// own `Task`.
+    static func classify(
+        _ error: any Error,
+        rejectedRejection: RelayTrustRejection?
+    ) -> RelayTransportError {
+        // Stub carried by the Tests: commit of issue-89: the recorded refusal
+        // is ignored, so a -999 stays `.cancelled` — exactly the defect the
+        // red tests are written against.
+        classify(error)
+    }
+
+    static func webSocketFailure(
+        _ error: any Error,
+        response: HTTPURLResponse?,
+        rejection: RelayTrustRejection? = nil
+    ) -> RelayTransportError {
+        guard let response, response.statusCode != 101 else {
+            // Stub: the recorded refusal is ignored (issue-89 Tests: commit).
+            return classify(error)
+        }
         let failure: DshRPCError
         switch response.statusCode {
         case 401:
@@ -336,6 +360,15 @@ enum RelayTrustRejection: Equatable, Sendable {
     case pinMismatch
     /// There is no pin and no platform validation, so nothing vouches for the server.
     case noTrustAnchor
+
+    /// The words a refusal becomes once it reaches a user (#89): the detail of
+    /// ``RelayTransportError/tlsPinMismatch(_:)``, and with it the diagnostics line
+    /// and the pairing sheet.
+    var reason: String {
+        // Stub carried by the Tests: commit of issue-89: the red tests fail on
+        // the classification, not on this text.
+        "unimplemented"
+    }
 }
 
 extension RelayPinningPolicy {
@@ -470,6 +503,15 @@ public final class URLSessionRelayTransport: NSObject, RelayTransport, @unchecke
         (session.delegate, socketSession.delegate)
     }
 
+    /// The pin refusal this transport's challenge handler last recorded for the
+    /// authority `url` names, if any (#89). Internal so a test can put a challenge
+    /// to the object URLSession actually calls and read back what it remembered.
+    func trustRejection(for url: URL) -> RelayTrustRejection? {
+        // Stub carried by the Tests: commit of issue-89: nothing is recorded yet,
+        // which is the defect.
+        nil
+    }
+
     /// The configuration a long-lived socket needs, given the one the caller uses for requests.
     ///
     /// Built field by field rather than by copying: `URLSessionConfiguration.copy()` returns an
@@ -588,6 +630,32 @@ public final class URLSessionRelayTransport: NSObject, RelayTransport, @unchecke
             let credential = decision == .acceptPinned ? URLCredential(trust: trust) : nil
             completionHandler(decision.disposition, credential)
         }
+    }
+}
+
+/// The TLS identity is a property of the server behind an authority — scheme,
+/// host, port — not of the path. The challenge handler sees the authority from
+/// the protection space, and the callers see it from their request URLs; this
+/// is the one spelling both sides agree on, so a refusal recorded at one is
+/// found at the other (#89).
+enum TrustAuthority {
+    /// `https://host:3443`, or `https://host` when the port is the scheme's
+    /// default — the same string from the two sources a caller can have.
+    static func key(scheme: String, host: String, port: Int?) -> String {
+        let defaultPort = scheme == "https" ? 443 : 80
+        guard let port, port != defaultPort else { return "\(scheme)://\(host)" }
+        return "\(scheme)://\(host):\(port)"
+    }
+
+    /// From the request URL a caller is about to classify a failure for.
+    static func key(of url: URL) -> String {
+        key(scheme: url.scheme ?? "", host: url.host ?? "", port: url.port)
+    }
+
+    /// From the protection space a challenge carries.
+    static func key(of space: URLProtectionSpace) -> String {
+        let scheme = space.protocol == NSURLProtectionSpaceHTTPS ? "https" : "http"
+        return key(scheme: scheme, host: space.host, port: space.port)
     }
 }
 
