@@ -11,6 +11,28 @@ in a Swift package (`DSHRemoteKit`) that is testable on its own; the app target 
   <img src="design/mockups/2026-10-09/02-conversation-and-recovery.png" width="240" alt="Conversation">
 </p>
 
+## Status: development has stopped
+
+This is published as-is, and it works. I built it for my own phone, used it every day, and
+stopped because keeping up with a moving harness protocol turned into more than I could carry
+alongside a full-time job and other hobbies — not because it is broken or half-finished. `main`
+is green and the last device build came from it.
+
+**If you want to pick it up, please do.** Fork it, or open an issue here, and I will answer when
+I can. The honest state of the work is in [`NEXT.md`](NEXT.md): what was verified against a live
+harness, what was only ever covered by unit tests, what was never tested on a physical device,
+and what was deliberately not built. [`AGENTS.md`](AGENTS.md) has the conventions if you want to
+work the same way — semantic versioning, tests first, signed commits.
+
+Two things worth knowing before you start:
+
+- **The issue references mean nothing to you.** Every `#123` in a commit message, the changelog
+  and the plan files points at a private Gitea instance this repo used to live on. The reasoning
+  behind each change is in `design/plans/` and `NEXT.md` instead.
+- **The relay is a separate project.** This is the client half; it needs a `dsh-relay` in front
+  of a harness to talk to. `Protocol/` holds the endpoint descriptor it was written against, and
+  `SPEC.md` §6 records where the two disagreed.
+
 ## What works
 
 - **Pairing** with a relay by code or pasted payload, TLS pinned to the host's key, credential
@@ -95,9 +117,14 @@ Tools/setup-dev.sh      # once: git hook, signers file, toolchain check
 Tools/check.sh          # what "green" means; the pre-push hook runs it
 ```
 
-Issues are the front door: features, host gaps and papercuts all belong there. If you are
-changing the transport or a store, run `swift test` and expect a fixture to be the right place
-for protocol shapes — several of them were captured from a live host and the comments say so.
+Issues are the front door: features, host gaps and papercuts all belong there — in your fork if
+you take this somewhere, since the original tracker is gone. If you are changing the transport or
+a store, run `swift test` and expect a fixture to be the right place for protocol shapes — several
+of them were captured from a live host and the comments say so.
+
+`Tools/setup-dev.sh` wants a signing key and the `.gitsigners` entry to match it, because the
+pre-push hook runs `Tools/check.sh` in full. If you would rather not sign, remove your key from
+`.gitsigners` and use `git push --no-verify`.
 
 ## Licence
 

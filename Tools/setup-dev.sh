@@ -30,12 +30,16 @@ command -v xcodegen > /dev/null && ok "xcodegen $(xcodegen --version 2>/dev/null
   || bad "xcodegen: brew install xcodegen (the .xcodeproj is generated from project.yml)"
 command -v python3 > /dev/null && ok "$(python3 --version)" \
   || bad "python3 (Tools/generate-models.py)"
-if command -v tea > /dev/null; then
-  logins="$(tea logins 2>/dev/null || true)"   # captured: `| grep -q` would SIGPIPE tea under pipefail
-  if [[ "$logins" == *gitea.fernlabs.net* ]]; then ok "tea, logged in to gitea"
-  else warn "tea is installed but not logged in: tea login add --url https://gitea.fernlabs.net"; fi
-else
-  warn "tea (Gitea CLI, for issues and PRs from the terminal): brew install tea"
+# tea was how the original had its issues and PRs; it is not needed to build or test anything,
+# and the instance it pointed at is private, so only mention it where `origin` is that instance.
+if [[ "$(git remote get-url origin 2>/dev/null || true)" == *gitea.fernlabs.net* ]]; then
+  if command -v tea > /dev/null; then
+    logins="$(tea logins 2>/dev/null || true)"   # captured: `| grep -q` would SIGPIPE tea under pipefail
+    if [[ "$logins" == *gitea.fernlabs.net* ]]; then ok "tea, logged in to gitea"
+    else warn "tea is installed but not logged in: tea login add --url https://gitea.fernlabs.net"; fi
+  else
+    warn "tea (Gitea CLI, for issues and PRs from the terminal): brew install tea"
+  fi
 fi
 
 # Tools/check.sh runs the app tests on a simulator of their own, "DSH Remote Tests", and creates
