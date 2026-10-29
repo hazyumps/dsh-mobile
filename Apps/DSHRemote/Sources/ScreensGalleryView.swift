@@ -353,7 +353,7 @@ extension AppModel {
         ]
         let host = SavedHost(
             displayName: "patrick-mac",
-            origin: URL(string: "https://10.1.0.138:3443")!,
+            origin: URL(string: "https://192.0.2.10:3443")!,
             pinnedFingerprint: "7pcXvn2Kosz4qWgFpUmIao9YQ05bXYTLbfP0IskaeN4="
         )
         // #89's banner state seeds the status and the carried error together, because

@@ -14,19 +14,19 @@ What that took, for the next person who has to do it again:
 xcodegen generate
 xcodebuild -project DSHRemote.xcodeproj -scheme DSHRemote \
   -destination "platform=iOS,name=Patrick's iPhone" -allowProvisioningUpdates build
-xcrun devicectl device install app --device 00008140-000C54512E46801C \
+xcrun devicectl device install app --device <your-iphone-udid> \
   ~/Library/Developer/Xcode/DerivedData/DSHRemote-*/Build/Products/Debug-iphoneos/DSHRemote.app
 ```
 
 Two manual steps that no command replaces: **Developer Mode** on the phone
 (Settings → Privacy & Security), and **trusting the developer profile**
-(Settings → General → VPN & Device Management → Apple Development: ph@dontbuck.com).
+(Settings → General → VPN & Device Management → Apple Development: you@example.com).
 `DEVELOPMENT_TEAM: "U6LC736TBG"` is committed; a stray line in `project.yml` once
 made XcodeGen fold it into a bogus value that read like an Apple ID fault.
 
 ## Remote access: today, and the end state (recorded 2026-10-08)
 
-**Today it is LAN-only.** The pairing payload points at `10.1.0.138`, so off the
+**Today it is LAN-only.** The pairing payload points at `192.0.2.10`, so off the
 home network the phone has nothing to dial. WireGuard closes that gap with **no
 app change at all** — pair with the tunnel address instead of the LAN one. The
 relay already binds every interface and the app pins the certificate's *key*, not
@@ -545,7 +545,7 @@ below with their measurements, so none of them needs rediscovering either.
 
 ## Proven against the live harness
 
-`swift run --disable-sandbox --scratch-path .build-smoke dsh-smoke --origin https://10.1.0.138:3443 --pin <pin>`
+`swift run --disable-sandbox --scratch-path .build-smoke dsh-smoke --origin https://192.0.2.10:3443 --pin <pin>`
 with a device token in `DSH_DEVICE_TOKEN` connected from a non-loopback
 address and reported `SMOKE OK`: SPKI pinning accepted the self-signed
 certificate without a trust chain, the bearer token authenticated, the mux
@@ -607,7 +607,7 @@ and with a revoked token. Both are client-side; the relay behaves correctly.
    idle threads** before being stopped. So the hang is not a timing artefact.
 
    **The assumed mechanism is wrong, and that is measured — twice.** Two
-   standalone probes against `wss://10.1.0.138:3443`, each with a session-level
+   standalone probes against `wss://192.0.2.10:3443`, each with a session-level
    delegate that refuses every server-trust challenge:
 
    - `Tools/probes/ws-probe.swift` — a pending `receive()` **resumes on its own in
@@ -892,7 +892,7 @@ and with a revoked token. Both are client-side; the relay behaves correctly.
 Also worth keeping: **loopback proves nothing about authentication.** From
 `127.0.0.1` the relay serves `/api` with a garbage token and with no
 `Authorization` header at all. Any token or pairing work must be verified
-against the LAN address in the certificate's SANs (`https://10.1.0.138:3443`),
+against the LAN address in the certificate's SANs (`https://192.0.2.10:3443`),
 which is where the revoke → `403 {"error":"forbidden"}` was actually observed.
 
 **The API a `ChatSession` implementer needs, written down so nobody has to go

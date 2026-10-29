@@ -149,7 +149,7 @@ var cancelAfter: Double?
 if args.count > 2, let v = Double(args[2]) { cancelAfter = v }
 let hardDeadline: Double = (cancelAfter ?? 0) > 0 ? (cancelAfter! + 12.0) : 18.0
 
-let url = URL(string: "wss://10.1.0.138:3443/api/remote.mux")!
+let url = URL(string: "wss://192.0.2.10:3443/api/remote.mux")!
 let probe: Probe = useTaskLevelChallenge ? BothProbe(url: url) : Probe(url: url)
 let task = probe.task!
 let stateQueue = DispatchQueue(label: "probe.state")

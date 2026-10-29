@@ -29,7 +29,7 @@ already committed to [project.yml](project.yml):
 
 ```sh
 security find-identity -v -p codesigning
-#  1) … "Apple Development: ph@dontbuck.com (7JS22WHNBB)"   1 valid identities found
+#  1) … "Apple Development: you@example.com (7JS22WHNBB)"   1 valid identities found
 security find-certificate -c "Apple Development" -p | openssl x509 -noout -subject
 #  … OU=U6LC736TBG …
 grep DEVELOPMENT_TEAM project.yml

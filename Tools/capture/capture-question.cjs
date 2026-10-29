@@ -1,7 +1,7 @@
 const req = require('module').createRequire(__dirname + '/package.json')
 const WebSocket = req('ws')
 const SID = process.argv[2], TOKEN = process.argv[3]
-const ws = new WebSocket('wss://10.1.0.138:3443/api/remote.mux', {
+const ws = new WebSocket('wss://192.0.2.10:3443/api/remote.mux', {
   headers: { Authorization: 'Bearer ' + TOKEN }, rejectUnauthorized: false,
 })
 let seen = 0

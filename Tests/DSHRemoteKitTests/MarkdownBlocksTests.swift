@@ -67,12 +67,12 @@ struct MarkdownBlocksTests {
         let blocks = MarkdownBlocks.parse("""
         | Setting | Value |
         | --- | ---: |
-        | host | 10.1.0.138 |
+        | host | 192.0.2.10 |
         | port | 3443 |
         """)
         #expect(blocks == [.table(
             headers: ["Setting", "Value"],
-            rows: [["host", "10.1.0.138"], ["port", "3443"]]
+            rows: [["host", "192.0.2.10"], ["port", "3443"]]
         )])
 
         #expect(MarkdownBlocks.parse("| not a table |") == [.paragraph("| not a table |")])

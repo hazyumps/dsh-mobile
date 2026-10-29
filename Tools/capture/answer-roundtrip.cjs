@@ -2,7 +2,7 @@ const req = require('module').createRequire(__dirname + '/package.json')
 const WebSocket = req('ws')
 const [SID, TOKEN] = process.argv.slice(2)
 let answered = false
-const ws = new WebSocket('wss://10.1.0.138:3443/api/remote.mux', {
+const ws = new WebSocket('wss://192.0.2.10:3443/api/remote.mux', {
   headers: { Authorization: 'Bearer ' + TOKEN }, rejectUnauthorized: false })
 const collect = async (ev) => {
   if (!ev || ev.type !== 'tool/call') return
@@ -14,7 +14,7 @@ const collect = async (ev) => {
   const body = { type: 'client-request', rpcId: 'ans', method: 'userQuestions/answer',
     payload: { args: { agentId: SID, callId: data.callId,
       answer: { answers: [{ id: q.id, selected: ['Blue'] }] } } } }
-  const r = await fetch('https://10.1.0.138:3443/api/userQuestions/answer', {
+  const r = await fetch('https://192.0.2.10:3443/api/userQuestions/answer', {
     method: 'POST', headers: { Authorization: 'Bearer ' + TOKEN, 'Content-Type': 'application/json' },
     body: JSON.stringify(body) })
   console.log('ANSWER ->', (await r.text()).slice(0, 160))

@@ -103,7 +103,7 @@ that is observable in behaviour:
   `/api/session/list` with a garbage token, and with no `Authorization` header at all
   (HTTP 200). So a run against `https://127.0.0.1:3443` proves the pin and the protocol,
   but proves nothing about the token. To exercise the credential, run against the LAN
-  address the certificate covers (`https://10.1.0.138:3443` here), where an unpaired
+  address the certificate covers (`https://192.0.2.10:3443` here), where an unpaired
   device gets `403 {"error":"forbidden"}`.
 - **A revoked credential fails the WebSocket upgrade as a generic transport error.** A
   run against the LAN origin after revocation exits 1 with

@@ -78,7 +78,7 @@ node --experimental-strip-types Tools/diagnostics/relay-identity-probe.mjs /User
 
 This is a fingerprint comparison using generated certificates, not a simulated iPhone handshake. The app's pin comparison rejects unequal fingerprints. The important timing qualification is relay certificate loading/reloading; a DHCP change does not instantly rewrite a running TLS listener.
 
-The current live listener is inside DeepSeek Harness on the Mac, port 3443, with upstream port 19387. Health responds on loopback and 10.1.0.138. Public certificate metadata still matches the earlier baseline. Health proves a responding relay, not a usable session catalogue. The desktop profile links the local 0.3.0 relay fork and disables compatibility address grants. Actual forwarding behavior comes from src/auth/index.ts and matching built lib/index.js; older memory notes about loopback exemption are inaccurate. Direct loopback remains privileged regardless of addressGrants; forwarded loopback requests must authenticate.
+The current live listener is inside DeepSeek Harness on the Mac, port 3443, with upstream port 19387. Health responds on loopback and 192.0.2.10. Public certificate metadata still matches the earlier baseline. Health proves a responding relay, not a usable session catalogue. The desktop profile links the local 0.3.0 relay fork and disables compatibility address grants. Actual forwarding behavior comes from src/auth/index.ts and matching built lib/index.js; older memory notes about loopback exemption are inaccurate. Direct loopback remains privileged regardless of addressGrants; forwarded loopback requests must authenticate.
 
 ## Recommended order
 

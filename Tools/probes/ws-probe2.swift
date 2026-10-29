@@ -21,7 +21,7 @@ final class Refuser: NSObject, URLSessionTaskDelegate {
 
 func makeTask() -> URLSessionWebSocketTask {
     let session = URLSession(configuration: .ephemeral, delegate: Refuser(), delegateQueue: nil)
-    let task = session.webSocketTask(with: URL(string: "wss://10.1.0.138:3443/api/remote.mux")!)
+    let task = session.webSocketTask(with: URL(string: "wss://192.0.2.10:3443/api/remote.mux")!)
     task.resume()
     return task
 }
